@@ -164,18 +164,28 @@ taillés **une seule fois** : **118 → 71 matériaux**, **318 → 270 géométr
 node --import ./tools/resolveur-ts.mjs tools/mesurer-scene.ts
 ```
 
-## 🎋 Les plateformes arrêtent — sauf le radeau de bambou
+## 🎋 Les plateformes arrêtent — et le radeau de bambou est un TUNNEL
 
 Une plateforme **pleine** arrête le corps *et* les sorts. Le **radeau de
-bambou**, lui, est monté sur pilotis : on court dessous, et un projectile y file
-aussi. C'est le seul passage bas de la course, et son dessin l'annonce — le
-bloquer reviendrait à démentir ce qu'on voit.
+bambou**, lui, est un couloir : ses deux montants courent du sol au tablier sur
+toute sa longueur, ce sont de vraies parois, et il est ouvert à ses deux bouts.
+C'est le seul passage bas de la course.
+
+D'où une règle unique, la même pour les **sorts**, les **bots** et le **joueur** :
+
+> **On entre par l'entrée.**
+
+| Par où | Ce qui se passe | Qui le tient |
+|---|---|---|
+| l'**avant** | on passe — c'est l'entrée | `supportSous`, qui ne heurte pas |
+| les **côtés** | refusé, on reste sur sa voie | `flancA`, qui laisse passer au ras du nez |
+| le **toit** | refusé, on se cogne | `TUNNEL_HAUT`, le plafond sous le tablier |
 
 C'est une **règle de jeu**, pas une coquetterie : le drapeau `plateformeAjouree`
 vit sur le biome, à côté de sa fabrique, et la collision le **lit**. Impossible
 qu'un radeau se dessine ouvert tout en se comportant comme un bloc plein.
 
-Trois défauts réparés, tous invisibles au typage :
+Cinq défauts réparés, tous invisibles au typage :
 
 1. **Les sorts traversaient tout.** Ils ne consultaient que les murs — un kunaï
    passait au travers d'un wagon massif. `premierBarrage` prend désormais le
@@ -187,10 +197,28 @@ Trois défauts réparés, tous invisibles au typage :
    branche de secours ne traite que les obstacles, et une plateforme n'en est
    pas un. Armure levée, on passait au travers d'un wagon. La géométrie reste de
    la géométrie : on se hisse toujours, c'est le **frein** que l'armure épargne.
+4. **On sortait du tunnel PAR LE HAUT.** Rien ne fermait le dessous du tablier :
+   un saut à l'intérieur franchissait le seuil des 2,40 m à partir duquel la
+   piste considère qu'on est *sur* le plateau, et l'on ressortait sur le toit.
+   `TUNNEL_HAUT` (1,90 m) pose désormais un plafond — mesuré, l'apex d'un saut
+   tombe de **2,13 m à ciel ouvert à 1,90 m sous le radeau**. Le seuil du toit
+   n'est plus jamais atteint. Les deux valeurs se surveillent : le plafond doit
+   rester sous `PLATEFORME_H - 0.3`, sinon le trou revient.
+5. **Le liseré vermillon couvrait tout le dessus.** Il était un *enfant* du
+   plateau, long de `1` en local — or le plateau est étiré à sa longueur, et
+   l'enfant suit. L'« arête de 5 cm sur le nez » devenait une bande de 25 m :
+   un tapis rouge. Les 5 cm étaient son *épaisseur*, la réduire ne pouvait donc
+   rien changer. Il a maintenant **son propre maillage** (`nez`), posé en
+   mètres — exactement le traitement déjà réservé à la rampe, et pour la même
+   raison.
+
+> **La leçon, deux fois apprise :** ce qui doit garder sa taille en mètres ne
+> peut pas être un enfant de ce qu'on étire.
 
 ```bash
 npm run plateformes:test   # 27 plateformes sur une vraie course : 21 arrêtent,
                            # 6 laissent passer dessous, 27 portent sur le dessus
+npm run mur:test           # le flanc bloque de côté, la voie est libre au nez
 ```
 
 ## ⛩️ Le portique et sa forme creuse
@@ -554,9 +582,29 @@ Mesuré sur 3 000 courses :
 | Deux pots | 2,8 % |
 | Plus de deux | **jamais** |
 
-Le contenu : **1 à 10 Mon** (79,9 % des pots) ou **1 à 6 Jade** (20,1 %). Le jade
-cumule les deux raretés — il faut d'abord tomber sur un pot, puis qu'il en
-contienne : on en voit dans **une course sur 23**.
+### Le contenu : l'or toujours, le jade en plus
+
+**Les deux monnaies ne s'excluent pas.** Un pot donne **toujours 1 à 10 Mon**, et
+le jade vient **par-dessus** quand il vient — casser un pot n'est donc jamais une
+déception, et trouver du jade ne prive plus de la récompense ordinaire.
+
+Le jade se tire sur une **échelle** : plus la bande est étroite, plus la poignée
+est grosse. Un seul tirage les départage, mesuré sur **20 000 courses** :
+
+| Bande | Annoncé | Mesuré (sur 4 670 pots) |
+|---|---|---|
+| 1 à 3 jades | 12 % | 1 → 4,03 % · 2 → 3,98 % · 3 → 4 % |
+| 3 jades | 7 % | le « 3 » monte à **11,07 %** |
+| 4 à 5 jades | 3 % | 4 → 1,35 % · 5 → 1,18 % |
+| aucun jade | 78 % | **78,39 %** |
+
+La deuxième bande tombe **dans** l'intervalle de la première : c'est voulu, et
+c'est ce qui fait de **3 la quantité la plus probable**. Les bandes disent des
+probabilités, pas des plages qui devraient s'emboîter.
+
+Le jade cumule les deux raretés — il faut d'abord tomber sur un pot (20 % des
+courses), puis qu'il en contienne (22 % des pots) : on en voit dans **une course
+sur vingt** environ.
 
 ### Un plafond n'est pas une rareté
 
@@ -580,10 +628,18 @@ partagée : en duel, les deux joueurs voient le **même** contenu dans le **mêm
 pot. Le tirer à la casse donnerait du jade à l'un et des pièces à l'autre pour la
 même poterie — on se disputerait un objet qui n'est pas le même.
 
+> ⚠️ Le tirage consomme **trois nombres aléatoires, toujours**, même quand il n'y
+> a pas de jade. Sans cette précaution, le nombre d'appels dépendrait du résultat
+> du premier pot, et le **second** pot d'une même course tomberait ailleurs selon
+> que le premier portait du jade ou non. Le plan doit rester une pure fonction de
+> la graine, branche par branche.
+
 ### Le crédit est plafonné, pas vérifié
 
 Le jeu annonce sa récolte à `/api/pot` ; le serveur la borne à **20 Mon et
-12 Jade par minute** (le pire cas possible : deux pots, tous deux au maximum).
+10 Jade par minute** — le pire cas possible, soit deux pots donnant chacun le
+maximum des deux monnaies **à la fois**. Les deux plafonds sont vérifiés
+séparément : un plafond commun rejetterait le meilleur pot honnête du jeu.
 
 ⚠️ C'est un plafond, **pas une vérification**. Un client modifié peut réclamer ce
 maximum. Le choix est assumé : c'est délibérément *moins* rentable que de courir

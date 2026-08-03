@@ -1278,9 +1278,31 @@ const BAMBOUS: Biome = {
    * exactement ce qu'on veut quand la plateforme s'étire. Un tonneau ou une
    * caisse se seraient déformés en bouillie.
    *
-   * Le liseré vermillon du dessus reprend celui des pans de mur : c'est devenu
-   * le langage des surfaces qu'on UTILISE, par opposition aux obstacles qu'on
-   * subit.
+   * Le liseré vermillon du nez reprend celui des pans de mur : c'est devenu le
+   * langage des surfaces qu'on UTILISE, par opposition aux obstacles qu'on
+   * subit. Il est posé par la piste, pas ici (cf. la fabrique plus bas).
+   *
+   * ————— 🎋 CE RADEAU EST UN TUNNEL —————
+   *
+   * Et il faut le lire au pied de la lettre : ses deux montants courent du sol
+   * au tablier sur toute la longueur, ce sont donc de vraies PAROIS. Le radeau
+   * n'est pas une masse pleine, mais il n'est pas non plus un décor qu'on
+   * traverse : c'est un couloir, ouvert à ses deux bouts et fermé partout
+   * ailleurs.
+   *
+   * D'où une règle unique, valable pour les sorts, les bots et le joueur :
+   * ON ENTRE PAR L'ENTRÉE.
+   *
+   *  · par l'AVANT  → on passe, c'est le seul passage bas de la course ;
+   *  · par les CÔTÉS → refusé, `flancA` retient le changement de ligne tant
+   *    qu'on est sous la hauteur du tablier (et laisse passer au ras du nez,
+   *    ce qui EST l'entrée) ;
+   *  · par le TOIT  → refusé, `TUNNEL_HAUT` pose un plafond sous le tablier.
+   *    Sauter à l'intérieur cognait autrefois au-delà du seuil des 2,40 m et
+   *    l'on ressortait sur le dessus.
+   *
+   * Le drapeau ci-dessous ne dit donc plus « ouvert dessous » mais « c'est un
+   * tunnel » — le reste de la mécanique en découle.
    */
   plateformeAjouree: true,
 
@@ -1322,15 +1344,19 @@ const BAMBOUS: Biome = {
       })
     }
 
-    // Le vermillon ne subsiste qu'en ARÊTE, sur le nez du tablier : « on peut
-    // monter là-dessus ». Cinq centimètres au lieu de dix, et le dessus n'est
-    // plus rouge du tout.
-    p.push({
-      geo: GEO.bloc.clone().scale(largeur + 0.06, 0.05, 1),
-      couleur: VERMILLON,
-      x: 0, y: hauteur - 0.02, z: 0,
-    })
-
+    /*
+     * ⚠️ PAS DE VERMILLON ICI. Le liseré du nez est posé par la piste, en
+     * mètres, sur son propre maillage (cf. `nez` dans track.ts).
+     *
+     * Il a vécu ici, et c'était le bug. Les 5 cm dont parlait le commentaire
+     * étaient son ÉPAISSEUR ; sa longueur, elle, valait 1 — soit toute la pièce,
+     * qui est ensuite étirée à la longueur du radeau. Sur un radeau de 25 m, la
+     * bande faisait donc 25 m de long : tout le dessus virait au rouge, et le
+     * « repère sur le nez » se lisait comme un tapis déroulé.
+     *
+     * La règle est la même que pour la rampe : ce qui doit garder sa taille en
+     * mètres ne peut pas être un enfant de ce qu'on étire.
+     */
     return groupe(assemble(p, MAT_SOLIDE))
   },
 }

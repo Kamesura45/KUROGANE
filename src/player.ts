@@ -266,6 +266,17 @@ export class Player {
    */
   sol = 0
 
+  /**
+   * Le PLAFOND au-dessus de la tête : `Infinity` à ciel ouvert, le dessous du
+   * tablier quand on court dans un tunnel.
+   *
+   * Symétrique exact de `sol`, et posé par main.ts de la même façon. Le joueur
+   * ne sait pas plus ce qu'est un tunnel qu'il ne sait ce qu'est une
+   * plateforme : il connaît un sol et un plafond, et c'est la piste qui les
+   * renseigne.
+   */
+  plafond = Infinity
+
   /** Temps restant de l'escalade en cours, et le sommet qu'on vise. */
   private escaladeT = 0
   private escaladeVers = 0
@@ -538,6 +549,22 @@ export class Player {
     } else {
       this.mesh.position.y = this.sol
       this.vy = 0
+    }
+
+    /*
+     * 🎋 On se cogne au plafond du tunnel.
+     *
+     * APRÈS la gravité, sinon l'image où l'on touche le tablier laisserait
+     * encore monter d'un cheveu — et c'est ce cheveu qui faisait traverser.
+     *
+     * On n'annule que la vitesse ASCENDANTE : remettre `vy` à zéro dans tous
+     * les cas ferait flotter contre le plafond au lieu de retomber. Le
+     * `Math.max` avec `sol` protège du cas absurde où un plafond passerait sous
+     * nos pieds — mieux vaut être écrasé au sol que catapulté sous la piste.
+     */
+    if (this.mesh.position.y > this.plafond) {
+      this.mesh.position.y = Math.max(this.sol, this.plafond)
+      if (this.vy > 0) this.vy = 0
     }
 
     /*

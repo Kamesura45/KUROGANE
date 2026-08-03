@@ -348,6 +348,16 @@ let speed = 0
 let countdown = 0 // secondes avant le GO !
 let stumble = 0 // invincibilité après un trébuchement
 /**
+ * ⚡ Les shaders de la course sont-ils déjà compilés ?
+ *
+ * Remis à faux à chaque départ : d'une course à l'autre le biome de tête ne
+ * change pas, mais la graine, elle, change — les matières croisées sur les
+ * premiers mètres ne sont pas forcément les mêmes. Repayer une compilation
+ * déjà faite ne coûte rien (three.js garde son cache de programmes), la sauter
+ * à tort coûterait le hoquet qu'on cherche justement à supprimer.
+ */
+let shadersPrets = false
+/**
  * 🧪 Le banc d'essai fige la course (cf. le guichet `__sorts` en fin de
  * fichier). Le monde s'arrête, mais TOUT LE RESTE continue de tourner : les
  * sorts, leurs minuteurs, les brumes, les chaînes. C'est ce qui permet de
@@ -1982,14 +1992,21 @@ function gagneParchemin(kind: ParcheminKind) {
 const recolte = { mon: 0, hisui: 0 }
 
 function ramasserTresor(t: Tresor) {
-  recolte[t.monnaie] += t.quantite
+  recolte.mon += t.mon
+  recolte.hisui += t.hisui
   jouerBruit('jarreDoree')
-  // Le jade s'annonce autrement que les pièces : c'est la trouvaille rare, elle
-  // ne doit pas se confondre avec un gain ordinaire dans le coin de l'œil.
+  /*
+   * Le jade s'annonce autrement que les pièces : c'est la trouvaille rare, elle
+   * ne doit pas se confondre avec un gain ordinaire dans le coin de l'œil.
+   *
+   * ⚠️ Et quand il y a du jade, LES PIÈCES SONT ANNONCÉES AUSSI. Elles tombent
+   * désormais dans tous les cas : n'afficher que le jade laisserait croire
+   * qu'on a troqué les unes contre l'autre, alors qu'on a reçu les deux.
+   */
   toast(
-    t.monnaie === 'hisui'
-      ? `💎 JADE ! +${t.quantite} Hisui`
-      : `🟢 +${t.quantite} Mon`
+    t.hisui > 0
+      ? `💎 JADE ! +${t.hisui} Hisui — et +${t.mon} Mon`
+      : `🟢 +${t.mon} Mon`
   )
 }
 
@@ -2342,6 +2359,7 @@ function startRace(seed: number) {
 
   countdown = 3
   state = 'depart'
+  shadersPrets = false // ⚡ la piste va être repeuplée : on recompile au décompte
   menu.hide()
   updateMeLabel()
   countEl.classList.add('show')
@@ -3049,6 +3067,38 @@ function tick(now?: number) {
      * apparaissent, et l'on voit ce qui nous attend.
      */
     track.update(dt, 0, 0)
+
+    /*
+     * ⚡ On compile les shaders PENDANT le décompte, pas en pleine course.
+     *
+     * Three.js ne compile le programme d'un matériau qu'à son PREMIER rendu, et
+     * il le fait sur le thread principal : chaque matière inédite fige l'image
+     * le temps de la compilation — de l'ordre de 50 à 200 ms sur mobile. Or la
+     * bambouseraie découvre ses matières UNE À UNE au fil des premiers mètres
+     * (radeau, palissade, yotsume-gaki, litière…), si bien que la course
+     * démarrait en hoquetant, très exactement là où l'on accélère.
+     *
+     * La ligne juste au-dessus vient de peupler 85 m de piste à vitesse nulle :
+     * tout ce que la forêt va montrer est DÉJÀ dans la scène. C'est donc le seul
+     * moment de la partie où la facture peut être payée d'un coup sans que
+     * personne ne le sente — on est immobile sur la grille.
+     *
+     * `compileAsync` de préférence à `compile` : là où le navigateur sait le
+     * faire (KHR_parallel_shader_compile), three.js rend la main tout de suite
+     * et le décompte ne bronche pas. Là où l'extension manque, il retombe de
+     * lui-même sur la compilation bloquante — un temps d'arrêt sur la grille de
+     * départ reste préférable à un hoquet en pleine ligne droite. Les deux cas
+     * sont déjà traités DANS three.js : rien à démêler ici.
+     *
+     * La promesse n'intéresse personne : le GO ne l'attend pas. Si le décompte
+     * s'achève avant la fin, on n'aura fait qu'AVANCER le travail — jamais
+     * l'aggraver. Le `catch` est là pour qu'un échec de compilation reste un
+     * problème d'images par seconde, jamais un rejet non capturé.
+     */
+    if (!shadersPrets) {
+      shadersPrets = true
+      renderer.compileAsync(scene, camera).catch(() => {})
+    }
   } else if (state === 'course') {
     time += dt
 
@@ -3109,6 +3159,9 @@ function tick(now?: number) {
      */
     const support = track.supportSous(player.mesh.position.x, player.mesh.position.y)
     player.sol = player.surMur === 0 ? support.sol : 0
+    // 🎋 Le plafond du tunnel. Sur la paroi on est hors de la piste : rien
+    // au-dessus non plus, sinon on se cognerait à un tablier qu'on a quitté.
+    player.plafond = player.surMur === 0 ? support.plafond : Infinity
     player.update(dt)
     for (const r of rivals.values()) {
       // Chacun entre dans le sprint a SA distance, pas a la notre
