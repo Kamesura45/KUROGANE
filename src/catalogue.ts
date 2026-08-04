@@ -202,14 +202,34 @@ const RAYONS: Rayon[] = [
           },
         },
         {
-          titre: 'plateforme',
-          detail: `${PLATEFORME_H} m — trop haut pour un saut`,
+          titre: 'plateforme (rampe)',
+          detail: `${PLATEFORME_H} m — pleine, on la monte par sa pente`,
           faire: () => {
             // La largeur n'est passée qu'à la fabrique du BIOME : biomes.ts ne
             // peut pas importer de valeur depuis track.ts sans créer un cycle.
             // Le repli, lui, vit dans track.ts et lit PLATEFORME_LARG tout seul.
             const p =
-              biome.fabriquePlateforme?.(PLATEFORME_H, PLATEFORME_LARG) ??
+              biome.fabriquePlateforme?.(PLATEFORME_H, PLATEFORME_LARG, true) ??
+              makePlateformeMesh(PLATEFORME_H)
+            p.scale.z = 12
+            return p
+          },
+        },
+        {
+          /*
+           * 🎋 Les DEUX radeaux, côte à côte.
+           *
+           * C'est tout l'intérêt de les voir ici : la différence entre « plein »
+           * et « sur pilotis » se juge à la silhouette, et il fallait sinon
+           * croiser deux plateformes de bambou dans une même course pour espérer
+           * les comparer. Hors bambouseraie, les deux entrées montrent le même
+           * bloc — les autres biomes n'ont qu'un modèle.
+           */
+          titre: 'plateforme (pilotis)',
+          detail: `${PLATEFORME_H} m — ajourée, on passe dessous`,
+          faire: () => {
+            const p =
+              biome.fabriquePlateforme?.(PLATEFORME_H, PLATEFORME_LARG, false) ??
               makePlateformeMesh(PLATEFORME_H)
             p.scale.z = 12
             return p

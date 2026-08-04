@@ -476,8 +476,32 @@ const PORTAIL_BLEU = 0x4db8ff
  */
 const PORTAIL_Y = 1.1
 
-/** 🔮 Le portail en vol : il file tout droit dans SA ligne jusqu'au 1er mur. */
-let portail: { d: number; lane: number; couleur: number; sens: 1 | -1 } | null = null
+/**
+ * 🔮 Combien de temps la boule tient sa ligne avant de commencer à tomber.
+ *
+ * Deux secondes : assez pour qu'on la voie filer droit et comprendre qu'elle
+ * vole, assez court pour que sa chute arrive encore dans le champ. Passé ce
+ * délai elle plonge, touche le sol et éclate — c'est ce qui lui donne enfin une
+ * portée à elle, au lieu de dépendre uniquement du prochain mur.
+ */
+const PORTAIL_PLANE = 2
+/**
+ * La pesanteur de la boule, en m/s². Volontairement le QUART d'une vraie
+ * gravité : elle doit s'affaisser, pas piquer. Depuis 1,10 m, la chute dure un
+ * peu moins d'une seconde — on a le temps de la voir descendre.
+ */
+const PORTAIL_PESANTEUR = 2.4
+
+/**
+ * 🔮 Le portail en vol : il file tout droit dans SA ligne jusqu'au 1er mur.
+ *
+ * `y` est sa hauteur ACTUELLE, et `t0` l'instant du lancer. Les deux vont
+ * ensemble : la boule part à la hauteur du lanceur — saut compris — tient ce
+ * niveau `PORTAIL_PLANE` secondes, puis s'affaisse jusqu'au sol.
+ */
+let portail:
+  | { d: number; lane: number; couleur: number; sens: 1 | -1; y: number; vy: number; t0: number }
+  | null = null
 
 /**
  * 👻 La trêve du départ : pendant les 5 premières secondes, personne ne peut
@@ -1341,8 +1365,19 @@ function spawnFumeeZone(cible: THREE.Object3D) {
 /** Recale la zone sur sa victime. `age` fait monter le dôme au fil du temps. */
 function placerFumeeZone(z: FumeeZone, age: number) {
   const p = z.cible.position
-  z.disque.position.set(p.x, 0.05, p.z)
-  z.dome.position.set(p.x, 0.4 + age * 0.16, p.z)
+  /*
+   * ⚠️ `p.y` : LA FUMÉE MONTE AVEC SA VICTIME.
+   *
+   * Les deux hauteurs étaient écrites en dur, et la zone restait donc plaquée
+   * au sol pendant qu'on sautait ou qu'on courait sur un plateau à 2,70 m. On
+   * voyait alors son aveuglement se dérouler sous ses pieds — un effet qu'on
+   * subit ne peut pas rester en bas quand on monte.
+   *
+   * Le disque garde son ras-du-sol RELATIF : c'est l'empreinte au niveau des
+   * pieds, pas une tache sur la piste.
+   */
+  z.disque.position.set(p.x, p.y + 0.05, p.z)
+  z.dome.position.set(p.x, p.y + 0.4 + age * 0.16, p.z)
 }
 
 // ————— 💨💥 Le rideau de vitesse (sprint final + dash) —————
@@ -1867,7 +1902,23 @@ function lancerParchemin() {
       return
     }
     const couleur = PORTAIL_BLEU
-    portail = { d: distance, lane: player.currentLane, couleur, sens: 1 }
+    /*
+     * ⚠️ Elle part à LA HAUTEUR DU LANCEUR, saut compris.
+     *
+     * Elle naissait à 1,10 m quoi qu'il arrive : tirer en plein saut faisait
+     * apparaître la boule sous ses propres pieds. `PORTAIL_Y` n'est donc plus
+     * une altitude mais un écart au-dessus des pieds — la hauteur de la main
+     * qui jette.
+     */
+    portail = {
+      d: distance,
+      lane: player.currentLane,
+      couleur,
+      sens: 1,
+      y: player.mesh.position.y + PORTAIL_Y,
+      vy: 0,
+      t0: time,
+    }
     player.geste('lancer') // 🔥 le bras jette le portail devant lui
     for (const m of [portailHalo, portailAnneau]) {
       ;(m.material as THREE.MeshBasicMaterial).color.setHex(couleur)
@@ -3290,6 +3341,41 @@ function tick(now?: number) {
       }
     })
 
+    /*
+     * ————— 🔮 Elle plane, puis elle s'affaisse —————
+     *
+     * Deux secondes de vol tendu à la hauteur du lancer, puis la pesanteur la
+     * prend. On garde `vy` plutôt que de recalculer la hauteur depuis `t0` :
+     * une vitesse s'intègre image par image et supporte tout ce qu'on voudra
+     * lui ajouter plus tard — un rebond, un renvoi qui la relance — là où une
+     * formule fermée obligerait à réécrire le temps.
+     *
+     * 💥 Et quand elle touche le sol, elle éclate : c'est SA portée à elle.
+     * Jusqu'ici seul un mur pouvait l'arrêter, et sur une ligne dégagée elle
+     * filait indéfiniment. Le sol lui donne une fin qui ne dépend plus de ce
+     * que la piste veut bien lui opposer.
+     *
+     * ⚠️ Un bloc À PART, avant celui des rencontres, plutôt qu'une imbrication :
+     * une boule éteinte au sol n'a plus de mur ni de rival à croiser, et le
+     * `if (portail)` suivant suffit à le dire. Deux blocs frères se lisent mieux
+     * qu'un test au milieu de cent lignes.
+     */
+    if (portail) {
+      if (time - portail.t0 > PORTAIL_PLANE) {
+        portail.vy -= PORTAIL_PESANTEUR * dt
+        portail.y += portail.vy * dt
+      }
+      if (portail.y <= 0) {
+        portailImpact(
+          new THREE.Vector3(LANES[portail.lane], 0.12, -(portail.d - distance)),
+          portail.couleur
+        )
+        portail = null
+        portailGroup.visible = false
+        toast('🔮 Le portail retombe et s\'éteint…')
+      }
+    }
+
     // ————— 🔮 Le portail en vol —————
     if (portail) {
       const avant = portail.d
@@ -3301,7 +3387,10 @@ function tick(now?: number) {
       // Un mur OU une plateforme pleine l'avale : c'est la piste qui borne sa
       // portée, pas un chiffre. Les radeaux de bambou, eux, le laissent filer
       // dessous — ils sont sur pilotis.
-      const mur = track.premierBarrage(portail.lane, lo, hi, PORTAIL_Y)
+      //
+      // ⚠️ On passe sa hauteur DU MOMENT, pas une constante : en s'affaissant
+      // elle rencontre les rampes de plus en plus bas, donc de plus en plus tôt.
+      const mur = track.premierBarrage(portail.lane, lo, hi, portail.y)
       // Qui croise-t-il dans sa ligne cette image ? Bots (solo) ET rivaux (en
       // ligne) confondus — le PLUS PROCHE l'emporte. On teste le franchissement :
       // à ~83 m/s il parcourt ~1,4 m par image, un test de proximité le raterait.
@@ -3330,7 +3419,9 @@ function tick(now?: number) {
         // 💥 Il éclate SUR la paroi : on prend la position du mur, pas celle du
         // portail — sinon la brûlure flotterait devant, dans le vide.
         portailImpact(
-          new THREE.Vector3(LANES[portail.lane], 1.1, -(dMur - distance) + 0.3),
+          // Sa hauteur DU MOMENT : une boule qui s'est affaissée doit brûler la
+          // paroi là où elle l'a heurtée, pas à l'altitude où elle est partie.
+          new THREE.Vector3(LANES[portail.lane], portail.y, -(dMur - distance) + 0.3),
           portail.couleur
         )
         portail = null
@@ -3378,7 +3469,9 @@ function tick(now?: number) {
       } else {
         // L'orbe file, l'anneau tourne, et les arcs se relancent à chaque image
         portailGroup.visible = true
-        portailGroup.position.set(LANES[portail.lane], PORTAIL_Y, -(portail.d - distance))
+        // `portail.y` et non plus une constante : c'est elle qui porte la
+        // hauteur, du lancer jusqu'à l'affaissement.
+        portailGroup.position.set(LANES[portail.lane], portail.y, -(portail.d - distance))
         portailAnneau.rotation.z += dt * 5
         portailCoeur.scale.setScalar(0.9 + Math.random() * 0.35) // le cœur palpite
         for (const a of portailArcs) jitterArc(a, 0.62, 0.3)
@@ -3448,9 +3541,18 @@ function tick(now?: number) {
         const ph = (v.userData.phase as number) + time * 0.8
         // Chacun tourne à son rythme sur une orbite propre : c'est l'irrégularité
         // qui fait « brume » — alignés, ils redeviendraient une boule.
+        /*
+         * ⚠️ `p.y` : LA BRUME MONTE AVEC SA VICTIME.
+         *
+         * Sa hauteur était écrite en dur, et la brume restait donc au sol
+         * pendant qu'on sautait ou qu'on courait sur un plateau à 2,70 m. Un
+         * poison qu'on laisse en bas en sautant se lit comme un décor posé sur
+         * la piste, pas comme un état qui nous colle — et c'est précisément ce
+         * que cette aura doit dire.
+         */
         v.position.set(
           p.x + Math.cos(ph) * 0.5,
-          0.5 + Math.sin(ph * 1.7) * 0.45 + 0.5,
+          p.y + 1 + Math.sin(ph * 1.7) * 0.45,
           p.z + Math.sin(ph) * 0.5
         )
         v.rotation.z = ph * 0.5

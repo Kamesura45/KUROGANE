@@ -164,14 +164,23 @@ taillés **une seule fois** : **118 → 71 matériaux**, **318 → 270 géométr
 node --import ./tools/resolveur-ts.mjs tools/mesurer-scene.ts
 ```
 
-## 🎋 Les plateformes arrêtent — et le radeau de bambou est un TUNNEL
+## 🎋 Les plateformes arrêtent — et la bambouseraie en a DEUX
 
-Une plateforme **pleine** arrête le corps *et* les sorts. Le **radeau de
-bambou**, lui, est un couloir : ses deux montants courent du sol au tablier sur
-toute sa longueur, ce sont de vraies parois, et il est ouvert à ses deux bouts.
-C'est le seul passage bas de la course.
+Une plateforme **pleine** arrête le corps *et* les sorts. La bambouseraie, elle,
+bâtit deux radeaux — et c'est la **rampe** qui les sépare :
 
-D'où une règle unique, la même pour les **sorts**, les **bots** et le **joueur** :
+| | avec rampe | sans rampe |
+|---|---|---|
+| Flancs | pile de perches jusqu'au sol | **pilotis espacés** |
+| Dessous | plein, on n'y passe pas | **on passe** — le seul passage bas |
+| Dessus | on court dessus | on court dessus |
+
+La logique est celle du terrain : une plateforme qu'on monte par une pente n'a
+pas de tunnel, puisque la rampe emmène en haut et que **personne n'arriverait
+jamais dessous**. Y ménager un passage serait un décor sans usage.
+
+Le radeau sur pilotis, lui, est un couloir ouvert à ses deux bouts. D'où une
+règle unique, la même pour les **sorts**, les **bots** et le **joueur** :
 
 > **On entre par l'entrée.**
 
@@ -181,9 +190,16 @@ D'où une règle unique, la même pour les **sorts**, les **bots** et le **joueu
 | les **côtés** | refusé, on reste sur sa voie | `flancA`, qui laisse passer au ras du nez |
 | le **toit** | refusé, on se cogne | `TUNNEL_HAUT`, le plafond sous le tablier |
 
-C'est une **règle de jeu**, pas une coquetterie : le drapeau `plateformeAjouree`
-vit sur le biome, à côté de sa fabrique, et la collision le **lit**. Impossible
-qu'un radeau se dessine ouvert tout en se comportant comme un bloc plein.
+C'est une **règle de jeu**, pas une coquetterie. Le drapeau `plateformeAjouree`
+dit seulement qu'un biome *sait* bâtir des radeaux ajourés ; c'est `ajouree()`,
+dans track.ts, qui le croise avec `rampe === 0`. Et c'est **la même condition**
+qui choisit le maillage — impossible qu'un radeau se dessine ouvert tout en se
+comportant comme un bloc plein.
+
+> Le pool de plateformes est donc indexé par biome **et** par variante. Sans
+> ça, il aurait recyclé un radeau sur pilotis au bout d'une pente.
+
+Sur une course de 1 920 m : **22 plateformes pleines, 5 tunnels**.
 
 Six défauts réparés, tous invisibles au typage :
 
@@ -1277,6 +1293,49 @@ tombent tous les 13 m. Mesuré sur 1 860 tirs simulés :
 C'est **la piste qui borne le sort**, pas un plafond arbitraire — et il faut
 encore aligner sa ligne sur celle du rival. L'échange se mérite.
 
+### 🔮 Elle plane, puis elle retombe
+
+La boule ne file plus indéfiniment. Elle part **à la hauteur du lanceur — saut
+compris**, tient ce niveau **2 s**, puis s'affaisse jusqu'au sol où elle éclate.
+
+> Elle naissait à 1,10 m quoi qu'il arrive : tirer en plein saut la faisait
+> apparaître **sous ses propres pieds**. `PORTAIL_Y` n'est donc plus une
+> altitude mais un écart au-dessus des pieds — la hauteur de la main qui jette.
+
+| Tir | Départ | Chute | Touche le sol à |
+|---|---|---|---|
+| au sol | 1,10 m | 0,97 s | 246 m |
+| en plein saut | 3,23 m | 1,65 s | 303 m |
+| depuis un plateau | 3,80 m | 1,80 s | 315 m |
+
+**Tirer en hauteur porte donc plus loin** — sauter avant de lancer devient un
+vrai geste, et c'est le seul endroit du jeu où la hauteur récompense autre chose
+qu'un franchissement.
+
+Ces distances sont des maximums **théoriques**, sur une ligne dégagée : la
+médiane reste 53 m, puisqu'un mur l'arrête presque toujours avant. La chute
+ajoute un plafond, elle ne change pas le jeu courant. Un seul chiffre la règle :
+`PORTAIL_PESANTEUR`, à 2,4 m/s² — le quart d'une vraie gravité, pour qu'elle
+s'affaisse au lieu de piquer.
+
+Deux conséquences qui suivent : la collision reçoit sa hauteur **du moment** (en
+descendant, elle rencontre les rampes de plus en plus bas, donc de plus en plus
+tôt), et sa brûlure se pose à cette hauteur-là au lieu de flotter à 1,10 m.
+
+### ✨ Les auras montent avec toi
+
+Un effet qu'on subit ne peut pas rester au sol quand on monte. Six auras suivent
+la hauteur du joueur ; **deux ne le faisaient pas** :
+
+| Effet | Avant | Maintenant |
+|---|---|---|
+| ☠️ Brume de poison | `y` figé entre 0,5 et 1,45 m | `p.y + 1` + ondulation |
+| 💨 Zone de fumigène | disque à 0,05 m, dôme à 0,40 m | `p.y + 0,05` / `p.y + 0,40` |
+
+En sautant, ou en courant sur un plateau à 2,70 m, on voyait donc son propre
+aveuglement se dérouler **sous ses pieds** — ce qui se lit comme un décor posé
+sur la piste, pas comme un état qui nous colle.
+
 ### Les bots jouent aussi
 
 Les rivaux d'entraînement ramassent et lancent des parchemins, avec les mêmes
@@ -1609,6 +1668,54 @@ jamais de « claquement ». Le **décor**, lui, suit la frontière STRICTE
 (`indexBiome`) et se plante d'après le point où il APPARAÎT — 85 m devant, pas
 sous nos pieds. Sans cette avance, un bambou semé pendant qu'on entre dans le
 village nous arriverait dessus en pleine fournaise.
+
+### 🎋 Le bambou pousse en TOUFFES
+
+Un rhizome donne une touffe, et les chaumes en sortent serrés autour du même
+point. On semait pourtant chaque tige **indépendamment**, à plat sur toute la
+bande — d'où une forêt également clairsemée partout, où l'œil ne trouvait aucun
+groupe auquel se raccrocher et où les trous se voyaient d'autant mieux qu'ils
+étaient réguliers.
+
+On tire donc des **centres**, puis les tiges autour. Même quantité de géométrie,
+répartition tout autre : des paquets denses, et de vraies clairières entre eux.
+
+> ⚠️ `sqrt` sur le rayon du tirage. Sans lui, un tirage uniforme sur *r* entasse
+> tout au centre — l'aire croît comme *r²* — et la touffe redevient un poteau.
+
+Deux ajouts qui vont avec le groupement, parce qu'un paquet serré de tiges
+identiques se lirait comme un motif répété :
+
+- une tige sur douze est **sèche** (brune) — les vieux chaumes jaunissent sur
+  pied, au milieu des jeunes ;
+- 2 à 3 **branches** en haut des tiges détaillées. Les nœuds disaient déjà
+  « bambou » de près ; les branches le disent **de loin, à la silhouette** — et
+  c'est à la silhouette qu'on lit un massif à 28 m/s. Réservées aux ~30 tiges
+  ornées : sur les 200 fûts de remplissage, elles coûteraient sans rien ajouter,
+  la canopée couvrant déjà tout à cette hauteur.
+
+### 🪨 Les obstacles du Fuji
+
+Le biome n'en avait **aucun** : ses trois obstacles étaient les blocs nus du
+repli, le seul endroit de la course où l'on voyait la géométrie brute du jeu.
+
+| | Ce que c'est |
+|---|---|
+| **saut** | une congère — trois rochers à demi enfouis, coiffés de neige |
+| **glissade** | une poutre de glace, stalactites dessous, cordages dorés |
+| **mur** | un gros rocher anguleux, calotte de neige sur le dessus |
+
+> **La valeur avant la teinte.** C'est le biome CLAIR : un obstacle blanc sur un
+> sol blanc ne se verrait pas, et c'est la portion où l'on martèle pour le
+> sprint — on n'a pas le temps de déchiffrer. Tout est bâti en roche **sombre**,
+> la neige ne fait que coiffer.
+
+Les **cordages dorés** de la glissade sont repris tels quels de la perche de la
+bambouseraie : l'or est devenu le signal du « glisse », et le changer ici
+obligerait à réapprendre la lecture en pleine course, juste avant le sprint.
+
+Les **stalactites** ne sont pas de l'ornement : la barre seule pouvait se lire
+comme un appui. Elles disent qu'il faut se baisser.
 
 > ⚠️ Le décor a longtemps utilisé `ambianceA().index`, qui bascule au MILIEU du
 > fondu de couleur. Il quittait donc la forêt **133 m avant la vraie frontière**,

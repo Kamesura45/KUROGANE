@@ -281,6 +281,12 @@ interface Plateforme {
   nez: THREE.Mesh
   plan: PlannedPlateforme
   biome: number
+  /**
+   * 🎋 Quel des deux radeaux ce maillage dessine — celui qu'on monte par une
+   * rampe, ou celui sur pilotis. Le pool s'en sert pour ne jamais recycler
+   * l'un à la place de l'autre (cf. spawnPlateforme).
+   */
+  avecRampe: boolean
   active: boolean
 }
 
@@ -771,8 +777,22 @@ export class Track {
    * source : impossible qu'un radeau se dessine ajouré tout en se comportant
    * comme un bloc plein.
    */
-  private ajouree(d: number): boolean {
-    return BIOMES[indexBiome(d, this.courseLength)].plateformeAjouree === true
+  private ajouree(p: PlannedPlateforme): boolean {
+    /*
+     * Le biome d'une plateforme se déduit de sa distance — c'est déjà comme ça
+     * qu'on choisit son apparence (cf. spawnPlateforme). On lit donc la MÊME
+     * source : impossible qu'un radeau se dessine ajouré tout en se comportant
+     * comme un bloc plein.
+     *
+     * ⚠️ Et la RAMPE tranche entre les deux radeaux de la bambouseraie. Une
+     * plateforme qu'on monte par une pente n'a pas de tunnel : la rampe emmène
+     * en haut, on n'arrive jamais dessous. C'est la même condition qui choisit
+     * le maillage, pour que le dessin et la règle ne puissent pas diverger.
+     */
+    return (
+      BIOMES[indexBiome(p.d, this.courseLength)].plateformeAjouree === true &&
+      p.rampe === 0
+    )
   }
 
   /**
@@ -820,7 +840,7 @@ export class Track {
         // On garde la PLUS HAUTE : deux plateaux peuvent se chevaucher d'un
         // cheveu au moment où l'on passe de l'un à l'autre.
         sol = Math.max(sol, p.plan.hauteur)
-      } else if (!this.ajouree(p.plan.d)) {
+      } else if (!this.ajouree(p.plan)) {
         // Les pieds sous le plateau : on lui rentre dedans. À 2,40 m, c'est
         // forcément le cas quand il n'y a pas de rampe — d'où l'escalade.
         //
@@ -934,7 +954,7 @@ export class Track {
        * pilotis, et un projectile passe dessous comme un coureur y passe. Sans
        * cette exception, l'arme la plus lente du jeu serait arrêtée par du vide.
        */
-      if (!this.ajouree(p.d)) retiens(p.d)
+      if (!this.ajouree(p)) retiens(p.d)
     }
     return plusProche
   }
@@ -1434,13 +1454,25 @@ export class Track {
 
   private spawnPlateforme(p: PlannedPlateforme, z: number) {
     const biome = indexBiome(p.d, this.courseLength)
-    let pf = this.plateformes.find((q) => !q.active && q.biome === biome)
+    /*
+     * 🎋 Le pool est indexé par biome ET par VARIANTE.
+     *
+     * La bambouseraie bâtit deux radeaux différents selon qu'il y a une rampe
+     * ou non. Recycler l'un pour l'autre — ce que faisait un pool indexé sur le
+     * seul biome — poserait un radeau sur pilotis au bout d'une pente, ou un
+     * radeau plein là où la collision ouvre un tunnel.
+     */
+    const avecRampe = p.rampe > 0
+    let pf = this.plateformes.find(
+      (q) => !q.active && q.biome === biome && q.avecRampe === avecRampe
+    )
     if (!pf) {
       const habille = BIOMES[biome].fabriquePlateforme
       pf = {
         mesh: habille
-          ? habille(p.hauteur, PLATEFORME_LARG)
+          ? habille(p.hauteur, PLATEFORME_LARG, avecRampe)
           : makePlateformeMesh(p.hauteur),
+        avecRampe,
         rampe: new THREE.Mesh(
           GEO_RAMPE,
           new THREE.MeshStandardMaterial({
