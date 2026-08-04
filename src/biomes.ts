@@ -65,7 +65,18 @@ export interface Biome {
    * Un élément de bordure (massif, masure, rocher…). Appelé avec le tirage à
    * graine : deux joueurs voient EXACTEMENT le même décor, comme le reste.
    */
-  fabriqueDecor: (rng: () => number) => THREE.Group
+  /**
+   * Le massif de bordure. `cote` vaut -1 à gauche, +1 à droite.
+   *
+   * ⚠️ Le côté n'est pas là pour faire joli : il permet aux deux bords de ne
+   * PAS se ressembler. Un décor identique de part et d'autre se lit comme un
+   * couloir tapissé ; deux bords qui racontent des choses différentes donnent
+   * une direction au paysage.
+   *
+   * La plupart des biomes l'ignorent, et c'est très bien — ils sont symétriques
+   * par nature. Seul le pont s'en sert (cf. ses maisons).
+   */
+  fabriqueDecor: (rng: () => number, cote: number) => THREE.Group
   /** Un élément tous les combien de mètres, de chaque côté. */
   ecartDecor: number
 
@@ -93,20 +104,44 @@ export interface Biome {
    * de valeur depuis track.ts sans créer un cycle (track importe déjà BIOMES).
    * C'est la même raison qui fait que `Kind` n'est importé qu'en `type`.
    */
-  fabriquePlateforme?: (hauteur: number, largeur: number) => THREE.Group
+  fabriquePlateforme?: (
+    hauteur: number,
+    largeur: number,
+    avecRampe: boolean
+  ) => THREE.Group
 
   /**
-   * 🎋 Sa plateforme est-elle AJOURÉE — montée sur pilotis, ouverte dessous ?
+   * 🎋 Ce biome sait-il bâtir des plateformes AJOURÉES — sur pilotis, ouvertes
+   * dessous ?
    *
    * Ce n'est pas une coquetterie d'apparence mais une règle de jeu, et c'est
    * pour ça qu'elle vit ici et pas dans la fabrique. Sous un radeau de bambou
    * on doit pouvoir courir, et un kunaï doit filer dessous ; sous un wagon
    * plein, non — on lui rentre dedans et on l'escalade.
    *
-   * La collision LIT ce drapeau. Sans lui elle traitait tout comme plein, et
-   * le radeau bloquait un passage que son propre dessin annonce ouvert.
+   * ⚠️ CE DRAPEAU NE SUFFIT PLUS À LUI SEUL. La bambouseraie a désormais DEUX
+   * radeaux, et c'est la RAMPE qui les départage :
+   *
+   *  · avec rampe → un radeau PLEIN, qu'on monte en courant par sa pente. Y
+   *    ménager un tunnel n'aurait aucun sens : la rampe emmène en haut, et
+   *    personne n'arriverait jamais dessous.
+   *  · sans rampe → le radeau sur PILOTIS, celui qu'on traverse par-dessous et
+   *    sur lequel on peut aussi passer.
+   *
+   * La collision croise donc les deux : ce drapeau, ET `rampe === 0`. Voir
+   * `ajouree()` dans track.ts, qui est l'unique endroit où la question se pose.
    */
   plateformeAjouree?: boolean
+
+  /**
+   * 🔊 L'ambiance SONORE du biome, s'il en a une.
+   *
+   * Elle vit ici, à côté de la brume et de la palette, parce qu'elle dit la
+   * même chose qu'elles : où l'on se trouve. La boucle de jeu n'a donc aucun
+   * numéro de biome à connaître — elle lit ce champ, exactement comme elle lit
+   * `plateformeAjouree`.
+   */
+  ambiance?: 'feu' | 'oiseaux'
 
 
   /**
@@ -291,6 +326,34 @@ function galet(
  * donc pas de matière. On garde quand même l'entrée, pour ne pas retenter la
  * peinture à chaque image.
  */
+/**
+ * 🌿 Une brindille de bambou : un brin fin qui part du fût, presque à
+ * l'horizontale, puis se redresse un peu vers le ciel.
+ *
+ * `cote` vaut -1 ou +1 : la branche part à gauche ou à droite. `x` est son
+ * MILIEU, pas son attache — le cylindre est centré sur son origine, et c'est à
+ * l'appelant d'avoir déjà décalé d'une demi-longueur.
+ *
+ * Elle est volontairement bâtie en UNE pièce : à deux ou trois par tige et une
+ * trentaine de tiges ornées par massif, un coude articulé se paierait cent
+ * fois pour un détail qu'on croise à 28 m/s.
+ */
+function p2Branche(
+  dans: Piece[],
+  o: { x: number; y: number; z: number; lg: number; cote: number; couleur: THREE.Color | number }
+) {
+  dans.push({
+    geo: GEO.tigeCreuse.clone().scale(0.028, o.lg, 0.028),
+    couleur: o.couleur,
+    x: o.x,
+    y: o.y,
+    z: o.z,
+    // Couchée (π/2), puis relevée d'un cheveu : une branche part à l'horizontale
+    // et remonte. Le signe suit le côté, sinon elle plongerait vers le sol.
+    rz: o.cote * (Math.PI / 2 - 0.22),
+  })
+}
+
 const _texCache = new Map<string, THREE.Texture | null>()
 function texturePour(clé: string, dessin: (t: Peintre) => void): THREE.Texture | null {
   const dejaLa = _texCache.get(clé)
@@ -670,6 +733,121 @@ function murSimple(f: FaçonMur): THREE.Group {
   return groupe(assemble(corps, MAT_SOLIDE), assemble(liser, MAT_LUMIERE))
 }
 
+/**
+ * ————— 🏗️ Le SQUELETTE d'une plateforme, commun à trois biomes —————
+ *
+ * La bambouseraie garde sa fabrique à elle (des perches couchées, une forme
+ * qu'aucun autre biome ne partage). Les trois autres, eux, disent la même chose
+ * avec des matières différentes — c'est exactement ce qu'un squelette commun
+ * doit porter, comme `murSimple` et `barriereSimple` le font déjà ailleurs.
+ *
+ * Les DEUX variantes en sortent, et c'est le point :
+ *
+ *  · `avecRampe` → des flancs PLEINS. On la monte par sa pente, il n'y a rien à
+ *    voir dessous et personne n'y passera jamais.
+ *  · sinon       → des PILOTIS espacés. On voit au travers, et l'on y court.
+ *
+ * ⚠️ Tout est bâti sur 1 m de long puis ÉTIRÉ. D'où deux conséquences qu'il
+ * faut avoir en tête en réglant les chiffres :
+ *  · ce qui est HORIZONTAL (le tablier, les lisses) s'allonge — c'est voulu ;
+ *  · ce qui est VERTICAL (les pilotis) ne s'allonge pas, il s'ÉCARTE. Trois
+ *    poteaux posés à z = -0,34 / 0 / +0,34 deviennent trois pilotis
+ *    régulièrement espacés sur toute la longueur, quelle qu'elle soit. C'est le
+ *    seul endroit du jeu où l'étirement joue en notre faveur.
+ */
+interface FaçonPlateforme {
+  /** Le dessus, celui qu'on foule. */
+  tablier: number
+  /** Les flancs pleins, en deux teintes qui alternent par assise. */
+  corps: [number, number]
+  /** Les poteaux de la variante ajourée. */
+  pilotis: number
+  /**
+   * Ce qui S'ÉCLAIRE : braises, lanternes. Reçoit le tableau à remplir et de
+   * quoi se placer. Appelé pour les deux variantes — un radeau plein a droit à
+   * ses feux comme l'autre.
+   */
+  lueurs?: (dans: Piece[], h: number, l: number, ajoure: boolean) => void
+}
+
+function plateformeSimple(
+  hauteur: number,
+  largeur: number,
+  avecRampe: boolean,
+  f: FaçonPlateforme
+): THREE.Group {
+  const corps: Piece[] = []
+  const lueurs: Piece[] = []
+
+  // Le tablier : c'est LUI qu'on voit d'en haut, et lui qui porte.
+  corps.push({
+    geo: GEO.bloc.clone().scale(largeur, 0.22, 1),
+    couleur: f.tablier,
+    x: 0, y: hauteur - 0.11, z: 0,
+  })
+
+  if (avecRampe) {
+    /*
+     * ⚠️ UNE MASSE PLEINE, d'abord.
+     *
+     * Il n'y avait ici que deux assises de flanc, et l'intérieur restait VIDE :
+     * de face, on voyait au travers entre les deux parois. Une plateforme qu'on
+     * monte par une pente doit être pleine — c'est ce qui la distingue de sa
+     * jumelle sur pilotis, et cette distinction ne peut pas tenir aux seuls
+     * côtés.
+     *
+     * Le corps est posé EN PREMIER, les assises viennent ensuite par-dessus :
+     * elles n'ont plus à faire structure, seulement relief.
+     */
+    corps.push({
+      geo: GEO.bloc.clone().scale(largeur - 0.08, hauteur - 0.2, 1),
+      couleur: f.corps[1],
+      x: 0, y: (hauteur - 0.2) / 2, z: 0,
+    })
+    // Les assises qui l'habillent : elles débordent d'un cheveu sur les flancs,
+    // et c'est leur alternance qui donne l'épaisseur du bâti.
+    const etages = Math.max(2, Math.floor((hauteur - 0.66) / 0.42))
+    for (const cote of [-1, 1]) {
+      for (let e = 0; e < etages; e++) {
+        corps.push({
+          geo: GEO.bloc.clone().scale(0.2, (hauteur - 0.9) / etages + 0.02, 1),
+          couleur: f.corps[e % 2],
+          x: cote * (largeur / 2 - 0.02),
+          y: 0.24 + e * ((hauteur - 0.9) / Math.max(1, etages - 1)),
+          z: 0,
+        })
+      }
+    }
+  } else {
+    // Les pilotis, plantés au bord EXACT de la ligne et volontairement fins :
+    // ils expliquent que le tablier tienne sans jamais se trouver là où l'on
+    // court. Le passage doit se voir libre pour qu'on ose s'y engager.
+    for (const cote of [-1, 1]) {
+      for (const z of [-0.34, 0, 0.34]) {
+        corps.push({
+          geo: GEO.bloc.clone().scale(0.13, hauteur - 0.66, 0.13),
+          couleur: f.pilotis,
+          x: cote * (largeur / 2 - 0.13),
+          y: (hauteur - 0.66) / 2,
+          z,
+        })
+      }
+      // Une lisse basse d'un pilotis à l'autre : elle borde le tunnel sans le
+      // fermer, et donne au passage un seuil.
+      corps.push({
+        geo: GEO.bloc.clone().scale(0.08, 0.08, 1),
+        couleur: f.corps[0],
+        x: cote * (largeur / 2 - 0.13),
+        y: 0.34,
+        z: 0,
+      })
+    }
+  }
+
+  f.lueurs?.(lueurs, hauteur, largeur, !avecRampe)
+  return groupe(assemble(corps, MAT_SOLIDE), assemble(lueurs, MAT_LUMIERE))
+}
+
 /* ————————————————————————————————————————————————————————————————
  *  1 · FORÊT DE BAMBOUS 竹 — l'aube verte
  * ———————————————————————————————————————————————————————————————— */
@@ -747,6 +925,11 @@ const BAMBOUS: Biome = {
    * C'est exactement le levier que la mesure avait désigné.
    */
   ecartDecor: 7,
+
+  // 🐦 L'aube dans les bambous : quelques chants espacés. C'est le biome du
+  // DÉPART, celui qu'on écoute pendant le décompte faute d'avoir mieux à faire
+  // — et le seul moment de la course où l'on a l'oreille libre.
+  ambiance: 'oiseaux',
 
   /*
    * ————— Le sol de la bambouseraie —————
@@ -903,12 +1086,47 @@ const BAMBOUS: Biome = {
      *
      * Les trois se chevauchent largement, donc plus aucune couture verticale.
      */
+    /*
+     * ————— 🎋 LES TIGES POUSSENT EN TOUFFES —————
+     *
+     * Un bambou ne pousse pas tige par tige : un rhizome donne une touffe, et
+     * les chaumes en sortent serrés autour du même point.
+     *
+     * On semait jusqu'ici chaque tige INDÉPENDAMMENT, à plat sur toute la
+     * bande. D'où une forêt également clairsemée partout : l'œil n'y trouvait
+     * aucun groupe auquel se raccrocher, et les trous se voyaient d'autant
+     * mieux qu'ils étaient réguliers — c'est ce qui se lisait comme un bug.
+     *
+     * On tire donc des CENTRES, puis les tiges autour. Même quantité de
+     * géométrie, répartition tout autre : des paquets denses, et de vraies
+     * clairières entre eux.
+     */
+    const semeTouffes = (etendue: number, profondeur: number, n: number) =>
+      Array.from({ length: n }, () => ({
+        x: rng() * etendue,
+        z: (rng() - 0.5) * profondeur,
+        // Serré : au-delà d'un mètre, on retombe sur du semis à plat.
+        r: 0.45 + rng() * 0.85,
+      }))
+
+    /**
+     * Un point au hasard DANS une touffe.
+     *
+     * ⚠️ `sqrt` sur le rayon : sans lui, un tirage uniforme sur r entasse tout
+     * au centre (l'aire croît comme r²) et la touffe devient un poteau unique.
+     */
+    const dansTouffe = (t: { x: number; z: number; r: number }) => {
+      const a = rng() * Math.PI * 2
+      const d = Math.sqrt(rng()) * t.r
+      return { x: t.x + Math.cos(a) * d, z: t.z + Math.sin(a) * d }
+    }
+
+    const touffesProches = semeTouffes(5, 22, 9)
     const detaillees = 26 + Math.floor(rng() * 12)
     for (let i = 0; i < detaillees; i++) {
       const h = 7 + rng() * 7
       const r = 0.085 + rng() * 0.05
-      const x = rng() * 5
-      const z = (rng() - 0.5) * 22
+      const { x, z } = dansTouffe(touffesProches[Math.floor(rng() * touffesProches.length)])
       // Plus la tige est loin, plus elle est sombre : la profondeur se lit à la
       // valeur avant de se lire à la taille.
       const recul = Math.min(1, x / 5)
@@ -936,6 +1154,33 @@ const BAMBOUS: Biome = {
           y: hy,
           z,
           rz: penche,
+        })
+      }
+
+      /*
+       * 🌿 Les BRANCHES du haut : deux ou trois brindilles qui partent du fût,
+       * dans le dernier tiers.
+       *
+       * C'est ce qui distingue une tige de bambou d'un tube vert planté. Les
+       * nœuds le disaient déjà de près ; les branches le disent de LOIN, à la
+       * silhouette — et c'est à la silhouette qu'on lit un massif en courant.
+       *
+       * Réservées aux tiges détaillées (une trentaine par massif) : sur les
+       * deux cents fûts de remplissage, elles coûteraient sans rien ajouter,
+       * puisque la canopée couvre déjà tout à cette hauteur.
+       */
+      const branches = 2 + Math.floor(rng() * 2)
+      for (let k = 0; k < branches; k++) {
+        const hy = h * (0.62 + rng() * 0.3)
+        const cote = rng() < 0.5 ? -1 : 1
+        const lg = 0.5 + rng() * 0.55
+        p2Branche(corps, {
+          x: x + Math.sin(penche) * hy + (cote * lg) / 2,
+          y: hy,
+          z,
+          lg,
+          cote,
+          couleur: teinte(0x7f9a4c, 0x46592c, recul * 0.5 + rng() * 0.4),
         })
       }
 
@@ -967,16 +1212,27 @@ const BAMBOUS: Biome = {
      * rien ne les distingue d'une tige détaillée, sinon qu'on ne compte pas
      * leurs nœuds à 28 m/s.
      */
+    const touffesLarges = semeTouffes(11, 23, 27)
     const simples = 152 + Math.floor(rng() * 58)
     for (let i = 0; i < simples; i++) {
       const h = 7 + rng() * 8
       const r = 0.085 + rng() * 0.055
-      const x = rng() * 11
-      const z = (rng() - 0.5) * 23
-      const recul = Math.min(1, x / 11)
+      const { x, z } = dansTouffe(touffesLarges[Math.floor(rng() * touffesLarges.length)])
+      const recul = Math.min(1, Math.max(0, x) / 11)
+      /*
+       * 🟤 Une tige sur douze est SÈCHE.
+       *
+       * Une touffe de bambou n'est jamais d'un seul vert : les vieux chaumes
+       * jaunissent puis brunissent sur pied, au milieu des jeunes. Sans eux, un
+       * paquet serré de tiges identiques se lit comme un motif répété — et
+       * c'est justement en les groupant qu'on rendrait ce défaut visible.
+       */
+      const seche = rng() < 0.085
       corps.push({
         geo: GEO.tigeCreuse.clone().scale(r, h, r),
-        couleur: teinte(0x6d8a42, 0x25361b, recul * 0.8 + rng() * 0.2),
+        couleur: seche
+          ? teinte(0x8a6f3a, 0x514020, rng())
+          : teinte(0x6d8a42, 0x25361b, recul * 0.8 + rng() * 0.2),
         x,
         y: h / 2,
         z,
@@ -1221,10 +1477,14 @@ const BAMBOUS: Biome = {
        * Les deux montants qui la portent.
        *
        * Volontairement FINS, et plantés au bord exact de la ligne (±0,85 m) :
-       * ils expliquent pourquoi la perche tient en l'air, sans jamais se
-       * trouver sur la trajectoire d'un joueur — qui court au centre de sa
-       * ligne. Ils ne sont pas dans la boîte de collision : un montant épais
-       * aurait été un mensonge visuel.
+       * ils expliquent pourquoi la perche tient en l'air sans encombrer le
+       * centre de la voie, là où l'on court.
+       *
+       * ⚠️ Ils DESCENDENT SOUS LA BOÎTE, et c'est voulu. La boîte de la
+       * glissade couvre toute la largeur de la ligne entre 1,30 m et 1,80 m —
+       * pas un centimètre plus bas. Un joueur qui glisse traverse donc les
+       * montants sans rien heurter : ils portent la barre, ils ne barrent pas
+       * le passage. Les faire épais laisserait croire le contraire.
        */
       for (const nx of [-0.85, 0.85]) {
         p.push({
@@ -1278,13 +1538,41 @@ const BAMBOUS: Biome = {
    * exactement ce qu'on veut quand la plateforme s'étire. Un tonneau ou une
    * caisse se seraient déformés en bouillie.
    *
-   * Le liseré vermillon du dessus reprend celui des pans de mur : c'est devenu
-   * le langage des surfaces qu'on UTILISE, par opposition aux obstacles qu'on
-   * subit.
+   * Le liseré vermillon du nez reprend celui des pans de mur : c'est devenu le
+   * langage des surfaces qu'on UTILISE, par opposition aux obstacles qu'on
+   * subit. Il est posé par la piste, pas ici (cf. la fabrique plus bas).
+   *
+   * ————— 🎋 DEUX RADEAUX, ET C'EST LA RAMPE QUI LES SÉPARE —————
+   *
+   * 1. AVEC RAMPE — un radeau PLEIN, qu'on monte en courant par sa pente. Ses
+   *    flancs sont une pile de perches jusqu'au sol : rien à voir dessous, et
+   *    rien à y faire. Y ménager un tunnel serait un mensonge, puisque la rampe
+   *    emmène en haut et que personne n'arriverait jamais en dessous.
+   *
+   * 2. SANS RAMPE — le radeau sur PILOTIS : des poteaux espacés, on voit au
+   *    travers, et c'est le seul passage bas de la course. C'est LUI le tunnel.
+   *
+   * Le tunnel se lit au pied de la lettre. On entre PAR L'ENTRÉE :
+   *
+   *  · par l'AVANT  → on passe ;
+   *  · par les CÔTÉS → refusé, `flancA` retient le changement de ligne tant
+   *    qu'on est sous la hauteur du tablier (et laisse passer au ras du nez,
+   *    ce qui EST l'entrée) ;
+   *  · par le TOIT  → refusé, `TUNNEL_HAUT` pose un plafond sous le tablier.
+   *    Sauter à l'intérieur cognait autrefois au-delà du seuil des 2,40 m et
+   *    l'on ressortait sur le dessus.
+   *
+   * Et l'on peut TOUJOURS courir sur le dessus, dans les deux cas : le tablier
+   * porte, ajouré ou non.
+   *
+   * ⚠️ Le drapeau ci-dessous dit seulement que ce biome SAIT bâtir des radeaux
+   * ajourés. C'est `ajouree()`, dans track.ts, qui croise ce drapeau avec la
+   * rampe — et c'est la même condition qui choisit le maillage ici, pour que le
+   * dessin et la règle ne puissent pas diverger.
    */
   plateformeAjouree: true,
 
-  fabriquePlateforme: (hauteur, largeur) => {
+  fabriquePlateforme: (hauteur, largeur, avecRampe) => {
     const p: Piece[] = []
 
     // Le corps : cinq perches côte à côte, couchées en long. Cinq et non
@@ -1312,25 +1600,114 @@ const BAMBOUS: Biome = {
       x: 0, y: hauteur - 0.11, z: 0,
     })
 
-    // Les montants sous le tablier, jusqu'au sol : la plateforme doit avoir
-    // l'air posée sur quelque chose, pas de léviter.
-    for (const x of [-largeur / 2 + 0.15, largeur / 2 - 0.15]) {
+    if (avecRampe) {
+      /*
+       * ————— 1. LE RADEAU PLEIN —————
+       *
+       * Ses flancs sont une PILE de perches couchées, du sol au tablier. On les
+       * couche dans le sens de la longueur comme celles du dessus : c'est la
+       * seule forme qui survive à l'étirement en Z sans se déformer.
+       *
+       * Rien ne se voit au travers, et c'est le but : ce radeau-là se monte par
+       * sa pente, il n'a pas de dessous à montrer.
+       */
+      /*
+       * ⚠️ LE CŒUR PLEIN, sous les perches.
+       *
+       * Les deux piles de perches ne faisaient que border : entre elles,
+       * l'intérieur restait vide et l'on voyait au travers de face. Un radeau
+       * qu'on monte par une pente est une masse — c'est ce qui le sépare de sa
+       * jumelle sur pilotis, et deux flancs n'y suffisent pas.
+       *
+       * Le bloc est en retrait des perches : il les remplit sans jamais les
+       * déborder, sinon on verrait une caisse là où l'on veut voir un fagot.
+       */
       p.push({
-        geo: GEO.bloc.clone().scale(0.16, hauteur - 0.66, 1),
-        couleur: 0x2b3320,
-        x, y: (hauteur - 0.66) / 2, z: 0,
+        geo: GEO.bloc.clone().scale(largeur - 0.5, hauteur - 0.3, 1),
+        couleur: 0x2f3a1e,
+        x: 0, y: (hauteur - 0.3) / 2, z: 0,
       })
+
+      const etages = Math.max(2, Math.floor((hauteur - 0.66) / 0.42))
+      for (const cote of [-1, 1]) {
+        for (let e = 0; e < etages; e++) {
+          const y = 0.24 + e * ((hauteur - 0.9) / Math.max(1, etages - 1))
+          p.push({
+            geo: GEO.tige.clone().scale(0.21, 1, 0.21),
+            couleur: e % 2 ? 0x3e4b27 : 0x33401f,
+            x: cote * (largeur / 2 - 0.19),
+            y,
+            z: 0,
+            rx: Math.PI / 2,
+          })
+        }
+      }
+      // Deux traverses verticales qui ceinturent la pile : sans elles, les
+      // perches empilées se lisent comme un tas plutôt que comme un radeau lié.
+      for (const cote of [-1, 1]) {
+        p.push({
+          geo: GEO.bloc.clone().scale(0.07, hauteur - 0.5, 0.16),
+          couleur: 0x574a33,
+          x: cote * (largeur / 2 - 0.19),
+          y: (hauteur - 0.5) / 2,
+          z: 0.34,
+        })
+      }
+    } else {
+      /*
+       * ————— 2. LE RADEAU SUR PILOTIS : le TUNNEL —————
+       *
+       * Des poteaux ESPACÉS, et non deux parois pleines. C'était le défaut
+       * filmé : le radeau se dessinait fermé sur ses côtés alors que la règle
+       * laissait passer dessous — on traversait donc ce qui avait l'air massif.
+       *
+       * ⚠️ Ils sont plantés au bord EXACT de la ligne et restent fins : ils
+       * expliquent que le tablier tienne sans jamais se trouver là où l'on
+       * court. Le passage doit se voir libre pour qu'on ose s'y engager.
+       *
+       * ⚠️ Leur `z` est en LOCAL, sur une pièce bâtie sur 1 m puis étirée : ils
+       * s'écarteront donc avec la longueur du radeau, exactement comme des
+       * pilotis régulièrement espacés. C'est le seul cas où l'étirement joue en
+       * notre faveur — un poteau vertical ne s'allonge pas, il se déplace.
+       */
+      for (const cote of [-1, 1]) {
+        for (const z of [-0.34, 0, 0.34]) {
+          p.push({
+            geo: GEO.tige.clone().scale(0.105, hauteur - 0.66, 0.105),
+            couleur: 0x2b3320,
+            x: cote * (largeur / 2 - 0.15),
+            y: (hauteur - 0.66) / 2,
+            z,
+          })
+        }
+      }
+      // Une lisse basse qui court d'un pilotis à l'autre, à hauteur de cheville :
+      // elle borde le tunnel sans le fermer, et donne au passage un seuil.
+      for (const cote of [-1, 1]) {
+        p.push({
+          geo: GEO.tige.clone().scale(0.06, 1, 0.06),
+          couleur: 0x3e4b27,
+          x: cote * (largeur / 2 - 0.15),
+          y: 0.34,
+          z: 0,
+          rx: Math.PI / 2,
+        })
+      }
     }
 
-    // Le vermillon ne subsiste qu'en ARÊTE, sur le nez du tablier : « on peut
-    // monter là-dessus ». Cinq centimètres au lieu de dix, et le dessus n'est
-    // plus rouge du tout.
-    p.push({
-      geo: GEO.bloc.clone().scale(largeur + 0.06, 0.05, 1),
-      couleur: VERMILLON,
-      x: 0, y: hauteur - 0.02, z: 0,
-    })
-
+    /*
+     * ⚠️ PAS DE VERMILLON ICI. Le liseré du nez est posé par la piste, en
+     * mètres, sur son propre maillage (cf. `nez` dans track.ts).
+     *
+     * Il a vécu ici, et c'était le bug. Les 5 cm dont parlait le commentaire
+     * étaient son ÉPAISSEUR ; sa longueur, elle, valait 1 — soit toute la pièce,
+     * qui est ensuite étirée à la longueur du radeau. Sur un radeau de 25 m, la
+     * bande faisait donc 25 m de long : tout le dessus virait au rouge, et le
+     * « repère sur le nez » se lisait comme un tapis déroulé.
+     *
+     * La règle est la même que pour la rampe : ce qui doit garder sa taille en
+     * mètres ne peut pas être un enfant de ce qu'on étire.
+     */
     return groupe(assemble(p, MAT_SOLIDE))
   },
 }
@@ -1357,6 +1734,10 @@ const VILLAGE: Biome = {
   ligne: 0x6b3a20,
   murCorps: 0x241610, // un mur de torchis noirci par le feu
   ecartDecor: 15,
+
+  // 🔥 Le seul biome qui s'ENTEND avant de se voir : sa nappe de brasier monte
+  // pendant qu'on y entre, et c'est elle qui annonce le pic de tension.
+  ambiance: 'feu',
 
   /*
    * Terre battue de village, jonchée de cendres et de débris calcinés. Les
@@ -1394,6 +1775,180 @@ const VILLAGE: Biome = {
       }
     }),
   tuileSol: 6,
+
+  /*
+   * 🔥 L'ÉCHAFAUD DU VILLAGE — et le feu qui court dessous.
+   *
+   * Des madriers noircis montés sur pilotis, comme une passerelle bâtie pour
+   * enjamber les décombres. Sa variante ajourée est le seul endroit du biome où
+   * l'on passe SOUS quelque chose, et ce quelque chose brûle : les braises sont
+   * posées au pied des poteaux, à hauteur de cheville.
+   *
+   * ⚠️ Elles ne blessent pas. Rien dans ce jeu ne tue, et un feu qui ferait
+   * exception ici obligerait à réapprendre la piste au pire endroit — le pic de
+   * tension. Elles disent « ce passage est risqué » ; c'est l'obscurité du
+   * biome, pas le feu, qui le rend vraiment difficile.
+   */
+  plateformeAjouree: true,
+
+  /*
+   * ————— 🔥 Les obstacles du village : du BOIS BRÛLÉ —————
+   *
+   * Le biome apporte sa matière — des poutres carbonisées, tombées de charpentes
+   * qui ont cédé — et l'accent de couleur reste celui du jeu : vermillon pour
+   * « saute », or pour « glisse », sombre pour « change de ligne ».
+   *
+   * ⚠️ LE FEU EST UN ACCENT, PAS LA LECTURE. Il aurait été tentant de tout
+   * embraser, mais c'est le biome le plus sombre du jeu ET celui où l'on voit le
+   * moins loin (72 m) : une braise sur chaque obstacle noierait le seul signal
+   * qui compte — la couleur qui dit QUOI FAIRE. Les braises ne se posent donc
+   * que là où elles ne trompent pas : sous une poutre au sol, jamais sur la
+   * barre qu'il faut lire.
+   */
+  fabriqueObstacle: (kind, rng) => {
+    const corps: Piece[] = []
+    const feux: Piece[] = []
+    const CHARBON = 0x1d1410
+    const BOIS = 0x3a2a1c
+
+    if (kind === 'saut') {
+      // Une poutre de charpente tombée en travers : ça s'enjambe.
+      corps.push({
+        geo: GEO.bloc.clone().scale(1.9, 0.34, 0.34),
+        couleur: teinte(BOIS, CHARBON, rng()),
+        x: 0, y: 0.3, z: 0,
+        rz: (rng() - 0.5) * 0.06,
+      })
+      // Les ferrures VERMILLON : c'est elles qu'on voit arriver de loin.
+      for (const nx of [-0.62, 0.62]) {
+        corps.push({
+          geo: GEO.bloc.clone().scale(0.12, 0.42, 0.42),
+          couleur: 0xc33a2c,
+          x: nx, y: 0.3, z: 0,
+        })
+      }
+      // Deux moellons qui la calent : sans eux, la poutre a l'air de flotter.
+      for (const nx of [-0.88, 0.88]) {
+        corps.push({
+          geo: GEO.caillou.clone().scale(0.18, 0.14, 0.16),
+          couleur: 0x2b2119,
+          x: nx, y: 0.09, z: 0.2,
+          ry: rng() * Math.PI,
+        })
+      }
+      // Les braises SOUS la poutre : elles la soulignent sans la masquer.
+      for (const nx of [-0.4, 0.15, 0.55]) {
+        feux.push({
+          geo: GEO.bloc.clone().scale(0.16, 0.09, 0.1),
+          couleur: teinte(0xffc25c, 0xbf2f1e, rng()),
+          x: nx, y: 0.06, z: 0.19,
+        })
+      }
+    } else if (kind === 'glissade') {
+      // Une panne de toiture restée en l'air : on passe DESSOUS.
+      corps.push({
+        geo: GEO.bloc.clone().scale(1.8, 0.3, 0.3),
+        couleur: teinte(BOIS, CHARBON, rng() * 0.6),
+        x: 0, y: 1.55, z: 0,
+        rz: (rng() - 0.5) * 0.05,
+      })
+      // Les liens DORÉS, l'accent du « glisse » — le même que partout ailleurs.
+      for (const nx of [-0.56, 0.56]) {
+        corps.push({
+          geo: GEO.anneau.clone().scale(0.23, 0.19, 0.23),
+          couleur: 0xd6ac5a,
+          x: nx, y: 1.55, z: 0, rz: Math.PI / 2,
+        })
+      }
+      /*
+       * Les deux montants, au bord EXACT de la ligne (±0,85 m) et volontairement
+       * fins : ils expliquent que la panne tienne sans encombrer le centre de la
+       * voie.
+       *
+       * ⚠️ Ils descendent SOUS la boîte, qui ne couvre que 1,30 m à 1,80 m : on
+       * les traverse en glissant, et c'est ce qu'il faut. Un montant épais
+       * laisserait croire qu'il barre aussi.
+       */
+      for (const nx of [-0.85, 0.85]) {
+        corps.push({
+          geo: GEO.bloc.clone().scale(0.1, 1.7, 0.1),
+          couleur: CHARBON,
+          x: nx, y: 0.85, z: 0,
+          rz: (rng() - 0.5) * 0.04,
+        })
+      }
+    } else {
+      /*
+       * Un pan de mur effondré : infranchissable, il faut changer de ligne.
+       *
+       * C'est la VALEUR très sombre qui dit « on ne passe pas », pas la teinte —
+       * exactement comme la palissade de la forêt. Dans un biome orange, un
+       * obstacle noir tranche mieux qu'un obstacle rouge.
+       */
+      const n = 5
+      for (let i = 0; i < n; i++) {
+        const h = 2.4 - rng() * 0.22
+        corps.push({
+          geo: GEO.bloc.clone().scale(1.6 / n - 0.02, h, 0.34),
+          couleur: teinte(0x241610, 0x0e0a08, rng()),
+          x: -0.72 + (1.44 / (n - 1)) * i,
+          y: h / 2, z: 0,
+          rz: (rng() - 0.5) * 0.04,
+        })
+      }
+      // Les deux entretoises qui tiennent encore le pan debout.
+      for (const hy of [0.75, 1.9]) {
+        corps.push({
+          geo: GEO.bloc.clone().scale(1.7, 0.13, 0.12),
+          couleur: 0x3d2a1c,
+          x: 0, y: hy, z: -0.18,
+        })
+      }
+      // Un reste de braise à son pied : le mur a brûlé, il fume encore.
+      feux.push({
+        geo: GEO.bloc.clone().scale(0.9, 0.08, 0.1),
+        couleur: 0xbf2f1e,
+        x: 0, y: 0.05, z: 0.2,
+      })
+    }
+
+    return groupe(assemble(corps, MAT_SOLIDE), assemble(feux, MAT_LUMIERE))
+  },
+
+  fabriquePlateforme: (hauteur, largeur, avecRampe) =>
+    plateformeSimple(hauteur, largeur, avecRampe, {
+      tablier: 0x4a3524, // du bois roussi, pas encore charbon
+      corps: [0x33241a, 0x281c13],
+      pilotis: 0x1d1410, // presque noir : les poteaux ont pris le plus de feu
+      lueurs: (dans, h, l, ajoure) => {
+        /*
+         * Les braises. Sous un tunnel elles courent au SOL, entre les pilotis —
+         * c'est ce qu'on longe en passant. Sur un radeau plein il n'y a pas de
+         * dessous : elles remontent alors le long des flancs, comme un feu qui
+         * lèche la structure.
+         */
+        const bas = ajoure ? 0.12 : h * 0.45
+        for (const cote of [-1, 1]) {
+          for (const z of [-0.3, 0.08, 0.36]) {
+            dans.push({
+              geo: GEO.bloc.clone().scale(0.16, 0.3, 0.12),
+              couleur: teinte(0xffc25c, 0xbf2f1e, Math.abs(z)),
+              x: cote * (l / 2 - 0.06),
+              y: bas + Math.abs(z) * 0.5,
+              z,
+              rz: cote * 0.25,
+            })
+          }
+        }
+        // Une braise plus vive sur le nez : elle donne le bord d'entrée, là où
+        // le vermillon du liseré ne suffit pas dans un biome déjà orange.
+        dans.push({
+          geo: GEO.bloc.clone().scale(l * 0.5, 0.14, 0.1),
+          couleur: 0xffd98a,
+          x: 0, y: h - 0.3, z: 0.44,
+        })
+      },
+    }),
 
   // Une clôture de village à moitié brûlée : des pieux noircis, inégaux, et
   // une seule traverse qui tient encore. Les pointes cassées font le reste.
@@ -1548,6 +2103,164 @@ const PONT: Biome = {
   tuileSol: 4,
 
   /*
+   * 🏮 LA PASSERELLE DE PLANCHES — et ses petites lanternes.
+   *
+   * Le biome le plus froid et le plus sombre : sa plateforme est en bois clair,
+   * la seule matière chaude du décor, et elle porte des lanternes minuscules.
+   *
+   * ⚠️ MINUSCULES, et c'est le réglage qui compte. Le pont est le biome où l'on
+   * voit le moins de points chauds — une seule lanterne tous les ~30 m dans son
+   * décor. En poser de grosses sur chaque plateforme ferait de la piste un
+   * lampion et annulerait ce que ce biome raconte : l'obscurité et le vide. Six
+   * petites lueurs suffisent à faire lire « on peut aller là ».
+   */
+  plateformeAjouree: true,
+
+  /*
+   * ————— 🏮 Les obstacles du pont : le CHANTIER d'un ouvrage —————
+   *
+   * Sa matière à lui : des planches clouées, des cordages, et le papier des
+   * lanternes. Un pont en travaux, barré de ce qu'on y a laissé — c'est la seule
+   * lecture qui explique des obstacles au milieu d'un tablier.
+   *
+   * ⚠️ LE BIOME LE PLUS SOMBRE APRÈS LE VILLAGE, et le plus froid. Tout y vire à
+   * l'indigo, donc un obstacle indigo disparaîtrait. Les trois sont bâtis en
+   * BOIS CLAIR — la seule matière chaude du décor, celle des plateformes — et
+   * l'accent de couleur les départage : vermillon « saute », or « glisse »,
+   * ardoise noire « change de ligne ».
+   *
+   * 🏮 La lanterne trouve ici son emploi le plus juste : suspendue à un cordage
+   * tendu en travers, elle EST le signal « baisse-toi ». C'est le seul biome où
+   * l'accent doré est aussi une source de lumière, et non une peinture.
+   */
+  fabriqueObstacle: (kind, rng) => {
+    const corps: Piece[] = []
+    const lueurs: Piece[] = []
+    const BOIS = 0x7a6242
+    const BOIS_SOMBRE = 0x4a3a2c
+    const ARDOISE = 0x2b3145
+
+    if (kind === 'saut') {
+      // Un chevalet de charpentier posé en travers : ça s'enjambe.
+      corps.push({
+        geo: GEO.bloc.clone().scale(1.85, 0.2, 0.3),
+        couleur: teinte(BOIS, BOIS_SOMBRE, rng() * 0.5),
+        x: 0, y: 0.5, z: 0,
+      })
+      // La bande VERMILLON, en plein sur le dessus : c'est elle qu'on lit.
+      corps.push({
+        geo: GEO.bloc.clone().scale(1.9, 0.09, 0.34),
+        couleur: 0xc33a2c,
+        x: 0, y: 0.58, z: 0,
+      })
+      // Les quatre pieds, croisés comme ceux d'un vrai chevalet.
+      for (const nx of [-0.66, 0.66]) {
+        for (const c of [-1, 1]) {
+          corps.push({
+            geo: GEO.bloc.clone().scale(0.08, 0.52, 0.08),
+            couleur: BOIS_SOMBRE,
+            x: nx + c * 0.06, y: 0.26, z: c * 0.11,
+            rz: c * 0.14,
+          })
+        }
+      }
+    } else if (kind === 'glissade') {
+      // Un cordage tendu d'une rambarde à l'autre : on passe DESSOUS.
+      corps.push({
+        geo: GEO.tige.clone().scale(0.07, 1.8, 0.07),
+        couleur: 0x8a7a5c,
+        x: 0, y: 1.62, z: 0,
+        rz: Math.PI / 2,
+      })
+      /*
+       * 🏮 Trois lanternes de papier qui y pendent. Ce sont elles l'accent DORÉ
+       * du « glisse » — et ici il éclaire vraiment, au lieu d'être peint.
+       */
+      for (const nx of [-0.55, 0, 0.55]) {
+        // La ficelle : sans elle, la lanterne flotte sous la corde.
+        corps.push({
+          geo: GEO.bloc.clone().scale(0.02, 0.1, 0.02),
+          couleur: 0x8a7a5c,
+          x: nx, y: 1.55, z: 0,
+        })
+        lueurs.push({
+          geo: GEO.bloc.clone().scale(0.2, 0.26, 0.2),
+          couleur: 0xffcf87,
+          x: nx, y: 1.4, z: 0,
+        })
+      }
+      // Les deux mâts qui tendent le cordage, au bord exact de la ligne.
+      for (const nx of [-0.85, 0.85]) {
+        corps.push({
+          geo: GEO.bloc.clone().scale(0.09, 1.78, 0.09),
+          couleur: 0x4a3a4e,
+          x: nx, y: 0.89, z: 0,
+        })
+      }
+    } else {
+      /*
+       * Une pile de caisses de chantier : infranchissable, il faut s'écarter.
+       *
+       * C'est la VALEUR très sombre qui dit « on ne passe pas ». Les cerclages
+       * de bois clair suffisent à ce qu'on lise des caisses et non un bloc, sans
+       * jamais éclaircir l'ensemble.
+       */
+      const rangs = [
+        { y: 0.4, n: 2, h: 0.8 },
+        { y: 1.2, n: 2, h: 0.8 },
+        { y: 2.0, n: 1, h: 0.8 },
+      ]
+      for (const r of rangs) {
+        for (let i = 0; i < r.n; i++) {
+          const larg = 1.66 / r.n
+          corps.push({
+            geo: GEO.bloc.clone().scale(larg - 0.04, r.h - 0.04, 0.34),
+            couleur: teinte(ARDOISE, 0x151a2c, rng()),
+            x: -0.83 + larg * (i + 0.5),
+            y: r.y, z: 0,
+            rz: (rng() - 0.5) * 0.03,
+          })
+          // Le cerclage clair : deux traverses par caisse, en croix plate.
+          corps.push({
+            geo: GEO.bloc.clone().scale(larg - 0.04, 0.06, 0.37),
+            couleur: BOIS_SOMBRE,
+            x: -0.83 + larg * (i + 0.5),
+            y: r.y, z: 0,
+          })
+        }
+      }
+    }
+
+    return groupe(assemble(corps, MAT_SOLIDE), assemble(lueurs, MAT_LUMIERE))
+  },
+
+  fabriquePlateforme: (hauteur, largeur, avecRampe) =>
+    plateformeSimple(hauteur, largeur, avecRampe, {
+      tablier: 0x7a6242, // des planches claires : elles doivent trancher sur l'indigo
+      corps: [0x4a3a2c, 0x3b2f24],
+      pilotis: 0x2f2733,
+      lueurs: (dans, h, l, ajoure) => {
+        /*
+         * Les lanternes pendent SOUS le tablier quand on passe dessous, et se
+         * dressent SUR lui quand on court dessus. Dans les deux cas elles
+         * éclairent le chemin qu'on emprunte réellement — une lanterne posée
+         * du mauvais côté serait un décor, pas un repère.
+         */
+        for (const cote of [-1, 1]) {
+          for (const z of [-0.3, 0.06, 0.42]) {
+            dans.push({
+              geo: GEO.bloc.clone().scale(0.13, 0.19, 0.13),
+              couleur: 0xffcf87,
+              x: cote * (l / 2 - 0.11),
+              y: ajoure ? h - 0.42 : h + 0.16,
+              z,
+            })
+          }
+        }
+      },
+    }),
+
+  /*
    * La rambarde du pont. Volontairement la plus BASSE et la plus ajourée des
    * quatre : ici le sujet est le vide autour, et une bordure pleine le
    * boucherait — on perdrait le seul biome qui fait peur.
@@ -1579,7 +2292,7 @@ const PONT: Biome = {
         { y: 5.35, e: 0.12, couleur: 0x434b68 },
       ],
     }),
-  fabriqueDecor: (rng) => {
+  fabriqueDecor: (rng, cote) => {
     const corps: Piece[] = []
     const lueurs: Piece[] = []
 
@@ -1648,6 +2361,142 @@ const PONT: Biome = {
       })
     }
 
+    /*
+     * ————— 🏠 Les MAISONS SUR PILOTIS —————
+     *
+     * Une berge habitée plutôt qu'un plan d'eau vide. Elles disent la même chose
+     * que le lac qu'elles remplacent — on longe de l'eau — mais elles le disent
+     * par une SILHOUETTE, pas par une tache au sol. À 28 m/s et de biais, une
+     * surface horizontale ne se voit presque pas ; un volume sur pieds, si.
+     *
+     * ⚠️ LE TOIT ROUGE EST TOUT L'ENJEU. C'est le biome le plus froid et le plus
+     * sombre du jeu : une maison de bois brun s'y noierait. Le toit vif est la
+     * seule chose qu'on lira à 92 m de brume, et c'est lui qui doit porter la
+     * lecture — le reste n'est que du détail qu'on découvre en passant.
+     *
+     * ⚠️ Une sur quatorze (7 %). Le décor tombe tous les 8 m de chaque côté,
+     * soit ~80 massifs par bord sur les 640 m du biome : cela fait cinq ou six
+     * maisons par bord, assez pour un hameau qui borde la voie, trop peu pour
+     * une rue continue — ce qui ferait mur et fermerait le paysage.
+     */
+    if (rng() < 0.07) {
+      /*
+       * ⚠️ LES DEUX BORDS N'ONT PAS LA MÊME ÉCHELLE.
+       *
+       * À gauche, des maisons à hauteur d'homme ; à droite, les mêmes en bien
+       * plus grand. Ce n'est pas une fantaisie : deux rives identiques se lisent
+       * comme un couloir tapissé, et l'œil n'y accroche rien. En cassant la
+       * symétrie, on donne une ORIENTATION au paysage — on sait de quel côté on
+       * regarde, ce qui est précieux dans le biome le plus sombre du jeu.
+       *
+       * Les grandes partent aussi plus loin (`cx` suit la largeur) : une maison
+       * de six mètres plantée à la distance d'une petite viendrait boucher le
+       * bord de la voie.
+       */
+      const droite = cote > 0
+      const ech = droite ? 1.45 + rng() * 0.55 : 0.88 + rng() * 0.35
+      const larg = 2.7 * ech
+      const prof = 2.5 * ech
+      const pil = 1.15 * ech // la hauteur des pilotis
+      const murs = 1.75 * ech
+      const cx = 4.2 + larg / 2 // au-delà des pylônes, jamais devant eux
+      const tourne = (rng() - 0.5) * 0.5
+
+      // Les PILOTIS : six pieds, plus fins que hauts. C'est ce qui fait lire
+      // « posée sur l'eau » avant même qu'on voie l'eau.
+      for (const sx of [-1, 0, 1]) {
+        for (const sz of [-1, 1]) {
+          corps.push({
+            geo: GEO.tige.clone().scale(0.09 * ech, pil, 0.09 * ech),
+            couleur: teinte(0x6b4f30, 0x4a3722, rng()),
+            x: cx + sx * (larg / 2 - 0.16),
+            y: pil / 2,
+            z: sz * (prof / 2 - 0.16),
+          })
+        }
+      }
+
+      // Le plancher, qui coiffe les pilotis et porte tout le reste.
+      corps.push({
+        geo: GEO.bloc.clone().scale(larg + 0.24, 0.14 * ech, prof + 0.5),
+        couleur: 0x7a5c38,
+        x: cx, y: pil, z: 0, ry: tourne,
+      })
+
+      // Le corps de la maison : du bois clair, la seule matière chaude du biome.
+      corps.push({
+        geo: GEO.bloc.clone().scale(larg, murs, prof),
+        couleur: teinte(0xa8804a, 0x8a6538, rng() * 0.6),
+        x: cx, y: pil + murs / 2, z: 0, ry: tourne,
+      })
+
+      /*
+       * 🔴 LE TOIT, en pyramide à quatre pans.
+       *
+       * `GEO.cone` a QUATRE côtés : pivoté d'un huitième de tour, sa base carrée
+       * s'aligne sur les murs et l'on obtient une croupe, pas un cône. Il déborde
+       * largement (×1,35) — un toit qui affleure les murs se lit comme un
+       * couvercle ; c'est l'avancée qui fait l'auvent, et l'ombre dessous.
+       */
+      corps.push({
+        geo: GEO.cone.clone().scale(larg * 0.96, 1.05 * ech, prof * 1.0),
+        couleur: teinte(0xc4342a, 0x9c2a22, rng() * 0.7),
+        x: cx,
+        y: pil + murs + 0.5 * ech,
+        z: 0,
+        ry: tourne + Math.PI / 4,
+      })
+
+      // La VÉRANDA : un plancher qui dépasse côté piste, et sa balustrade. C'est
+      // le détail qui fait « habitée » plutôt que « cabane ».
+      corps.push({
+        geo: GEO.bloc.clone().scale(0.55 * ech, 0.1 * ech, prof * 0.8),
+        couleur: 0x8a6538,
+        x: cx - larg / 2 - 0.24 * ech, y: pil + 0.06, z: 0, ry: tourne,
+      })
+      for (const hy of [0.32, 0.62]) {
+        corps.push({
+          geo: GEO.bloc.clone().scale(0.06, 0.05, prof * 0.78),
+          couleur: 0x9c7444,
+          x: cx - larg / 2 - 0.42 * ech, y: pil + hy * ech, z: 0, ry: tourne,
+        })
+      }
+
+      // La porte et deux fenêtres, en creux sombre sur la façade.
+      corps.push({
+        geo: GEO.bloc.clone().scale(0.42 * ech, 0.95 * ech, 0.06),
+        couleur: 0x3a2a1c,
+        x: cx - larg / 2 - 0.01, y: pil + 0.5 * ech, z: 0, ry: tourne,
+      })
+      for (const sz of [-1, 1]) {
+        corps.push({
+          geo: GEO.bloc.clone().scale(0.06, 0.42 * ech, 0.4 * ech),
+          couleur: 0x3a2f52, // le bleu profond des volets, comme sur la photo
+          x: cx - larg / 2 - 0.01,
+          y: pil + murs * 0.62,
+          z: sz * prof * 0.28,
+          ry: tourne,
+        })
+      }
+
+      /*
+       * 🏮 Une lanterne sous l'auvent, une fois sur deux.
+       *
+       * Elle ne sert pas à éclairer la maison mais à la SITUER : un point chaud
+       * accroche l'œil à 90 m, là où la silhouette n'est encore qu'une masse.
+       * C'est le même rôle que la lanterne du mât, et la même teinte.
+       */
+      if (rng() < 0.5) {
+        lueurs.push({
+          geo: GEO.bloc.clone().scale(0.2 * ech, 0.26 * ech, 0.2 * ech),
+          couleur: 0xffcf87,
+          x: cx - larg / 2 - 0.3 * ech,
+          y: pil + murs * 0.9,
+          z: prof * 0.3,
+        })
+      }
+    }
+
     return groupe(assemble(corps, MAT_SOLIDE), assemble(lueurs, MAT_LUMIERE))
   },
 }
@@ -1708,6 +2557,168 @@ const FUJI: Biome = {
   tuileSol: 7,
 
   /*
+   * ❄️ L'ENTRÉE D'IGLOO — une voûte de blocs de neige.
+   *
+   * Le seul des quatre à ne pas passer par `plateformeSimple` : ses pilotis ne
+   * sont pas des poteaux mais une VOÛTE, et un squelette droit ne la donnerait
+   * pas. C'est la forme qui raconte le biome, pas la couleur — sur la neige,
+   * six poteaux blancs auraient disparu.
+   *
+   * ⚠️ La voûte est ELLIPTIQUE, pas circulaire, et c'est une contrainte de jeu
+   * avant d'être un goût. Un arc de cercle né aux bords de la ligne culminerait
+   * bien en dessous du plafond du tunnel (`TUNNEL_HAUT`, 1,90 m), et l'on se
+   * cognerait la tête dans un décor. En étirant la hauteur, la clé de voûte
+   * passe au-dessus du plafond : jamais dans le chemin.
+   *
+   * ⚠️ Les épaules sont des ASSISES PLEINES, pas des blocs posés le long d'un
+   * arc. Elles l'ont été, et c'étaient six barreaux avec du vide entre eux —
+   * on voyait au travers des côtés, alors qu'un igloo est une paroi continue
+   * percée d'un seul trou. Chaque assise va maintenant du bord extérieur
+   * jusqu'à la courbe du passage : le mur se referme tout seul en montant.
+   */
+  plateformeAjouree: true,
+
+  fabriquePlateforme: (hauteur, largeur, avecRampe) => {
+    const p: Piece[] = []
+    const NEIGE = 0xf2f6fb
+    const OMBRE = 0xd3deea // la neige à l'ombre : c'est elle qui donne le relief
+
+    // Le tablier de neige tassée, celui qu'on foule.
+    p.push({
+      geo: GEO.bloc.clone().scale(largeur, 0.24, 1),
+      couleur: NEIGE,
+      x: 0, y: hauteur - 0.12, z: 0,
+    })
+
+    if (avecRampe) {
+      /*
+       * ⚠️ UNE CONGÈRE PLEINE. Les assises ne bordaient que les flancs et
+       * l'intérieur restait vide : de face, on voyait au travers. Un banc de
+       * neige tassée est plein — c'est ce qui le sépare de la voûte d'à côté.
+       */
+      p.push({
+        geo: GEO.bloc.clone().scale(largeur - 0.1, hauteur - 0.2, 1),
+        couleur: OMBRE,
+        x: 0, y: (hauteur - 0.2) / 2, z: 0,
+      })
+      const etages = 5
+      for (const cote of [-1, 1]) {
+        for (let e = 0; e < etages; e++) {
+          p.push({
+            geo: GEO.bloc.clone().scale(0.26, (hauteur - 0.5) / etages - 0.03, 1),
+            couleur: e % 2 ? NEIGE : OMBRE,
+            // Chaque assise rentre un peu : une congère s'affaisse, elle n'est
+            // pas un mur droit.
+            x: cote * (largeur / 2 - 0.05 - e * 0.02),
+            y: 0.2 + e * ((hauteur - 0.5) / etages),
+            z: 0,
+          })
+        }
+      }
+    } else {
+      /*
+       * La voûte. Quatre blocs par épaule, posés sur une ellipse et inclinés
+       * pour en suivre la tangente — sans cette rotation, des blocs droits
+       * empilés en arc se lisent comme un escalier.
+       */
+      /*
+       * ————— LES ÉPAULES SONT PLEINES —————
+       *
+       * Elles étaient six blocs posés le long d'un arc, donc six barreaux avec
+       * du vide entre eux : on voyait au travers des côtés, alors qu'un igloo
+       * est une PAROI continue percée d'un seul trou.
+       *
+       * On les bâtit donc par ASSISES : à chaque hauteur, un bloc qui va du
+       * bord extérieur jusqu'à la courbe du passage. Le mur se referme tout
+       * seul en montant, puisque la courbe rentre — et il n'y a plus un seul
+       * interstice.
+       *
+       * ⚠️ L'OUVERTURE EST PLUS ÉTROITE QUE LA PLATEFORME, et il le faut. À
+       * pleine largeur, il ne resterait aucune matière sur les côtés : la paroi
+       * aurait l'épaisseur d'une feuille. `R` borne donc le passage à ±0,75 m,
+       * ce qui laisse ~35 cm de neige de chaque côté — et reste deux fois plus
+       * large que le coureur.
+       */
+      const R = 0.75 // demi-largeur du passage, au sol
+      const H = hauteur - 0.25 // la clé de voûte
+      const BORD = largeur / 2 + 0.06 // les épaules débordent un peu du tablier
+      const ASSISES = 7
+
+      for (const cote of [-1, 1]) {
+        for (let i = 0; i < ASSISES; i++) {
+          const y = ((i + 0.5) * H) / ASSISES
+          // La courbe du passage à cette hauteur. Elliptique : un arc de cercle
+          // culminerait sous le plafond du tunnel et l'on s'y cognerait.
+          const creux = R * Math.sqrt(Math.max(0, 1 - (y / H) ** 2))
+          const ep = BORD - creux
+          p.push({
+            geo: GEO.bloc.clone().scale(ep, H / ASSISES + 0.01, 1),
+            couleur: i % 2 ? NEIGE : OMBRE,
+            x: cote * (creux + ep / 2),
+            y,
+            z: 0,
+          })
+        }
+      }
+
+      /*
+       * ————— LA BOUCHE —————
+       *
+       * Un igloo ne s'ouvre pas à même la voûte : il a un COL qui dépasse, un
+       * bourrelet plus épais tout autour de l'entrée. C'est ce col qu'on
+       * reconnaît, bien avant la coupole — et c'est lui qui manquait.
+       *
+       * ⚠️ Il est en z LOCAL, donc il s'écarte avec la longueur : sur un long
+       * tunnel il devient un cerclage régulier. C'est juste pour une galerie de
+       * neige, et ça reste lisible comme une entrée sur les plateformes courtes.
+       */
+      for (const cote of [-1, 1]) {
+        for (let i = 0; i < ASSISES; i++) {
+          const y = ((i + 0.5) * H) / ASSISES
+          const creux = R * Math.sqrt(Math.max(0, 1 - (y / H) ** 2))
+          // Le col suit EXACTEMENT la même courbe que les épaules, en un peu
+          // plus épais : c'est ce débord qui se lit comme une bouche. Le caler
+          // sur d'autres chiffres le décollerait de la paroi.
+          p.push({
+            geo: GEO.bloc.clone().scale(BORD + 0.09 - creux, H / ASSISES + 0.03, 0.14),
+            couleur: NEIGE,
+            x: cote * (creux + (BORD + 0.09 - creux) / 2),
+            y,
+            z: 0.47,
+          })
+        }
+      }
+
+      /*
+       * ————— LA NEIGE FRAÎCHE —————
+       *
+       * Ce qu'on demandait, et qui change tout : la voûte nue se lisait comme
+       * une maçonnerie. Deux congères aux pieds du col, et un bourrelet le long
+       * de la crête — la neige s'accumule là où le vent la dépose, contre les
+       * obstacles et sur les arêtes.
+       */
+      for (const cote of [-1, 1]) {
+        p.push({
+          geo: GEO.caillou.clone().scale(0.34, 0.17, 0.3),
+          couleur: NEIGE,
+          x: cote * (R + 0.02),
+          y: 0.11,
+          z: 0.5,
+          ry: cote * 0.6,
+        })
+      }
+      // Le bourrelet de crête, tout le long : c'est lui qui coiffe la galerie.
+      p.push({
+        geo: GEO.bloc.clone().scale(largeur * 0.52, 0.13, 1),
+        couleur: NEIGE,
+        x: 0, y: hauteur - 0.3, z: 0,
+      })
+    }
+
+    return groupe(assemble(p, MAT_SOLIDE))
+  },
+
+  /*
    * Le balisage de sentier de montagne : des piquets sombres coiffés de neige,
    * reliés par une corde claire.
    *
@@ -1724,6 +2735,154 @@ const FUJI: Biome = {
       },
       dé(0x0b4)
     ),
+
+  /*
+   * ————— 🪨 Les obstacles du Fuji : de la ROCHE sous la neige —————
+   *
+   * Le biome n'en avait aucun : ses trois obstacles étaient les blocs nus du
+   * repli, et c'est le seul endroit de la course où l'on voyait la géométrie
+   * brute du jeu.
+   *
+   * ⚠️ LA VALEUR AVANT LA TEINTE. C'est le biome CLAIR : un obstacle blanc sur
+   * un sol blanc ne se verrait pas, et sur cette portion on martèle pour le
+   * sprint final — on n'a pas le temps de déchiffrer. Chaque pièce est donc
+   * bâtie en roche SOMBRE, et la neige ne vient que la coiffer. C'est
+   * exactement la logique déjà retenue pour la bordure et le décor du biome.
+   *
+   * ⚠️ Rien ici ne définit la collision : elle vient de `TAILLE_OBSTACLE`. Les
+   * volumes suivent ces boîtes au plus près pour ne pas mentir, et ce qui
+   * dépasse (les congères basses, les montants) est volontairement HORS de la
+   * trajectoire — au centre de sa ligne, on ne touche que ce qui compte.
+   */
+  fabriqueObstacle: (kind, rng) => {
+    const p: Piece[] = []
+    const ROCHE = 0x39445c
+    const ROCHE_CLAIRE = 0x4d5a75
+    const NEIGE = 0xf2f6fb
+
+    if (kind === 'saut') {
+      /*
+       * Une congère durcie : trois blocs de roche à demi enfouis, coiffés de
+       * neige. Boîte de 0,60 m de haut — assez bas pour se sauter, et la ligne
+       * de crête blanche donne le bord supérieur d'un coup d'œil.
+       */
+      for (let i = 0; i < 3; i++) {
+        const x = -0.62 + i * 0.62
+        const r = 0.42 + rng() * 0.12
+        p.push({
+          geo: GEO.caillou.clone().scale(r, 0.38 + rng() * 0.1, r * 0.62),
+          couleur: teinte(ROCHE, ROCHE_CLAIRE, rng()),
+          x, y: 0.2, z: 0,
+          ry: rng() * Math.PI,
+          rz: (rng() - 0.5) * 0.3,
+        })
+        // La neige POSÉE dessus, jamais mélangée : c'est le contraste qui porte
+        // la lecture, pas une teinte moyenne entre les deux.
+        p.push({
+          geo: GEO.caillou.clone().scale(r * 0.82, 0.16, r * 0.5),
+          couleur: NEIGE,
+          x, y: 0.52, z: 0,
+          ry: rng() * Math.PI,
+        })
+      }
+      // Deux éclats tombés devant, hors de la boîte : ils ancrent la congère au
+      // sol au lieu de la faire poser dessus comme un décor découpé.
+      for (const nx of [-0.95, 0.9]) {
+        p.push({
+          geo: GEO.caillou.clone().scale(0.16, 0.12, 0.14),
+          couleur: ROCHE,
+          x: nx, y: 0.08, z: 0.26,
+          ry: rng() * Math.PI,
+        })
+      }
+    } else if (kind === 'glissade') {
+      /*
+       * Une poutre de GLACE tendue en travers, à 1,55 m : on passe dessous.
+       *
+       * Les cordages restent DORÉS, comme sur la perche de la bambouseraie.
+       * C'est devenu le signal du « glisse », et le changer ici obligerait à
+       * réapprendre la lecture en cours de course — au pire moment, juste avant
+       * le sprint.
+       */
+      p.push({
+        geo: GEO.bloc.clone().scale(1.75, 0.34, 0.34),
+        couleur: teinte(0x9fc4de, 0xd8ecf7, rng()),
+        x: 0, y: 1.55, z: 0,
+        rz: (rng() - 0.5) * 0.04,
+      })
+      for (const nx of [-0.58, 0.58]) {
+        p.push({
+          geo: GEO.anneau.clone().scale(0.24, 0.18, 0.24),
+          couleur: 0xd6ac5a,
+          x: nx, y: 1.55, z: 0, rz: Math.PI / 2,
+        })
+      }
+      // Les stalactites : elles pendent SOUS la poutre et disent d'un coup
+      // qu'il faut se baisser — la barre seule pouvait se lire comme un appui.
+      for (let i = 0; i < 5; i++) {
+        const x = -0.7 + i * 0.35
+        p.push({
+          geo: GEO.cone.clone().scale(0.075, 0.2 + rng() * 0.14, 0.075),
+          couleur: 0xe6f2fa,
+          x, y: 1.3, z: 0,
+          rx: Math.PI, // pointe vers le bas
+        })
+      }
+      /*
+       * Les deux montants, plantés au bord exact de la ligne (±0,85 m) et
+       * volontairement fins : ils expliquent que la poutre tienne sans encombrer
+       * le centre de la voie.
+       *
+       * ⚠️ Ils descendent SOUS la boîte, qui ne couvre que 1,30 m à 1,80 m : on
+       * les traverse en glissant. Un montant épais laisserait croire qu'il barre
+       * aussi le bas.
+       */
+      for (const nx of [-0.85, 0.85]) {
+        p.push({
+          geo: GEO.tige.clone().scale(0.09, 1.72, 0.09),
+          couleur: ROCHE,
+          x: nx, y: 0.86, z: 0,
+        })
+        p.push({
+          geo: GEO.caillou.clone().scale(0.2, 0.12, 0.18),
+          couleur: NEIGE,
+          x: nx, y: 1.74, z: 0,
+          ry: rng() * Math.PI,
+        })
+      }
+    } else {
+      /*
+       * ————— Le ROCHER : UN SEUL, et gros —————
+       *
+       * Il en portait trois : un gros et deux éclats calés au pied. Les éclats
+       * partent. Ce qu'on reconnaît d'un rocher à 105 m de brume, c'est une
+       * SILHOUETTE — une seule masse anguleuse. Trois volumes se lisaient comme
+       * un éboulis, c'est-à-dire comme quelque chose qu'on pourrait contourner
+       * ou escalader. Un bloc unique ne laisse aucun doute : on change de ligne.
+       *
+       * Il est élargi et posé plus bas pour occuper à lui seul la place que les
+       * trois tenaient — un rocher qui rétrécit en perdant ses éclats aurait
+       * l'air d'avoir maigri, pas d'avoir été simplifié.
+       */
+      p.push({
+        geo: GEO.caillou.clone().scale(1.2, 1.34, 0.46),
+        couleur: teinte(ROCHE, 0x2c3550, rng()),
+        x: 0, y: 1.12, z: 0,
+        ry: rng() * Math.PI,
+        rz: (rng() - 0.5) * 0.18,
+      })
+      // La calotte de neige, sur le dessus seulement : c'est elle qui donne la
+      // hauteur exacte à franchir… et qui dit qu'on ne la franchira pas.
+      p.push({
+        geo: GEO.caillou.clone().scale(1, 0.3, 0.38),
+        couleur: NEIGE,
+        x: 0, y: 2.28, z: 0,
+        ry: rng() * Math.PI,
+      })
+    }
+
+    return groupe(assemble(p, MAT_SOLIDE))
+  },
 
   // Une congère tassée, striée d'arêtes de neige durcie.
   fabriqueMur: () =>
@@ -1798,7 +2957,42 @@ const FUJI: Biome = {
 }
 
 /** Dans l'ordre de la course. */
-export const BIOMES: readonly Biome[] = [BAMBOUS, VILLAGE, PONT, FUJI]
+/*
+ * ⚠️ ————— LA FORÊT DE BAMBOUS EST RETIRÉE DE LA COURSE —————
+ *
+ * Retirée, PAS supprimée : son code entier vit toujours juste au-dessus, et il
+ * suffit de remettre `BAMBOUS` dans cette liste pour qu'elle revienne telle
+ * qu'elle était. Rien d'autre à toucher.
+ *
+ * ⚠️ Et il n'est pas mis en COMMENTAIRE, volontairement. Sept cents lignes de
+ * texte mort cesseraient d'être compilées : elles ne suivraient plus les
+ * changements de l'interface `Biome`, et l'on retrouverait dans six mois du
+ * code qui ne compile plus — un biome qu'on croyait « en pause » et qu'il
+ * faudrait en fait réécrire. `BIOMES_EN_PAUSE`, juste en dessous, le garde
+ * VIVANT : typé, vérifié à chaque build, prêt à revenir.
+ *
+ * ————— Ce que ce retrait change —————
+ *
+ * `indexBiome` découpe la course sur `BIOMES.length` : le partage se refait
+ * tout seul, en tiers au lieu de quarts. Concrètement :
+ *
+ *   · la course COMMENCE dans le village en flammes ;
+ *   · les 🐦 oiseaux ne se font plus entendre — la bambouseraie était le seul
+ *     biome à porter `ambiance: 'oiseaux'` ;
+ *   · ses deux radeaux (le plein et celui sur pilotis) ne se croisent plus en
+ *     piste. Les trois autres biomes ont les leurs, le tunnel existe toujours.
+ */
+export const BIOMES: readonly Biome[] = [/* BAMBOUS, */ VILLAGE, PONT, FUJI]
+
+/**
+ * Les biomes ÉCRITS mais hors course.
+ *
+ * Ils ne sont tirés par rien — ni `indexBiome`, ni le décor, ni les fabriques.
+ * Leur seule raison d'être ici est de rester COMPILÉS : c'est ce qui garantit
+ * qu'ils suivront les changements de l'interface `Biome` au lieu de pourrir en
+ * silence, et qu'ils reviendront en une ligne le jour où on les rappelle.
+ */
+export const BIOMES_EN_PAUSE: readonly Biome[] = [BAMBOUS]
 
 /** L'ambiance à un instant donné : deux biomes et le fondu entre eux. */
 export interface Ambiance {

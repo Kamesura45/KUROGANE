@@ -161,18 +161,44 @@ taillés **une seule fois** : **118 → 71 matériaux**, **318 → 270 géométr
 node --import ./tools/resolveur-ts.mjs tools/mesurer-scene.ts
 ```
 
-## 🎋 Les plateformes arrêtent — sauf le radeau de bambou
+## 🎋 Les plateformes arrêtent — et la bambouseraie en a DEUX
 
-Une plateforme **pleine** arrête le corps *et* les sorts. Le **radeau de
-bambou**, lui, est monté sur pilotis : on court dessous, et un projectile y file
-aussi. C'est le seul passage bas de la course, et son dessin l'annonce — le
-bloquer reviendrait à démentir ce qu'on voit.
+Une plateforme **pleine** arrête le corps *et* les sorts. La bambouseraie, elle,
+bâtit deux radeaux — et c'est la **rampe** qui les sépare :
 
-C'est une **règle de jeu**, pas une coquetterie : le drapeau `plateformeAjouree`
-vit sur le biome, à côté de sa fabrique, et la collision le **lit**. Impossible
-qu'un radeau se dessine ouvert tout en se comportant comme un bloc plein.
+| | avec rampe | sans rampe |
+|---|---|---|
+| Flancs | pile de perches jusqu'au sol | **pilotis espacés** |
+| Dessous | plein, on n'y passe pas | **on passe** — le seul passage bas |
+| Dessus | on court dessus | on court dessus |
 
-Trois défauts réparés, tous invisibles au typage :
+La logique est celle du terrain : une plateforme qu'on monte par une pente n'a
+pas de tunnel, puisque la rampe emmène en haut et que **personne n'arriverait
+jamais dessous**. Y ménager un passage serait un décor sans usage.
+
+Le radeau sur pilotis, lui, est un couloir ouvert à ses deux bouts. D'où une
+règle unique, la même pour les **sorts**, les **bots** et le **joueur** :
+
+> **On entre par l'entrée.**
+
+| Par où | Ce qui se passe | Qui le tient |
+|---|---|---|
+| l'**avant** | on passe — c'est l'entrée | `supportSous`, qui ne heurte pas |
+| les **côtés** | refusé, on reste sur sa voie | `flancA`, qui laisse passer au ras du nez |
+| le **toit** | refusé, on se cogne | `TUNNEL_HAUT`, le plafond sous le tablier |
+
+C'est une **règle de jeu**, pas une coquetterie. Le drapeau `plateformeAjouree`
+dit seulement qu'un biome *sait* bâtir des radeaux ajourés ; c'est `ajouree()`,
+dans track.ts, qui le croise avec `rampe === 0`. Et c'est **la même condition**
+qui choisit le maillage — impossible qu'un radeau se dessine ouvert tout en se
+comportant comme un bloc plein.
+
+> Le pool de plateformes est donc indexé par biome **et** par variante. Sans
+> ça, il aurait recyclé un radeau sur pilotis au bout d'une pente.
+
+Sur une course de 1 920 m : **22 plateformes pleines, 5 tunnels**.
+
+Six défauts réparés, tous invisibles au typage :
 
 1. **Les sorts traversaient tout.** Ils ne consultaient que les murs — un kunaï
    passait au travers d'un wagon massif. `premierBarrage` prend désormais le
@@ -184,10 +210,42 @@ Trois défauts réparés, tous invisibles au typage :
    branche de secours ne traite que les obstacles, et une plateforme n'en est
    pas un. Armure levée, on passait au travers d'un wagon. La géométrie reste de
    la géométrie : on se hisse toujours, c'est le **frein** que l'armure épargne.
+4. **On sortait du tunnel PAR LE HAUT.** Rien ne fermait le dessous du tablier :
+   un saut à l'intérieur franchissait le seuil des 2,40 m à partir duquel la
+   piste considère qu'on est *sur* le plateau, et l'on ressortait sur le toit.
+   `TUNNEL_HAUT` (1,90 m) pose désormais un plafond — mesuré, l'apex d'un saut
+   tombe de **2,13 m à ciel ouvert à 1,90 m sous le radeau**. Le seuil du toit
+   n'est plus jamais atteint. Les deux valeurs se surveillent : le plafond doit
+   rester sous `PLATEFORME_H - 0.3`, sinon le trou revient.
+5. **Le liseré vermillon couvrait tout le dessus.** Il était un *enfant* du
+   plateau, long de `1` en local — or le plateau est étiré à sa longueur, et
+   l'enfant suit. L'« arête de 5 cm sur le nez » devenait une bande de 25 m :
+   un tapis rouge. Les 5 cm étaient son *épaisseur*, la réduire ne pouvait donc
+   rien changer. Il a maintenant **son propre maillage** (`nez`), posé en
+   mètres — exactement le traitement déjà réservé à la rampe, et pour la même
+   raison.
+6. **La boule bleue éclatait DANS la pente.** `premierBarrage` ne connaissait
+   que le nez du plateau (`p.d`), alors que la rampe occupe les mètres d'avant
+   et monte du sol jusqu'à lui. Le 🔮 portail, qui vole à **1,10 m**, traversait
+   donc plusieurs mètres de coin plein avant d'éclater — très loin derrière la
+   surface qu'il aurait dû toucher. La rencontre est maintenant **résolue** au
+   lieu d'être approximée : la pente vaut `hauteur × (d − début) / rampe`, et
+   l'impact tombe là où elle atteint la hauteur de vol. Une boule qui rase le
+   sol éclate au **pied** de la rampe, une boule haute presque à son **sommet**
+   — c'est la même formule qui donne les deux. Mesuré sur quatre rampes :
+   impact 3,5 à 4,6 m avant le nez, tous **sur la pente**.
+
+> **La leçon, deux fois apprise :** ce qui doit garder sa taille en mètres ne
+> peut pas être un enfant de ce qu'on étire.
+>
+> **Et une seconde :** une barrière en PENTE ne peut pas dire où l'on tape sans
+> savoir à quelle hauteur on arrive. Un mur est vertical, une rampe non — c'est
+> pourquoi `premierBarrage` prend désormais l'altitude du projectile.
 
 ```bash
 npm run plateformes:test   # 27 plateformes sur une vraie course : 21 arrêtent,
                            # 6 laissent passer dessous, 27 portent sur le dessus
+npm run mur:test           # le flanc bloque de côté, la voie est libre au nez
 ```
 
 ## ⛩️ Le portique et sa forme creuse
@@ -538,9 +596,39 @@ Le mondial fait `distinct on (joueur)`. Sans ça, un joueur très régulier
 occuperait les vingt lignes avec ses vingt meilleures courses, et le tableau ne
 dirait plus rien de la communauté.
 
+### 🔎 Chercher un pseudo
+
+Les trois onglets portent un champ de recherche, à la place du bouton
+« Effacer » qui l'occupait. Un classement mondial sans recherche ne sert qu'à
+ceux du haut : au-delà de la première page, on ne peut plus se trouver soi-même
+ni suivre un camarade.
+
+Deux détails qui décident si elle sert vraiment :
+
+- **Les rangs sont conservés.** Filtrer puis renuméroter donnerait la médaille
+  d'or au 5ᵉ dès qu'il cherche son nom. La recherche montre **où l'on est**,
+  elle ne réécrit pas le classement.
+- **Accents et casse ignorés.** Les pseudos portent des accents, personne ne les
+  tape pour chercher : `rene` doit trouver **René**. Sans cette normalisation,
+  la recherche ne servirait qu'à ceux qui écrivent déjà juste.
+
+Aucun appel réseau de plus : les onglets ont déjà en mémoire la liste qu'ils
+viennent d'afficher. Interroger le serveur à chaque lettre aurait fait **une
+requête par frappe** pour filtrer des données déjà sous la main.
+
 ## 🟢 Les pots verts
 
 Une poterie **jade**, plus grosse que les autres, qui contient de la monnaie.
+
+> 🏋️ **Ils n'existent pas à l'entraînement.** Ils donnent de la monnaie, et
+> l'entraînement se relance à volonté, seul, sans adversaire : les y laisser
+> revenait à ouvrir un robinet qui aurait vidé la boutique de son sens.
+>
+> On sort **avant** le tirage du dé, et c'est le point : ne pas le consommer
+> laisse tout le reste du plan intact. *Mesuré sur 4 000 courses* — 925 pots en
+> ligne, **0 à l'entraînement**, et **4000/4000 pistes identiques par ailleurs**
+> (mêmes jarres, mêmes positions, mêmes dorées). On s'entraîne donc sur
+> exactement la piste qu'on jouera en ligne ; elle ne paie simplement pas.
 
 Mesuré sur 3 000 courses :
 
@@ -551,9 +639,29 @@ Mesuré sur 3 000 courses :
 | Deux pots | 2,8 % |
 | Plus de deux | **jamais** |
 
-Le contenu : **1 à 10 Mon** (79,9 % des pots) ou **1 à 6 Jade** (20,1 %). Le jade
-cumule les deux raretés — il faut d'abord tomber sur un pot, puis qu'il en
-contienne : on en voit dans **une course sur 23**.
+### Le contenu : l'or toujours, le jade en plus
+
+**Les deux monnaies ne s'excluent pas.** Un pot donne **toujours 1 à 10 Mon**, et
+le jade vient **par-dessus** quand il vient — casser un pot n'est donc jamais une
+déception, et trouver du jade ne prive plus de la récompense ordinaire.
+
+Le jade se tire sur une **échelle** : plus la bande est étroite, plus la poignée
+est grosse. Un seul tirage les départage, mesuré sur **20 000 courses** :
+
+| Bande | Annoncé | Mesuré (sur 4 670 pots) |
+|---|---|---|
+| 1 à 3 jades | 12 % | 1 → 4,03 % · 2 → 3,98 % · 3 → 4 % |
+| 3 jades | 7 % | le « 3 » monte à **11,07 %** |
+| 4 à 5 jades | 3 % | 4 → 1,35 % · 5 → 1,18 % |
+| aucun jade | 78 % | **78,39 %** |
+
+La deuxième bande tombe **dans** l'intervalle de la première : c'est voulu, et
+c'est ce qui fait de **3 la quantité la plus probable**. Les bandes disent des
+probabilités, pas des plages qui devraient s'emboîter.
+
+Le jade cumule les deux raretés — il faut d'abord tomber sur un pot (20 % des
+courses), puis qu'il en contienne (22 % des pots) : on en voit dans **une course
+sur vingt** environ.
 
 ### Un plafond n'est pas une rareté
 
@@ -577,10 +685,18 @@ partagée : en duel, les deux joueurs voient le **même** contenu dans le **mêm
 pot. Le tirer à la casse donnerait du jade à l'un et des pièces à l'autre pour la
 même poterie — on se disputerait un objet qui n'est pas le même.
 
+> ⚠️ Le tirage consomme **trois nombres aléatoires, toujours**, même quand il n'y
+> a pas de jade. Sans cette précaution, le nombre d'appels dépendrait du résultat
+> du premier pot, et le **second** pot d'une même course tomberait ailleurs selon
+> que le premier portait du jade ou non. Le plan doit rester une pure fonction de
+> la graine, branche par branche.
+
 ### Le crédit est plafonné, pas vérifié
 
 Le jeu annonce sa récolte à `/api/pot` ; le serveur la borne à **20 Mon et
-12 Jade par minute** (le pire cas possible : deux pots, tous deux au maximum).
+10 Jade par minute** — le pire cas possible, soit deux pots donnant chacun le
+maximum des deux monnaies **à la fois**. Les deux plafonds sont vérifiés
+séparément : un plafond commun rejetterait le meilleur pot honnête du jeu.
 
 ⚠️ C'est un plafond, **pas une vérification**. Un client modifié peut réclamer ce
 maximum. Le choix est assumé : c'est délibérément *moins* rentable que de courir
@@ -1204,6 +1320,49 @@ tombent tous les 13 m. Mesuré sur 1 860 tirs simulés :
 C'est **la piste qui borne le sort**, pas un plafond arbitraire — et il faut
 encore aligner sa ligne sur celle du rival. L'échange se mérite.
 
+### 🔮 Elle plane, puis elle retombe
+
+La boule ne file plus indéfiniment. Elle part **à la hauteur du lanceur — saut
+compris**, tient ce niveau **2 s**, puis s'affaisse jusqu'au sol où elle éclate.
+
+> Elle naissait à 1,10 m quoi qu'il arrive : tirer en plein saut la faisait
+> apparaître **sous ses propres pieds**. `PORTAIL_Y` n'est donc plus une
+> altitude mais un écart au-dessus des pieds — la hauteur de la main qui jette.
+
+| Tir | Départ | Chute | Touche le sol à |
+|---|---|---|---|
+| au sol | 1,10 m | 0,97 s | 246 m |
+| en plein saut | 3,23 m | 1,65 s | 303 m |
+| depuis un plateau | 3,80 m | 1,80 s | 315 m |
+
+**Tirer en hauteur porte donc plus loin** — sauter avant de lancer devient un
+vrai geste, et c'est le seul endroit du jeu où la hauteur récompense autre chose
+qu'un franchissement.
+
+Ces distances sont des maximums **théoriques**, sur une ligne dégagée : la
+médiane reste 53 m, puisqu'un mur l'arrête presque toujours avant. La chute
+ajoute un plafond, elle ne change pas le jeu courant. Un seul chiffre la règle :
+`PORTAIL_PESANTEUR`, à 2,4 m/s² — le quart d'une vraie gravité, pour qu'elle
+s'affaisse au lieu de piquer.
+
+Deux conséquences qui suivent : la collision reçoit sa hauteur **du moment** (en
+descendant, elle rencontre les rampes de plus en plus bas, donc de plus en plus
+tôt), et sa brûlure se pose à cette hauteur-là au lieu de flotter à 1,10 m.
+
+### ✨ Les auras montent avec toi
+
+Un effet qu'on subit ne peut pas rester au sol quand on monte. Six auras suivent
+la hauteur du joueur ; **deux ne le faisaient pas** :
+
+| Effet | Avant | Maintenant |
+|---|---|---|
+| ☠️ Brume de poison | `y` figé entre 0,5 et 1,45 m | `p.y + 1` + ondulation |
+| 💨 Zone de fumigène | disque à 0,05 m, dôme à 0,40 m | `p.y + 0,05` / `p.y + 0,40` |
+
+En sautant, ou en courant sur un plateau à 2,70 m, on voyait donc son propre
+aveuglement se dérouler **sous ses pieds** — ce qui se lit comme un décor posé
+sur la piste, pas comme un état qui nous colle.
+
 ### Les bots jouent aussi
 
 Les rivaux d'entraînement ramassent et lancent des parchemins, avec les mêmes
@@ -1222,6 +1381,48 @@ là où le mobile ne peut plus. Il faut donc vider ses rouleaux **avant** les
 Côté réseau, le serveur ne fait que **relayer** le Kusarigama : il ne simule
 aucun effet, c'est la victime qui l'applique. Il vérifie juste que le sort
 existe, pour qu'un client bricolé ne puisse pas inventer de sortilège.
+
+## 🏁 L'écran de fin
+
+Un **podium**, le même pour l'entraînement et pour les courses en ligne. C'est
+le même moment de jeu : deux écrans auraient fini par diverger.
+
+Les marches sont dans l'ordre **2 · 1 · 3**, celui d'un vrai podium — le
+vainqueur au milieu, encadré, sur la marche la plus haute. Un ordre 1-2-3 de
+gauche à droite se lirait comme une liste, et l'on perdrait ce que le podium
+apporte : voir qui a gagné **sans lire**. Du 4ᵉ au dernier, la liste en dessous.
+
+> ⚠️ L'entraînement n'en avait **aucun**. Il repartait droit au menu-titre avec
+> un bandeau, alors qu'on venait de courir 75 secondes : le résultat défilait
+> dans un coin, et relancer demandait de retraverser deux menus.
+
+| | entraînement | en ligne |
+|---|---|---|
+| 🔄 **REJOUER** | nouvelle graine, on repart | l'hôte seulement |
+| ↩️ **RETOUR AU LOBBY** | *caché* | tout le monde |
+| **QUITTER** | le menu du jeu | le menu du jeu |
+
+**Les trois boutons ont trois sens distincts**, ce qui n'était pas le cas avant :
+`REJOUER` renvoyait en réalité tout le monde au salon. Il repart maintenant
+vraiment en course — et en ligne, il passe par le salon *puis* enchaîne le
+départ, parce que le serveur n'accepte `start` que de là. L'intention est
+retenue (`relancerDesLobby`) et consommée quand le salon revient : envoyer les
+deux d'affilée ferait courir le départ après un salon qui n'existe pas encore.
+
+Deux cas que le podium doit tenir, et qu'il tient :
+
+- une **course à deux** cache la 3ᵉ marche — un podium à trois places dont une
+  reste vide se lirait comme un abandon ;
+- un **abandon** s'affiche « abandon » et se range **après** les arrivés, jamais
+  à un temps de 0 s qui le mettrait premier.
+
+Les pseudos passent par `textContent`, jamais par `innerHTML` : en ligne, ils
+viennent des autres joueurs.
+
+```js
+__sorts.fin(5, true)   // le podium sans courir 1 920 m
+                       // 5 = coureurs, true = en ligne (montre le bouton lobby)
+```
 
 ## 🥷 Les rivaux d'entraînement
 
@@ -1398,9 +1599,10 @@ un déploiement sans clés propose moins, il ne tombe pas en panne.
 
 ### La boutique
 
-Elle ne vend **que des couleurs** — huit teintes traditionnelles, de 500 文 à
-1 500 文, plus deux qui ne s'obtiennent qu'en jade
-([migration 002](server/migrations/002_boutique.sql)). Les 18 couleurs de la
+Elle ne vend **que des couleurs** — dix teintes traditionnelles, de 500 文 à
+1 500 文, plus trois qui ne s'obtiennent qu'en jade
+([migration 002](server/migrations/002_boutique.sql) et
+[004](server/migrations/004_coloris_ornements.sql)). Les 18 couleurs de la
 palette libre restent gratuites : la boutique n'a **rien retiré** à personne,
 elle ajoute.
 
@@ -1408,6 +1610,19 @@ elle ajoute.
 > pas décoratifs : ils **décident du style** du guerrier perso (les cornes
 > donnent la peau d'oni, les oreilles la ruse du renard — cf. `CUSTOM_STYLE`).
 > Les vendre reviendrait à vendre un passif, donc de la puissance.
+
+**Deux coloris pensés pour les cornes et les oreilles** — sans rien vendre
+d'autre qu'une couleur. Dans le maillage, les deux ornements sont taillés dans
+`matAccent`, c'est-à-dire la teinte du **bandeau** : une couleur de bandeau
+*est* donc la couleur de ses cornes.
+
+| Coloris | Prix | Pourquoi celle-là |
+|---|---|---|
+| **Kohaku 琥珀** (ambre) | 800 文 | la corne translucide prise dans la lumière ; sur une oreille de renard, le poil roux qui revient |
+| **Shu 朱** (vermillon) | 40 翡翠 | la couleur que le jeu s'était réservée — liserés, torii, ligatures. La porter, c'est prendre la teinte de la piste |
+
+Ce sont des couleurs de **matière**, de l'os et de la braise : elles ne disent
+pas grand-chose sur un bandeau plat, et beaucoup sur une pointe.
 
 **Le client n'envoie qu'un code.** Jamais un prix, jamais une monnaie, jamais un
 solde : tout est relu dans la base au moment de l'achat, dans une seule
@@ -1438,6 +1653,76 @@ en test :
    exacte de l'appelant — jamais `*`, qui ouvrirait l'API à n'importe quel site
    au nom d'un joueur connecté.
 
+## 🔊 Le son — tout est synthétisé
+
+Pas un seul fichier de bruitage : tout est fabriqué en Web Audio à la volée.
+Rien à télécharger sur mobile, aucun asset à gérer.
+
+### Un feu et des oiseaux, deux mécaniques opposées
+
+Les deux biomes qui parlent le font de façons qui n'ont rien à voir — et c'est
+**le contenu qui impose la forme**, pas l'inverse :
+
+| | 🔥 Brasier du village | 🐦 Oiseaux de la bambouseraie |
+|---|---|---|
+| Nature | **continu** | **espacé** |
+| Donc | une boucle | des événements |
+| Cadence | permanent + 2 à 8 craquements/s | un chant toutes les 3 à 7 s |
+
+Boucler un chant d'oiseau ferait entendre la répétition au deuxième tour ; poser
+une nappe de crépitements par événements coûterait des dizaines de nœuds Web
+Audio par seconde. Chaque son veut sa mécanique.
+
+> **Du bruit BRUN, pas blanc.** Le blanc siffle comme une friture, le brun
+> gronde. C'est toute la différence entre « radio mal réglée » et « feu ».
+>
+> **Un glissando, pas une note.** Un chant d'oiseau est une fréquence qui
+> *glisse* ; une sinusoïde fixe sonne comme une alarme.
+
+### Séparer la nappe des craquements
+
+Les crépitements étaient d'abord **cuits dans la boucle**. Défaut de fond : les
+deux ne faisaient qu'**un seul volume**. Baisser le grondement — qui couvrait le
+village — baissait du même coup les craquements, qui sont justement ce qu'on
+veut entendre. Ils vivent désormais à part : deux réglages indépendants.
+
+La force d'un craquement suit `hasard²·²` : **les gros sont rares**. Sans cette
+décroissance, ils se valent tous et le feu devient un grésillement uniforme.
+
+### Ce que la mesure a changé
+
+La fabrication de la boucle coûtait **114 ms**, et elle serait tombée à
+l'instant exact où l'on entre dans le village, à 28 m/s.
+
+| Correction | Effet |
+|---|---|
+| Génération à 22 kHz au lieu de 48 | 114 → 64 ms *(le passe-bas coupe à 1 150 Hz : au-delà de 2 300 Hz il n'y a rien à représenter)* |
+| Crépitements sortis de la boucle | 64 → **21 ms** |
+| Cuisson **provoquée au décompte** | plus aucun à-coup en course |
+
+La cuisson se fait au même endroit que la compilation des shaders, et pour la
+même raison : à l'arrêt sur la grille, personne ne le sent. Coût par image
+ensuite : **0,001 ms** au menu, 0,010 ms au village, 0,0005 ms en forêt.
+
+Deux gardes non cosmétiques : `dt > 0` (sinon la préchauffe craquerait en plein
+3‑2‑1) et `feuVoulu > 0` (sinon le feu craquerait encore après la sortie du
+village — la nappe s'éteint en fondu, un événement ne se fond pas).
+
+### Le banc d'essai
+
+```bash
+# http://localhost:5173/sfx-lab.html
+```
+
+Il contient **tout ce que le jeu peut émettre** : les 14 bruitages, les deux
+ambiances de biome et les trois musiques, avec deux volumes séparés. Un son
+absent d'ici ne se juge qu'en course, donc au milieu de dix autres et une fois
+sur vingt — autant dire jamais.
+
+Les ambiances y sont des **interrupteurs**, pas des boutons : elles ne se jugent
+pas au clic mais **à la durée**. Une nappe peut être parfaite trois secondes et
+insupportable au bout de trente.
+
 ## 🗺️ Roadmap
 
 - [x] Course solo 1 920 m : obstacles, trébuchement, chrono, record
@@ -1463,20 +1748,55 @@ villages en flammes, ponts au clair de lune et flancs enneigés du Fuji. Sur la
 route, des **parchemins de techniques** — pour se surpasser, ou saboter les
 rivaux. Premier au torii sacré, une lame légendaire à la clé.
 
-### Les quatre biomes 🏞️
+### Les biomes 🏞️
 
-La course traverse quatre décors, un par quart de piste (`src/biomes.ts`).
-Ce n'est pas que de l'habillage : sur 1 920 m de couloir uniforme, on perd la
-notion d'avancement. Le chrono dit qu'on progresse, l'œil dit qu'on fait du
-surplace. Quatre décors, c'est quatre repères — « je suis dans les flammes,
-donc à la moitié ».
+La course traverse plusieurs décors, à parts égales (`src/biomes.ts`). Ce n'est
+pas que de l'habillage : sur 1 920 m de couloir uniforme, on perd la notion
+d'avancement. Le chrono dit qu'on progresse, l'œil dit qu'on fait du surplace.
+Des décors qui changent, ce sont des repères — « je suis dans les flammes, donc
+à la moitié ».
 
 | Part | Biome | Brume | Portée | Décor |
 |---|---|---|---|---|
-| 0–25 % | **Forêt de bambous** 竹 | vert d'aube | 32 → 88 | Touffes de tiges hautes |
-| 25–50 % | **Village en flammes** 火 | orange, fumée | 26 → **72** | Masures et braises |
-| 50–75 % | **Pont au clair de lune** 月 | indigo | 30 → 92 | Rambardes, lanternes |
-| 75–100 % | **Flancs du Fuji** 雪 | **gris clair** | 38 → **105** | Rochers neigeux, pins |
+| 0–33 % | **Village en flammes** 火 | orange, fumée | 26 → **72** | Masures et braises |
+| 33–66 % | **Pont au clair de lune** 月 | indigo | 30 → 92 | Rambardes, lanternes |
+| 66–100 % | **Flancs du Fuji** 雪 | **gris clair** | 38 → **105** | Rochers neigeux, pins |
+
+> ⏸️ **La forêt de bambous 竹 est en pause.** Elle ouvrait la course ; elle est
+> retirée de `BIOMES`, mais **pas supprimée** — son code entier vit dans
+> `BIOMES_EN_PAUSE`, et il suffit de la remettre dans la liste pour qu'elle
+> revienne telle quelle.
+>
+> Elle n'est volontairement **pas mise en commentaire** : sept cents lignes de
+> texte mort cesseraient d'être compilées, ne suivraient plus les changements de
+> l'interface `Biome`, et l'on retrouverait dans six mois un biome « en pause »
+> qu'il faudrait en fait réécrire. Parquée dans un tableau, elle reste typée et
+> vérifiée à chaque build.
+>
+> `indexBiome` découpe sur `BIOMES.length` : le partage s'est refait tout seul,
+> en tiers au lieu de quarts. Deux conséquences — la course **commence dans les
+> flammes**, et les 🐦 oiseaux ne se font plus entendre (la bambouseraie était
+> le seul biome à porter `ambiance: 'oiseaux'`).
+
+### 🏠 Les deux rives du pont
+
+Le pont borde sa voie de **maisons sur pilotis** — toit pyramidal rouge, véranda,
+volets bleus. Le toit vif porte seul la lecture : c'est le biome le plus froid et
+le plus sombre, une maison de bois brun s'y noierait.
+
+**Les deux bords n'ont pas la même échelle** — petites à gauche (faîte 3,5 à
+4,8 m), grandes à droite (5,7 à 7,9 m). Deux rives identiques se lisent comme un
+couloir tapissé ; en cassant la symétrie, on donne une **orientation** au
+paysage.
+
+> 🐛 **Le pool de décors donnait la priorité à la gauche.** Il n'était indexé que
+> par biome, les deux bords y puisaient, et la boucle d'apparition demande
+> toujours la gauche en premier (`for (const cote of [-1, 1])`) — `find` rendant
+> le premier libre, un massif remarquable partait systématiquement du même côté.
+> *Symptôme observé en jeu : des maisons à gauche, jamais à droite.*
+>
+> Le pool est désormais indexé par biome **et par côté**. Mesuré après
+> correction : **6,8 % à gauche, 7,0 % à droite** — l'écart a disparu.
 
 Trois réglages portent tout le sens :
 
@@ -1494,6 +1814,54 @@ jamais de « claquement ». Le **décor**, lui, suit la frontière STRICTE
 (`indexBiome`) et se plante d'après le point où il APPARAÎT — 85 m devant, pas
 sous nos pieds. Sans cette avance, un bambou semé pendant qu'on entre dans le
 village nous arriverait dessus en pleine fournaise.
+
+### 🎋 Le bambou pousse en TOUFFES
+
+Un rhizome donne une touffe, et les chaumes en sortent serrés autour du même
+point. On semait pourtant chaque tige **indépendamment**, à plat sur toute la
+bande — d'où une forêt également clairsemée partout, où l'œil ne trouvait aucun
+groupe auquel se raccrocher et où les trous se voyaient d'autant mieux qu'ils
+étaient réguliers.
+
+On tire donc des **centres**, puis les tiges autour. Même quantité de géométrie,
+répartition tout autre : des paquets denses, et de vraies clairières entre eux.
+
+> ⚠️ `sqrt` sur le rayon du tirage. Sans lui, un tirage uniforme sur *r* entasse
+> tout au centre — l'aire croît comme *r²* — et la touffe redevient un poteau.
+
+Deux ajouts qui vont avec le groupement, parce qu'un paquet serré de tiges
+identiques se lirait comme un motif répété :
+
+- une tige sur douze est **sèche** (brune) — les vieux chaumes jaunissent sur
+  pied, au milieu des jeunes ;
+- 2 à 3 **branches** en haut des tiges détaillées. Les nœuds disaient déjà
+  « bambou » de près ; les branches le disent **de loin, à la silhouette** — et
+  c'est à la silhouette qu'on lit un massif à 28 m/s. Réservées aux ~30 tiges
+  ornées : sur les 200 fûts de remplissage, elles coûteraient sans rien ajouter,
+  la canopée couvrant déjà tout à cette hauteur.
+
+### 🪨 Les obstacles du Fuji
+
+Le biome n'en avait **aucun** : ses trois obstacles étaient les blocs nus du
+repli, le seul endroit de la course où l'on voyait la géométrie brute du jeu.
+
+| | Ce que c'est |
+|---|---|
+| **saut** | une congère — trois rochers à demi enfouis, coiffés de neige |
+| **glissade** | une poutre de glace, stalactites dessous, cordages dorés |
+| **mur** | un gros rocher anguleux, calotte de neige sur le dessus |
+
+> **La valeur avant la teinte.** C'est le biome CLAIR : un obstacle blanc sur un
+> sol blanc ne se verrait pas, et c'est la portion où l'on martèle pour le
+> sprint — on n'a pas le temps de déchiffrer. Tout est bâti en roche **sombre**,
+> la neige ne fait que coiffer.
+
+Les **cordages dorés** de la glissade sont repris tels quels de la perche de la
+bambouseraie : l'or est devenu le signal du « glisse », et le changer ici
+obligerait à réapprendre la lecture en pleine course, juste avant le sprint.
+
+Les **stalactites** ne sont pas de l'ornement : la barre seule pouvait se lire
+comme un appui. Elles disent qu'il faut se baisser.
 
 > ⚠️ Le décor a longtemps utilisé `ambianceA().index`, qui bascule au MILIEU du
 > fondu de couleur. Il quittait donc la forêt **133 m avant la vraie frontière**,
@@ -1572,5 +1940,5 @@ maintenant **26 par course**, un convoi toutes les ~4 s.
 
 ⚠️ **Le visuel et la collision sont séparés** (`TAILLE_OBSTACLE`). Chaque biome
 habille ses obstacles à sa façon ; la boîte, elle, ne dépend jamais du maillage.
-Vérifié en sondant la boîte réelle en pleine course : forêt et pont bloquent aux
-mêmes hauteurs au centimètre près, dans les quatre biomes.
+Vérifié en sondant la boîte réelle en pleine course : les biomes bloquent aux
+mêmes hauteurs au centimètre près, quel que soit leur habillage.

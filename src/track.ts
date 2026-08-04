@@ -140,17 +140,41 @@ export const CHANCE_UN_POT = 0.2
 /**
  * ————— Ce que le pot contient —————
  *
- * Une fois sur cinq, du JADE plutôt que des pièces. Le jade est la monnaie rare
- * du jeu : trouver un pot est déjà peu fréquent (une course sur cinq), et un
- * pot sur cinq porte du jade — soit une course sur vingt-cinq environ. C'est ce
- * cumul qui en fait un vrai événement, et non le chiffre pris isolément.
+ * ⚠️ LES DEUX MONNAIES NE S'EXCLUENT PLUS. Le pot donnait autrefois SOIT des
+ * pièces SOIT du jade ; il donne maintenant TOUJOURS des pièces, et le jade
+ * vient EN PLUS quand il vient. Casser un pot n'est donc jamais une déception,
+ * et tomber sur du jade ne prive plus de la récompense ordinaire.
  *
- * Le jade se compte plus petit (1 à 6) que les pièces (1 à 10) : une monnaie
- * rare qui tomberait par poignées ne serait plus rare, juste renommée.
+ * Les MON : 1 à 10, à chaque pot, sans condition.
  */
-export const CHANCE_JADE = 0.2
 export const MON_MAX = 10
-export const JADE_MAX = 6
+
+/**
+ * ————— Le jade, en paliers —————
+ *
+ * Le jade ne se tire pas en tout-ou-rien mais sur une ÉCHELLE : plus la bande
+ * est étroite, plus la poignée est grosse. C'est ce qui fait qu'un pot à jade
+ * reste une surprise même quand on en a déjà vu — la question n'est pas
+ * seulement « y en aura-t-il », mais « combien ».
+ *
+ * Les bandes sont DISJOINTES et se lisent de haut en bas, sur un seul tirage :
+ *   de < 0,12            → 1 à 3 jades   (12 %)
+ *   de < 0,19            → 3 jades       (7 %)
+ *   de < 0,22            → 4 à 5 jades   (3 %)
+ *   sinon                → aucun jade    (78 %)
+ *
+ * Soit 22 % des pots. Combiné à la rareté des pots eux-mêmes (20 % des courses
+ * en portent un), le jade reste un événement : environ une course sur vingt.
+ *
+ * ⚠️ La deuxième bande (3 pile) tombe DANS l'intervalle de la première : c'est
+ * voulu, et c'est ce qui fait de 3 la valeur la plus probable. Les bandes
+ * disent des probabilités, pas des plages qui devraient s'emboîter.
+ */
+export const JADE_PALIERS = [
+  { chance: 0.12, min: 1, max: 3 },
+  { chance: 0.07, min: 3, max: 3 },
+  { chance: 0.03, min: 4, max: 5 },
+] as const
 
 export interface PlannedJarre {
   d: number
@@ -165,14 +189,18 @@ export interface PlannedJarre {
 /**
  * ————— Ce qu'on trouve dans un pot vert —————
  *
- * Deux monnaies, et non une seule quantité : le jade est la monnaie rare du
- * jeu, il ne se compte pas dans la même unité que les pièces. Un pot donne
- * l'une OU l'autre, jamais les deux — sinon « rare » ne veut plus rien dire,
- * puisqu'on en aurait à chaque fois.
+ * Les DEUX monnaies à la fois, et non l'une ou l'autre. `mon` est toujours
+ * strictement positif ; `hisui` vaut 0 dans la grande majorité des pots.
+ *
+ * On garde deux champs distincts plutôt qu'un couple (monnaie, quantité) parce
+ * qu'un pot peut désormais porter les deux : les réduire à une seule unité
+ * obligerait à choisir laquelle annoncer, et l'autre passerait à la trappe.
  */
 export interface Tresor {
-  monnaie: 'mon' | 'hisui'
-  quantite: number
+  /** Les pièces. Toujours ≥ 1 : un pot n'est jamais vide. */
+  mon: number
+  /** Le jade. 0 la plupart du temps — voir JADE_PALIERS. */
+  hisui: number
 }
 
 interface Jarre {
@@ -239,10 +267,47 @@ interface Plateforme {
    * rampe de 6 m deviendrait une rampe de 25 m.
    */
   rampe: THREE.Mesh
+  /**
+   * Le liseré vermillon du nez — SON maillage lui aussi, et pour exactement la
+   * même raison que la rampe.
+   *
+   * ⚠️ C'est le piège dans lequel il était tombé. Il était bâti dans la fabrique
+   * comme un enfant du plateau, long de 1 m « pour ne faire qu'une arête ». Mais
+   * le plateau est étiré à sa longueur, et l'enfant suit : sur un wagon de 25 m,
+   * l'arête de 5 cm devenait un TAPIS ROUGE de 25 m couvrant tout le dessus.
+   * Réduire sa hauteur (10 cm → 5 cm) n'y changeait rien — c'est la longueur qui
+   * était étirée, pas l'épaisseur.
+   */
+  nez: THREE.Mesh
   plan: PlannedPlateforme
   biome: number
+  /**
+   * 🎋 Quel des deux radeaux ce maillage dessine — celui qu'on monte par une
+   * rampe, ou celui sur pilotis. Le pool s'en sert pour ne jamais recycler
+   * l'un à la place de l'autre (cf. spawnPlateforme).
+   */
+  avecRampe: boolean
   active: boolean
 }
+
+/**
+ * ————— Le gabarit du TUNNEL —————
+ *
+ * La hauteur libre sous un plateau ajouré : le dessous du tablier, là où l'on se
+ * cogne la tête. C'est ce chiffre qui fait d'un radeau un vrai tunnel plutôt
+ * qu'un décor qu'on traverse.
+ *
+ * ⚠️ IL DOIT RESTER SOUS `PLATEFORME_H - 0.3` (soit 2,40 m), le seuil à partir
+ * duquel `supportSous` considère qu'on est SUR le plateau. Si le plafond passait
+ * au-dessus, un joueur qui saute à l'intérieur atteindrait le seuil et se
+ * retrouverait hissé sur le toit — précisément le « passage par le haut » qu'on
+ * veut interdire. Les deux valeurs se surveillent l'une l'autre.
+ *
+ * ⚠️ Il doit AUSSI correspondre à ce que dessine la fabrique du biome : sous le
+ * radeau de bambou, la pièce la plus basse est le lit de perches, dont le
+ * dessous tombe vers 1,93 m. On se cogne donc là où l'on voit du bois.
+ */
+export const TUNNEL_HAUT = 1.9
 
 /** Largeur d'une plateforme : une ligne, exactement comme un obstacle. */
 export const PLATEFORME_LARG = 2.15
@@ -284,6 +349,15 @@ export const PLATEFORME_H = 2.7
 interface Decor {
   mesh: THREE.Group
   biome: number
+  /**
+   * Le bord pour lequel ce massif a été bâti : -1 à gauche, +1 à droite.
+   *
+   * Il ne se recycle QUE de son côté. Deux raisons, et la seconde est un bug
+   * corrigé : d'une part un biome peut vouloir deux rives différentes ; d'autre
+   * part un pool commun donnait la priorité à la gauche, qui demande la
+   * première à chaque image (cf. spawnDecor).
+   */
+  cote: number
   active: boolean
 }
 
@@ -560,7 +634,14 @@ export class Track {
    * Prépare une nouvelle course de `length` mètres à partir d'une graine.
    * En multi, la graine vient du serveur : les deux joueurs ont LA MÊME piste.
    */
-  reset(length: number, seed: number) {
+  /**
+   * Repart d'une piste neuve.
+   *
+   * `avecPots` : les 🟢 pots verts sont-ils semés ? Faux à l'entraînement — ils
+   * donnent de la monnaie, et une course qu'on relance seule à volonté ne doit
+   * pas en distribuer. Tout le reste de la piste est identique.
+   */
+  reset(length: number, seed: number, avecPots = true) {
     for (const o of this.obstacles) {
       o.active = false
       o.mesh.visible = false
@@ -598,12 +679,13 @@ export class Track {
     // Les rouleaux sont places APRES les obstacles : ils doivent s'en ecarter
     this.parcheminPlan = buildParcheminPlan(length, seed, occupe)
     this.parcheminIdx = 0
-    this.jarrePlan = buildJarrePlan(length, seed, occupe)
+    this.jarrePlan = buildJarrePlan(length, seed, occupe, avecPots)
     this.jarreIdx = 0
     for (const p of this.plateformes) {
       p.active = false
       p.mesh.visible = false
       p.rampe.visible = false
+      p.nez.visible = false
     }
     for (const m of this.murs) {
       m.active = false
@@ -711,13 +793,41 @@ export class Track {
    * source : impossible qu'un radeau se dessine ajouré tout en se comportant
    * comme un bloc plein.
    */
-  private ajouree(d: number): boolean {
-    return BIOMES[indexBiome(d, this.courseLength)].plateformeAjouree === true
+  private ajouree(p: PlannedPlateforme): boolean {
+    /*
+     * Le biome d'une plateforme se déduit de sa distance — c'est déjà comme ça
+     * qu'on choisit son apparence (cf. spawnPlateforme). On lit donc la MÊME
+     * source : impossible qu'un radeau se dessine ajouré tout en se comportant
+     * comme un bloc plein.
+     *
+     * ⚠️ Et la RAMPE tranche entre les deux radeaux de la bambouseraie. Une
+     * plateforme qu'on monte par une pente n'a pas de tunnel : la rampe emmène
+     * en haut, on n'arrive jamais dessous. C'est la même condition qui choisit
+     * le maillage, pour que le dessin et la règle ne puissent pas diverger.
+     */
+    return (
+      BIOMES[indexBiome(p.d, this.courseLength)].plateformeAjouree === true &&
+      p.rampe === 0
+    )
   }
 
-  supportSous(x: number, pieds: number): { sol: number; heurte: boolean } {
+  /**
+   * Ce qu'on trouve autour du joueur : le sol sous ses pieds, le flanc qu'il
+   * percute, et le PLAFOND au-dessus de sa tête.
+   *
+   * Le plafond est né du tunnel. Sans lui, sauter à l'intérieur d'un radeau
+   * faisait franchir le seuil des 2,40 m et l'on ressortait SUR le toit : on
+   * traversait le tablier par en dessous. Un tunnel qu'on quitte par le haut
+   * n'est plus un tunnel, c'est un trou.
+   */
+  supportSous(
+    x: number,
+    pieds: number
+  ): { sol: number; heurte: boolean; plafond: number } {
     let sol = 0
     let heurte = false
+    // Rien au-dessus par défaut : le ciel n'arrête personne.
+    let plafond = Infinity
     for (const p of this.plateformes) {
       if (!p.active) continue
       if (Math.abs(x - LANES[p.plan.lane]) > PLATEFORME_LARG / 2) continue
@@ -746,7 +856,7 @@ export class Track {
         // On garde la PLUS HAUTE : deux plateaux peuvent se chevaucher d'un
         // cheveu au moment où l'on passe de l'un à l'autre.
         sol = Math.max(sol, p.plan.hauteur)
-      } else if (!this.ajouree(p.plan.d)) {
+      } else if (!this.ajouree(p.plan)) {
         // Les pieds sous le plateau : on lui rentre dedans. À 2,40 m, c'est
         // forcément le cas quand il n'y a pas de rampe — d'où l'escalade.
         //
@@ -755,14 +865,30 @@ export class Track {
         // faut alors escalader comme partout ailleurs. Restreindre au nez ferait
         // TRAVERSER le plateau dans ce cas.
         heurte = true
+      } else {
+        /*
+         * 🎋 ————— LE TUNNEL —————
+         *
+         * Sous un radeau de bambou, on PASSE : il est ouvert à ses deux bouts,
+         * et c'est le seul passage bas de la course. Mais on ne passe QUE par
+         * là — par l'entrée, jamais par les côtés ni par le toit :
+         *
+         *  · les CÔTÉS sont déjà tenus par `flancA`, qui refuse le changement
+         *    de ligne tant qu'on est sous la hauteur du plateau. Elle laisse
+         *    justement passer au ras du nez (`zAvant < 1`) : c'est l'entrée.
+         *  · le TOIT, lui, ne tenait rien du tout. Un saut à l'intérieur
+         *    franchissait les 2,40 m du seuil au-dessus et l'on ressortait sur
+         *    le tablier. D'où ce plafond : on se cogne, on retombe, on
+         *    continue sa course dessous.
+         *
+         * Le plafond est pris au PLUS BAS de ceux qu'on croise, comme le sol
+         * est pris au plus haut : deux radeaux qui se chevauchent d'un cheveu
+         * ne doivent pas ouvrir une brèche le temps d'une image.
+         */
+        plafond = Math.min(plafond, TUNNEL_HAUT)
       }
-      /*
-       * 🎋 Sous un radeau de bambou, en revanche, ON PASSE — il est monté sur
-       * pilotis et son dessin l'annonce. Le bloquer revenait à démentir ce
-       * qu'on voit, et à fermer le seul passage bas de la course.
-       */
     }
-    return { sol, heurte }
+    return { sol, heurte, plafond }
   }
 
   /**
@@ -801,13 +927,50 @@ export class Track {
    * projectile file dessous comme un coureur y passe. Sans cette exception,
    * l'arme la plus lente du jeu aurait été arrêtée par du vide.
    */
-  premierePlateforme(lane: number, d1: number, d2: number): number | null {
+  premierePlateforme(
+    lane: number,
+    d1: number,
+    d2: number,
+    hauteurVol = 0
+  ): number | null {
     let plusProche: number | null = null
+    const retiens = (d: number) => {
+      if (d > d1 && d <= d2 && (plusProche === null || d < plusProche)) plusProche = d
+    }
+
     for (const p of this.plateformePlan) {
-      if (p.lane !== lane || this.ajouree(p.d)) continue
-      if (p.d > d1 && p.d <= d2 && (plusProche === null || p.d < plusProche)) {
-        plusProche = p.d
+      if (p.lane !== lane) continue
+
+      /*
+       * ————— La RAMPE arrête aussi —————
+       *
+       * Elle ne le faisait pas, et l'orbe s'enfonçait DANS la pente : on ne
+       * connaissait ici que le nez du plateau (`p.d`), alors que la rampe
+       * occupe les mètres d'AVANT et monte du sol jusqu'à lui. Un projectile
+       * à 1,10 m traversait donc 3,5 m de coin plein avant d'éclater, très
+       * loin derrière la surface qu'il aurait dû toucher.
+       *
+       * On résout la rencontre au lieu de l'approximer : la pente vaut
+       * `hauteur × (d - début) / rampe`, et l'impact tombe là où elle atteint
+       * la hauteur de vol. Une boule qui rase le sol éclate au PIED de la
+       * rampe, une boule haute presque à son sommet — c'est la même formule
+       * qui donne les deux.
+       *
+       * ⚠️ Valable même devant un radeau AJOURÉ. Le tunnel s'ouvre derrière la
+       * rampe, pas devant : le coin, lui, est plein dans tous les biomes. Un
+       * coureur qui aborde cette ligne monte la pente au lieu de passer
+       * dessous, et ce qui vole doit lire la piste comme lui.
+       */
+      if (p.rampe > 0 && hauteurVol < p.hauteur) {
+        retiens(p.d - p.rampe * (1 - hauteurVol / p.hauteur))
       }
+
+      /*
+       * 🎋 Le CORPS, lui, laisse filer les radeaux ajourés : ils tiennent sur
+       * pilotis, et un projectile passe dessous comme un coureur y passe. Sans
+       * cette exception, l'arme la plus lente du jeu serait arrêtée par du vide.
+       */
+      if (!this.ajouree(p)) retiens(p.d)
     }
     return plusProche
   }
@@ -819,10 +982,20 @@ export class Track {
    * Les sorts ne consultaient que les murs et TRAVERSAIENT les plateformes —
    * un kunaï passait au travers d'un wagon massif. C'est ici qu'on répare, en
    * un seul endroit, pour que tout ce qui vole obéisse à la même piste.
+   *
+   * `hauteurVol` est l'altitude du projectile. Elle ne sert qu'aux RAMPES, les
+   * seules barrières en pente du jeu : sur elles, le point d'impact dépend de
+   * la hauteur à laquelle on arrive. Un mur ou un flanc de plateau, eux, sont
+   * verticaux — on les touche au même endroit quelle que soit l'altitude.
    */
-  premierBarrage(lane: number, d1: number, d2: number): number | null {
+  premierBarrage(
+    lane: number,
+    d1: number,
+    d2: number,
+    hauteurVol = 0
+  ): number | null {
     const mur = this.premierMur(lane, d1, d2)
-    const pf = this.premierePlateforme(lane, d1, d2)
+    const pf = this.premierePlateforme(lane, d1, d2, hauteurVol)
     if (mur === null) return pf
     if (pf === null) return mur
     return Math.min(mur, pf)
@@ -1019,11 +1192,13 @@ export class Track {
       if (!p.active) continue
       p.mesh.position.z += dz
       p.rampe.position.z += dz
+      p.nez.position.z += dz
       p.mesh.userData.zAvant = (p.mesh.userData.zAvant as number) + dz
       if (p.mesh.userData.zAvant > DESPAWN_Z + p.plan.longueur) {
         p.active = false
         p.mesh.visible = false
         p.rampe.visible = false
+        p.nez.visible = false
       }
     }
 
@@ -1252,11 +1427,26 @@ export class Track {
    * barrière transforme le joli en injuste.
    */
   private spawnDecor(biome: number, cote: number, z: number) {
-    let dec = this.decors.find((d) => !d.active && d.biome === biome)
+    /*
+     * ⚠️ LE POOL EST INDEXÉ PAR BIOME **ET PAR CÔTÉ**.
+     *
+     * Il ne l'était que par biome, et les deux bords y puisaient. Or la boucle
+     * d'apparition demande TOUJOURS la gauche en premier (`for (const cote of
+     * [-1, 1])`) et `find` rend le premier libre : un massif remarquable — une
+     * maison, disons — placé tôt dans le tableau partait donc
+     * systématiquement à gauche. Symptôme observé en jeu : des maisons d'un
+     * seul côté de la piste, jamais de l'autre.
+     *
+     * Séparer les deux réserves supprime la préférence, et permet en prime aux
+     * deux bords de ne pas se ressembler (cf. `fabriqueDecor`, qui reçoit
+     * désormais le côté).
+     */
+    let dec = this.decors.find((d) => !d.active && d.biome === biome && d.cote === cote)
     if (!dec) {
       dec = {
-        mesh: BIOMES[biome].fabriqueDecor(this.graineDecor),
+        mesh: BIOMES[biome].fabriqueDecor(this.graineDecor, cote),
         biome,
+        cote,
         active: false,
       }
       this.decors.push(dec)
@@ -1295,13 +1485,25 @@ export class Track {
 
   private spawnPlateforme(p: PlannedPlateforme, z: number) {
     const biome = indexBiome(p.d, this.courseLength)
-    let pf = this.plateformes.find((q) => !q.active && q.biome === biome)
+    /*
+     * 🎋 Le pool est indexé par biome ET par VARIANTE.
+     *
+     * La bambouseraie bâtit deux radeaux différents selon qu'il y a une rampe
+     * ou non. Recycler l'un pour l'autre — ce que faisait un pool indexé sur le
+     * seul biome — poserait un radeau sur pilotis au bout d'une pente, ou un
+     * radeau plein là où la collision ouvre un tunnel.
+     */
+    const avecRampe = p.rampe > 0
+    let pf = this.plateformes.find(
+      (q) => !q.active && q.biome === biome && q.avecRampe === avecRampe
+    )
     if (!pf) {
       const habille = BIOMES[biome].fabriquePlateforme
       pf = {
         mesh: habille
-          ? habille(p.hauteur, PLATEFORME_LARG)
+          ? habille(p.hauteur, PLATEFORME_LARG, avecRampe)
           : makePlateformeMesh(p.hauteur),
+        avecRampe,
         rampe: new THREE.Mesh(
           GEO_RAMPE,
           new THREE.MeshStandardMaterial({
@@ -1309,12 +1511,13 @@ export class Track {
             roughness: 0.9,
           })
         ),
+        nez: new THREE.Mesh(GEO_NEZ, MAT_NEZ),
         plan: p,
         biome,
         active: false,
       }
       this.plateformes.push(pf)
-      this.scene.add(pf.mesh, pf.rampe)
+      this.scene.add(pf.mesh, pf.rampe, pf.nez)
     }
     pf.plan = p
     // Le maillage est bâti sur 1 m de long, centré : on l'étire et on le recule
@@ -1331,6 +1534,16 @@ export class Track {
       pf.rampe.scale.set(PLATEFORME_LARG, p.hauteur, p.rampe)
       pf.rampe.position.set(LANES[p.lane], 0, z + p.rampe / 2)
     }
+
+    /*
+     * L'arête vermillon, posée en mètres sur le nez du tablier — jamais étirée.
+     * Elle mord de 5 cm vers l'intérieur du plateau, donc son centre est une
+     * demi-épaisseur en arrière du bord avant.
+     */
+    pf.nez.scale.set(PLATEFORME_LARG + 0.1, NEZ_EP, NEZ_EP)
+    pf.nez.position.set(LANES[p.lane], p.hauteur - 0.02, z - NEZ_EP / 2)
+    pf.nez.visible = true
+
     pf.active = true
   }
 
@@ -1740,7 +1953,8 @@ function periodeRebond(d: number, length: number): number {
 export function buildJarrePlan(
   length: number,
   seed: number,
-  obstacles: PlannedObstacle[]
+  obstacles: PlannedObstacle[],
+  avecPots = true
 ): PlannedJarre[] {
   const rng = mulberry32(seed ^ 0x2b91e6a7)
   const plan: PlannedJarre[] = []
@@ -1825,6 +2039,22 @@ export function buildJarrePlan(
    * joueurs voient le même pot au même endroit, et se le disputent. Un tirage
    * local en donnerait un à l'un et pas à l'autre, ce qui serait injouable.
    */
+  /*
+   * ————— 🏋️ PAS DE POTS VERTS À L'ENTRAÎNEMENT —————
+   *
+   * Les pots donnent de la MONNAIE, et l'entraînement se relance à volonté,
+   * seul, sans adversaire : les y laisser revenait à ouvrir un robinet. On
+   * pourrait farmer des Mon et du Jade en boucle, ce qui viderait de son sens
+   * la seule ressource que la boutique demande.
+   *
+   * On sort AVANT le tirage, et c'est le point : ne pas consommer le dé laisse
+   * le reste du plan — les jarres, leurs grappes, leurs dorées — strictement
+   * identique. La piste d'entraînement reste donc celle qu'on jouera en ligne,
+   * à ceci près qu'elle ne paie pas. S'entraîner sur une autre piste que la
+   * vraie n'aurait servi à rien.
+   */
+  if (!avecPots) return plan
+
   const candidats = eligibles.filter((i) => plan[i].kind === 'vide')
   const de = rng()
   const combien = de < CHANCE_DEUX_POTS ? 2 : de < CHANCE_UN_POT ? 1 : 0
@@ -1841,10 +2071,34 @@ export function buildJarrePlan(
      * à la casse, côté joueur, donnerait du jade à l'un et des pièces à l'autre
      * pour la même poterie — on se disputerait un objet qui n'est pas le même.
      */
-    const jade = rng() < CHANCE_JADE
+    /*
+     * ⚠️ TROIS TIRAGES, TOUJOURS, quelle que soit l'issue.
+     *
+     * `rQuantJade` est consommé même sans jade. Sans cette précaution, le nombre
+     * d'appels à `rng()` dépendrait du résultat du premier pot, et le SECOND pot
+     * d'une même course tomberait ailleurs selon que le premier portait du jade
+     * ou non. Le plan doit rester une pure fonction de la graine, branche par
+     * branche — c'est ce qui garantit qu'en duel les deux joueurs voient les
+     * mêmes pots aux mêmes endroits.
+     */
+    const dJade = rng()
+    const rQuantJade = rng()
+    const rMon = rng()
+
+    let hisui = 0
+    let cumul = 0
+    for (const palier of JADE_PALIERS) {
+      cumul += palier.chance
+      if (dJade < cumul) {
+        hisui = palier.min + Math.floor(rQuantJade * (palier.max - palier.min + 1))
+        break
+      }
+    }
+
     plan[i].tresor = {
-      monnaie: jade ? 'hisui' : 'mon',
-      quantite: 1 + Math.floor(rng() * (jade ? JADE_MAX : MON_MAX)),
+      // Les pièces tombent toujours, y compris quand le jade sort.
+      mon: 1 + Math.floor(rMon * MON_MAX),
+      hisui,
     }
   }
   return plan
@@ -2013,9 +2267,11 @@ export function buildPlateformePlan(length: number, seed: number): PlannedPlatef
  * Le visuel GÉNÉRIQUE d'une plateforme : un plateau bâti sur 1 m de long et
  * centré, qu'on étire en Z à l'apparition.
  *
- * Le liseré du dessus est vermillon, comme celui des pans de mur — et pour la
- * même raison. Le vermillon est devenu le langage des SURFACES QU'ON UTILISE
- * (on s'y accroche, on court dessus), par opposition aux obstacles qu'on subit.
+ * Le vermillon, lui, ne se fabrique PAS ici : c'est `spawnPlateforme` qui pose
+ * l'arête du nez, en mètres, sur un maillage à part (`nez`). Il reste le langage
+ * des SURFACES QU'ON UTILISE (on s'y accroche, on court dessus) par opposition
+ * aux obstacles qu'on subit — mais un repère qui doit mesurer 5 cm n'a rien à
+ * faire dans un groupe qu'on étire.
  */
 export function makePlateformeMesh(hauteur: number): THREE.Object3D {
   const g = new THREE.Group()
@@ -2030,14 +2286,17 @@ export function makePlateformeMesh(hauteur: number): THREE.Object3D {
     new THREE.MeshStandardMaterial({ color: 0x4d566f, roughness: 0.9 })
   )
   tablier.position.y = hauteur - 0.08
-  // Le vermillon réduit à une arête de 5 cm sur le nez : le repère survit, le
-  // « ruban rouge » disparaît.
-  const liser = new THREE.Mesh(
-    new THREE.BoxGeometry(PLATEFORME_LARG + 0.1, 0.05, 1),
-    new THREE.MeshStandardMaterial({ color: 0xc33a2c, emissive: 0x3a0f0a })
-  )
-  liser.position.y = hauteur - 0.02
-  g.add(corps, tablier, liser)
+  /*
+   * ⚠️ PAS DE VERMILLON ICI — il est posé par `spawnPlateforme`, sur son propre
+   * maillage (`nez`), en mètres.
+   *
+   * Il a été un enfant de ce groupe, et c'était le bug : le groupe est étiré en
+   * Z à la longueur du wagon, et l'enfant suivait. L'« arête de 5 cm sur le
+   * nez » couvrait en réalité TOUT le dessus du plateau — un tapis rouge de 25 m
+   * sur un wagon de 25 m. Réduire son épaisseur n'y pouvait rien : c'est sa
+   * LONGUEUR qui était multipliée.
+   */
+  g.add(corps, tablier)
   return g
 }
 
@@ -2075,6 +2334,23 @@ function makeRampeGeo(): THREE.BufferGeometry {
 }
 
 const GEO_RAMPE = makeRampeGeo()
+
+/**
+ * Le liseré du nez : une boîte unité qu'on met à l'échelle en MÈTRES au moment
+ * de poser la plateforme, jamais un enfant qu'on étire.
+ *
+ * Géométrie et matière sont partagées par toutes les plateformes de la course :
+ * le vermillon ne dépend pas du biome — c'est justement une langue commune, le
+ * signe des surfaces qu'on UTILISE. Une seule matière, donc un seul shader à
+ * compiler et un état de rendu de moins.
+ */
+const GEO_NEZ = new THREE.BoxGeometry(1, 1, 1)
+const MAT_NEZ = new THREE.MeshStandardMaterial({
+  color: 0xc33a2c,
+  emissive: 0x3a0f0a,
+})
+/** L'épaisseur de l'arête vermillon sur le nez du plateau, en mètres. */
+const NEZ_EP = 0.05
 
 /**
  * Place les pans de mur : un tous les 160 à 280 m, de 26 à 42 m de long.

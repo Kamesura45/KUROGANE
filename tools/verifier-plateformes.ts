@@ -45,8 +45,17 @@ function verifier(titre: string, ok: boolean, detail = '') {
   console.log(`  ${ok ? 'ok  ' : 'ECHEC'} ${titre}${detail ? '  → ' + detail : ''}`)
 }
 
-/** Ce biome porte-t-il des radeaux ajoures ? */
-const ajouree = (d: number) => BIOMES[indexBiome(d, LONGUEUR)].plateformeAjouree === true
+/**
+ * Cette plateforme-la est-elle ajouree ?
+ *
+ * ⚠️ Le biome ne suffit PAS. La bambouseraie batit deux radeaux, et c'est la
+ * RAMPE qui les separe : avec rampe il est plein (on le monte par sa pente,
+ * personne n'arrive jamais dessous), sans rampe il est sur pilotis et l'on
+ * passe. Ce banc doit classer comme le jeu classe — sinon il verifie une regle
+ * que le jeu n'applique plus. Voir `ajouree()` dans track.ts.
+ */
+const ajouree = (p: { d: number; rampe: number }) =>
+  BIOMES[indexBiome(p.d, LONGUEUR)].plateformeAjouree === true && p.rampe === 0
 
 function neuf() {
   const t = new Track(new THREE.Scene())
@@ -62,11 +71,39 @@ for (const b of BIOMES) {
     `  · ${b.nom.padEnd(22)} ${b.plateformeAjouree ? 'AJOURE — on passe dessous' : 'plein — il arrete'}`
   )
 }
-verifier(
-  'un seul biome est ajoure',
-  BIOMES.filter((b) => b.plateformeAjouree).length === 1,
-  `${BIOMES.filter((b) => b.plateformeAjouree).length} biome(s)`
-)
+/*
+ * ⚠️ Ce banc verifiait « un seul biome est ajoure ». Ce n'est plus la question :
+ * les QUATRE savent desormais batir un radeau sur pilotis, chacun a sa matiere.
+ * Compter les biomes ne dit donc plus rien.
+ *
+ * L'invariant qui a remplace celui-la est ailleurs, et il est plus fort : c'est
+ * la RAMPE qui decide, et elle decide pour les deux a la fois — le maillage et
+ * la collision. Une plateforme a rampe n'est JAMAIS ajouree (on la monte, on
+ * n'arrive jamais dessous) ; une plateforme sans rampe l'est toujours, dans un
+ * biome qui sait en batir. C'est ce lien-la qu'on verifie.
+ */
+{
+  const plan = new Track(new THREE.Scene())
+  plan.reset(LONGUEUR, GRAINE)
+  const toutes = plan.plateformesPrevues()
+  const avecRampeEtAjouree = toutes.filter((p) => p.rampe > 0 && ajouree(p)).length
+  const sansRampePasAjouree = toutes.filter(
+    (p) =>
+      p.rampe === 0 &&
+      BIOMES[indexBiome(p.d, LONGUEUR)].plateformeAjouree === true &&
+      !ajouree(p)
+  ).length
+  verifier(
+    'aucune plateforme a rampe n est ajouree',
+    avecRampeEtAjouree === 0,
+    `${avecRampeEtAjouree} contre-exemple(s)`
+  )
+  verifier(
+    'toute plateforme sans rampe l est, dans un biome qui sait en batir',
+    sansRampePasAjouree === 0,
+    `${sansRampePasAjouree} contre-exemple(s)`
+  )
+}
 
 // ————— Les sorts —————
 console.log('\n————— Un projectile est arrete par une plateforme pleine —————')
@@ -86,7 +123,7 @@ console.log('\n————— Un projectile est arrete par une plateforme plein
      * fait passer le controle pour de mauvaises raisons.
      */
     const arretee = track.premierePlateforme(p.lane, p.d - 1, p.d + 1) === p.d
-    if (ajouree(p.d)) arretee ? bloqueBambou++ : fileBambou++
+    if (ajouree(p)) arretee ? bloqueBambou++ : fileBambou++
     else arretee ? arretePlein++ : ratePlein++
   }
   verifier(
@@ -146,7 +183,7 @@ console.log('\n————— Le coureur bute sur le plein, passe sous le bambo
   let creux = 0
   for (const [i, r] of vus) {
     const p = plateformes[i]
-    if (ajouree(p.d)) r.heurte ? buteBambou++ : passeBambou++
+    if (ajouree(p)) r.heurte ? buteBambou++ : passeBambou++
     else r.heurte ? butePlein++ : traversePlein++
     r.sol >= p.hauteur - 0.01 ? porte++ : creux++
   }

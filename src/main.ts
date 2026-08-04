@@ -52,7 +52,16 @@ import {
   connexionEmail,
   verserPots,
 } from './compte'
-import { souffleDeVent, jouerBruit, setVolumeSfx, sonDeSoin } from './sfx'
+import {
+  souffleDeVent,
+  jouerBruit,
+  setVolumeSfx,
+  sonDeSoin,
+  feuAmbiance,
+  oiseauxAmbiance,
+  prechauffeFeu,
+} from './sfx'
+import { BIOMES, indexBiome } from './biomes'
 import type { Quality } from './settings'
 import { Musique } from './audio'
 
@@ -348,6 +357,24 @@ let speed = 0
 let countdown = 0 // secondes avant le GO !
 let stumble = 0 // invincibilité après un trébuchement
 /**
+ * ⚡ Les shaders de la course sont-ils déjà compilés ?
+ *
+ * Remis à faux à chaque départ : d'une course à l'autre le biome de tête ne
+ * change pas, mais la graine, elle, change — les matières croisées sur les
+ * premiers mètres ne sont pas forcément les mêmes. Repayer une compilation
+ * déjà faite ne coûte rien (three.js garde son cache de programmes), la sauter
+ * à tort coûterait le hoquet qu'on cherche justement à supprimer.
+ */
+let shadersPrets = false
+/**
+ * 🔄 Un « rejouer » en ligne est en cours : il attend que le salon revienne.
+ *
+ * Le serveur n'accepte le départ que depuis le salon, et le retour au salon est
+ * un aller-retour réseau. On note donc l'intention ici, et `onLobby` la
+ * consomme quand le salon est réellement là.
+ */
+let relancerDesLobby = false
+/**
  * 🧪 Le banc d'essai fige la course (cf. le guichet `__sorts` en fin de
  * fichier). Le monde s'arrête, mais TOUT LE RESTE continue de tourner : les
  * sorts, leurs minuteurs, les brumes, les chaînes. C'est ce qui permet de
@@ -447,8 +474,43 @@ let senbonFin = 0 // ☠️ l'écran ondule
  */
 const PORTAIL_BLEU = 0x4db8ff
 
-/** 🔮 Le portail en vol : il file tout droit dans SA ligne jusqu'au 1er mur. */
-let portail: { d: number; lane: number; couleur: number; sens: 1 | -1 } | null = null
+/**
+ * L'altitude de vol du portail, en mètres.
+ *
+ * ⚠️ Elle est LUE par la piste (`premierBarrage`) autant qu'elle place le
+ * maillage. C'était un `1.1` écrit en dur au seul endroit du dessin, et la
+ * collision, elle, ne connaissait aucune hauteur : l'orbe s'enfonçait dans les
+ * rampes. Une pente ne peut pas dire où l'on tape sans savoir à quelle hauteur
+ * on arrive — les deux usages partagent donc désormais le même chiffre.
+ */
+const PORTAIL_Y = 1.1
+
+/**
+ * 🔮 Combien de temps la boule tient sa ligne avant de commencer à tomber.
+ *
+ * Deux secondes : assez pour qu'on la voie filer droit et comprendre qu'elle
+ * vole, assez court pour que sa chute arrive encore dans le champ. Passé ce
+ * délai elle plonge, touche le sol et éclate — c'est ce qui lui donne enfin une
+ * portée à elle, au lieu de dépendre uniquement du prochain mur.
+ */
+const PORTAIL_PLANE = 2
+/**
+ * La pesanteur de la boule, en m/s². Volontairement le QUART d'une vraie
+ * gravité : elle doit s'affaisser, pas piquer. Depuis 1,10 m, la chute dure un
+ * peu moins d'une seconde — on a le temps de la voir descendre.
+ */
+const PORTAIL_PESANTEUR = 2.4
+
+/**
+ * 🔮 Le portail en vol : il file tout droit dans SA ligne jusqu'au 1er mur.
+ *
+ * `y` est sa hauteur ACTUELLE, et `t0` l'instant du lancer. Les deux vont
+ * ensemble : la boule part à la hauteur du lanceur — saut compris — tient ce
+ * niveau `PORTAIL_PLANE` secondes, puis s'affaisse jusqu'au sol.
+ */
+let portail:
+  | { d: number; lane: number; couleur: number; sens: 1 | -1; y: number; vy: number; t0: number }
+  | null = null
 
 /**
  * 👻 La trêve du départ : pendant les 5 premières secondes, personne ne peut
@@ -1312,8 +1374,19 @@ function spawnFumeeZone(cible: THREE.Object3D) {
 /** Recale la zone sur sa victime. `age` fait monter le dôme au fil du temps. */
 function placerFumeeZone(z: FumeeZone, age: number) {
   const p = z.cible.position
-  z.disque.position.set(p.x, 0.05, p.z)
-  z.dome.position.set(p.x, 0.4 + age * 0.16, p.z)
+  /*
+   * ⚠️ `p.y` : LA FUMÉE MONTE AVEC SA VICTIME.
+   *
+   * Les deux hauteurs étaient écrites en dur, et la zone restait donc plaquée
+   * au sol pendant qu'on sautait ou qu'on courait sur un plateau à 2,70 m. On
+   * voyait alors son aveuglement se dérouler sous ses pieds — un effet qu'on
+   * subit ne peut pas rester en bas quand on monte.
+   *
+   * Le disque garde son ras-du-sol RELATIF : c'est l'empreinte au niveau des
+   * pieds, pas une tache sur la piste.
+   */
+  z.disque.position.set(p.x, p.y + 0.05, p.z)
+  z.dome.position.set(p.x, p.y + 0.4 + age * 0.16, p.z)
 }
 
 // ————— 💨💥 Le rideau de vitesse (sprint final + dash) —————
@@ -1838,7 +1911,23 @@ function lancerParchemin() {
       return
     }
     const couleur = PORTAIL_BLEU
-    portail = { d: distance, lane: player.currentLane, couleur, sens: 1 }
+    /*
+     * ⚠️ Elle part à LA HAUTEUR DU LANCEUR, saut compris.
+     *
+     * Elle naissait à 1,10 m quoi qu'il arrive : tirer en plein saut faisait
+     * apparaître la boule sous ses propres pieds. `PORTAIL_Y` n'est donc plus
+     * une altitude mais un écart au-dessus des pieds — la hauteur de la main
+     * qui jette.
+     */
+    portail = {
+      d: distance,
+      lane: player.currentLane,
+      couleur,
+      sens: 1,
+      y: player.mesh.position.y + PORTAIL_Y,
+      vy: 0,
+      t0: time,
+    }
     player.geste('lancer') // 🔥 le bras jette le portail devant lui
     for (const m of [portailHalo, portailAnneau]) {
       ;(m.material as THREE.MeshBasicMaterial).color.setHex(couleur)
@@ -1982,14 +2071,21 @@ function gagneParchemin(kind: ParcheminKind) {
 const recolte = { mon: 0, hisui: 0 }
 
 function ramasserTresor(t: Tresor) {
-  recolte[t.monnaie] += t.quantite
+  recolte.mon += t.mon
+  recolte.hisui += t.hisui
   jouerBruit('jarreDoree')
-  // Le jade s'annonce autrement que les pièces : c'est la trouvaille rare, elle
-  // ne doit pas se confondre avec un gain ordinaire dans le coin de l'œil.
+  /*
+   * Le jade s'annonce autrement que les pièces : c'est la trouvaille rare, elle
+   * ne doit pas se confondre avec un gain ordinaire dans le coin de l'œil.
+   *
+   * ⚠️ Et quand il y a du jade, LES PIÈCES SONT ANNONCÉES AUSSI. Elles tombent
+   * désormais dans tous les cas : n'afficher que le jade laisserait croire
+   * qu'on a troqué les unes contre l'autre, alors qu'on a reçu les deux.
+   */
   toast(
-    t.monnaie === 'hisui'
-      ? `💎 JADE ! +${t.quantite} Hisui`
-      : `🟢 +${t.quantite} Mon`
+    t.hisui > 0
+      ? `💎 JADE ! +${t.hisui} Hisui — et +${t.mon} Mon`
+      : `🟢 +${t.mon} Mon`
   )
 }
 
@@ -2245,7 +2341,9 @@ function startRace(seed: number) {
   // La récolte de pots repart de zéro à chaque départ
   recolte.mon = 0
   recolte.hisui = 0
-  track.reset(COURSE_LENGTH, seed)
+  // 🏋️ Les pots verts n'existent qu'EN LIGNE : ils donnent de la monnaie, et
+  // l'entraînement se relance seul, à volonté. Voir buildJarrePlan.
+  track.reset(COURSE_LENGTH, seed, online)
   time = 0
   distance = 0
   speed = 0
@@ -2342,6 +2440,7 @@ function startRace(seed: number) {
 
   countdown = 3
   state = 'depart'
+  shadersPrets = false // ⚡ la piste va être repeuplée : on recompile au décompte
   menu.hide()
   updateMeLabel()
   countEl.classList.add('show')
@@ -2447,7 +2546,41 @@ function crossFinishLine() {
   })
   const rangLine = rang > 0 ? `<br>🏆 ${rang}ᵉ meilleur temps` : ''
 
-  backToMenu(`⛩️ Torii sacré franchi en <b>${t} s</b> !<br>${classement()}<br>${bestLine}${rangLine}`)
+  /*
+   * ————— 🏁 L'entraînement a droit au même écran que la course —————
+   *
+   * Il repartait droit au menu-titre avec un bandeau, alors qu'on venait de
+   * courir 75 secondes : le résultat défilait dans un coin et l'on n'avait
+   * même pas de quoi relancer sans retraverser deux menus.
+   *
+   * Les rivaux qui n'ont pas franchi le torii n'ont pas de temps — leur
+   * `tempsArrivee` vaut -1. On les range après les arrivés, comme en ligne
+   * pour un abandon, et non à un temps de 0 qui les mettrait premiers.
+   */
+  const rivaux = botsEnCourse().map((b) => ({
+    nom: b.profil.nom,
+    temps: b.tempsArrivee >= 0 ? b.tempsArrivee : null,
+    moi: false,
+  }))
+  const joueurs = [
+    { nom: menu.settings.name || 'Guerrier anonyme', temps: time, moi: true },
+    ...rivaux,
+  ].sort((a, b) => {
+    if (a.temps === null && b.temps === null) return 0
+    if (a.temps === null) return 1
+    if (b.temps === null) return -1
+    return a.temps - b.temps
+  })
+
+  menu.showFin({
+    titre:
+      `⛩️ Torii franchi en <b>${t} s</b><br>${classement()}<br>${bestLine}${rangLine}`,
+    joueurs,
+    canReplay: true,
+    // 🏋️ Pas de salon en entraînement : le bouton du milieu n'aurait nulle part
+    // où mener. On le cache plutôt que de lui inventer une destination.
+    canLobby: false,
+  })
 }
 
 /** Le classement final : trié, arrivés d'abord (au rang), puis les abandons. */
@@ -2469,19 +2602,20 @@ function showResults(view: LobbyView) {
         : '☁️ Tu n\'as pas fini la course…'
   jouerBruit(rang === 1 ? 'victoire' : 'defaite')
 
-  const lignes = ranked
-    .map((p, i) => {
-      const medaille = ['🥇', '🥈', '🥉'][i] ?? `${i + 1}ᵉ`
-      const chrono = p.rank ? `${p.time.toFixed(2)} s` : 'abandon'
-      const moi = p.id === view.me ? ' moi' : ''
-      // ⚠️ escapeHtml : les pseudos viennent des autres joueurs
-      return `<div class="resrow${moi}"><span>${medaille}</span>` +
-        `<span class="resname">${escapeHtml(p.name || 'Guerrier')}</span>` +
-        `<span class="restime">${chrono}</span></div>`
-    })
-    .join('')
-
-  menu.showResults(`${titre}<div class="reslist">${lignes}</div>`, view.isHost)
+  menu.showFin({
+    titre,
+    joueurs: ranked.map((p) => ({
+      nom: p.name || 'Guerrier',
+      // Un abandon n'a pas de temps : `rank` à 0 le dit, et `time` vaudrait 0.
+      temps: p.rank ? p.time : null,
+      moi: p.id === view.me,
+    })),
+    // Seul l'hôte relance : c'est lui qui commande le départ.
+    canReplay: view.isHost,
+    // Le retour au salon, lui, est pour tout le monde — y compris celui qui
+    // veut juste attendre la manche suivante sans la déclencher.
+    canLobby: true,
+  })
 }
 
 // ————— Le réseau —————
@@ -2494,6 +2628,17 @@ const net = new Net({
     state = 'attente'
     musique.jouer('lobby')
     menu.showLobby(view)
+
+    /*
+     * 🔄 Le « rejouer » demandé depuis l'écran de fin arrive à destination : le
+     * salon est là, on peut enfin lancer. Réservé à l'hôte — lui seul commande
+     * le départ, et l'intention est remise à zéro dans TOUS les cas pour qu'un
+     * clic resté en travers ne relance pas une course trois manches plus tard.
+     */
+    if (relancerDesLobby) {
+      relancerDesLobby = false
+      if (view.isHost && view.phase === 'lobby') net.sendStart()
+    }
   },
   onCountdown(seed) {
     online = true
@@ -2625,10 +2770,33 @@ const menu = new Menu({
   onChat(text) {
     net.sendChat(text)
   },
+  /*
+   * 🔄 REJOUER — on repart en course, sans repasser par les menus.
+   *
+   * En ligne, le départ ne peut PAS être demandé depuis l'écran de fin : le
+   * serveur n'accepte `start` que depuis le salon. On y renvoie donc tout le
+   * monde, et l'on retient qu'il faudra enchaîner — c'est `onLobby` qui
+   * relancera, une fois le salon vraiment revenu. Envoyer les deux d'affilée
+   * ferait courir le départ après un salon qui n'existe pas encore.
+   */
   onReplay() {
+    if (!online) {
+      // 🏋️ Une NOUVELLE graine, comme au bouton « EN PISTE » : rejouer la même
+      // piste par cœur ne serait plus de l'entraînement. Le nombre de rivaux,
+      // lui, ne bouge pas — c'est le réglage qu'on vient de choisir.
+      startRace(Math.floor(Math.random() * 2 ** 31))
+      return
+    }
+    relancerDesLobby = true
+    net.sendToLobby()
+  },
+  /** ↩️ Le salon, sans relancer : on attend la manche suivante. */
+  onRetourLobby() {
     net.sendToLobby()
   },
   onLeaveSalon() {
+    // En entraînement il n'y a rien à quitter : `leave` ne coûte rien et garde
+    // ce chemin unique, mais c'est `backToMenu` qui fait le travail.
     net.leave()
     clearRivals()
     backToMenu()
@@ -3049,6 +3217,42 @@ function tick(now?: number) {
      * apparaissent, et l'on voit ce qui nous attend.
      */
     track.update(dt, 0, 0)
+
+    /*
+     * ⚡ On compile les shaders PENDANT le décompte, pas en pleine course.
+     *
+     * Three.js ne compile le programme d'un matériau qu'à son PREMIER rendu, et
+     * il le fait sur le thread principal : chaque matière inédite fige l'image
+     * le temps de la compilation — de l'ordre de 50 à 200 ms sur mobile. Or la
+     * bambouseraie découvre ses matières UNE À UNE au fil des premiers mètres
+     * (radeau, palissade, yotsume-gaki, litière…), si bien que la course
+     * démarrait en hoquetant, très exactement là où l'on accélère.
+     *
+     * La ligne juste au-dessus vient de peupler 85 m de piste à vitesse nulle :
+     * tout ce que la forêt va montrer est DÉJÀ dans la scène. C'est donc le seul
+     * moment de la partie où la facture peut être payée d'un coup sans que
+     * personne ne le sente — on est immobile sur la grille.
+     *
+     * `compileAsync` de préférence à `compile` : là où le navigateur sait le
+     * faire (KHR_parallel_shader_compile), three.js rend la main tout de suite
+     * et le décompte ne bronche pas. Là où l'extension manque, il retombe de
+     * lui-même sur la compilation bloquante — un temps d'arrêt sur la grille de
+     * départ reste préférable à un hoquet en pleine ligne droite. Les deux cas
+     * sont déjà traités DANS three.js : rien à démêler ici.
+     *
+     * La promesse n'intéresse personne : le GO ne l'attend pas. Si le décompte
+     * s'achève avant la fin, on n'aura fait qu'AVANCER le travail — jamais
+     * l'aggraver. Le `catch` est là pour qu'un échec de compilation reste un
+     * problème d'images par seconde, jamais un rejet non capturé.
+     */
+    if (!shadersPrets) {
+      shadersPrets = true
+      renderer.compileAsync(scene, camera).catch(() => {})
+      // 🔥 Et la boucle du brasier, pour la même raison exactement : sa
+      // fabrication coûte quelques dizaines de millisecondes, et elle tomberait
+      // sinon à l'instant où l'on entre dans le village, à pleine vitesse.
+      prechauffeFeu()
+    }
   } else if (state === 'course') {
     time += dt
 
@@ -3109,6 +3313,9 @@ function tick(now?: number) {
      */
     const support = track.supportSous(player.mesh.position.x, player.mesh.position.y)
     player.sol = player.surMur === 0 ? support.sol : 0
+    // 🎋 Le plafond du tunnel. Sur la paroi on est hors de la piste : rien
+    // au-dessus non plus, sinon on se cognerait à un tablier qu'on a quitté.
+    player.plafond = player.surMur === 0 ? support.plafond : Infinity
     player.update(dt)
     for (const r of rivals.values()) {
       // Chacun entre dans le sprint a SA distance, pas a la notre
@@ -3133,7 +3340,9 @@ function tick(now?: number) {
       if (lance === 'onmyoji') {
         // Un bot ne vise pas mieux que nous : son portail part droit devant et
         // meurt au premier obstacle, exactement comme le nôtre.
-        const mur = track.premierBarrage(b.ligne, b.distance, distance)
+        // Le portail d'un bot vole à la même altitude que le nôtre : il doit
+        // donc s'écraser sur les mêmes pentes, aux mêmes endroits.
+        const mur = track.premierBarrage(b.ligne, b.distance, distance, PORTAIL_Y)
         if (devant === null && b.ligne === player.currentLane && mur === null && distance > b.distance) {
           const sien = b.distance
           b.distance = distance
@@ -3147,6 +3356,41 @@ function tick(now?: number) {
       }
     })
 
+    /*
+     * ————— 🔮 Elle plane, puis elle s'affaisse —————
+     *
+     * Deux secondes de vol tendu à la hauteur du lancer, puis la pesanteur la
+     * prend. On garde `vy` plutôt que de recalculer la hauteur depuis `t0` :
+     * une vitesse s'intègre image par image et supporte tout ce qu'on voudra
+     * lui ajouter plus tard — un rebond, un renvoi qui la relance — là où une
+     * formule fermée obligerait à réécrire le temps.
+     *
+     * 💥 Et quand elle touche le sol, elle éclate : c'est SA portée à elle.
+     * Jusqu'ici seul un mur pouvait l'arrêter, et sur une ligne dégagée elle
+     * filait indéfiniment. Le sol lui donne une fin qui ne dépend plus de ce
+     * que la piste veut bien lui opposer.
+     *
+     * ⚠️ Un bloc À PART, avant celui des rencontres, plutôt qu'une imbrication :
+     * une boule éteinte au sol n'a plus de mur ni de rival à croiser, et le
+     * `if (portail)` suivant suffit à le dire. Deux blocs frères se lisent mieux
+     * qu'un test au milieu de cent lignes.
+     */
+    if (portail) {
+      if (time - portail.t0 > PORTAIL_PLANE) {
+        portail.vy -= PORTAIL_PESANTEUR * dt
+        portail.y += portail.vy * dt
+      }
+      if (portail.y <= 0) {
+        portailImpact(
+          new THREE.Vector3(LANES[portail.lane], 0.12, -(portail.d - distance)),
+          portail.couleur
+        )
+        portail = null
+        portailGroup.visible = false
+        toast('🔮 Le portail retombe et s\'éteint…')
+      }
+    }
+
     // ————— 🔮 Le portail en vol —————
     if (portail) {
       const avant = portail.d
@@ -3158,7 +3402,10 @@ function tick(now?: number) {
       // Un mur OU une plateforme pleine l'avale : c'est la piste qui borne sa
       // portée, pas un chiffre. Les radeaux de bambou, eux, le laissent filer
       // dessous — ils sont sur pilotis.
-      const mur = track.premierBarrage(portail.lane, lo, hi)
+      //
+      // ⚠️ On passe sa hauteur DU MOMENT, pas une constante : en s'affaissant
+      // elle rencontre les rampes de plus en plus bas, donc de plus en plus tôt.
+      const mur = track.premierBarrage(portail.lane, lo, hi, portail.y)
       // Qui croise-t-il dans sa ligne cette image ? Bots (solo) ET rivaux (en
       // ligne) confondus — le PLUS PROCHE l'emporte. On teste le franchissement :
       // à ~83 m/s il parcourt ~1,4 m par image, un test de proximité le raterait.
@@ -3187,7 +3434,9 @@ function tick(now?: number) {
         // 💥 Il éclate SUR la paroi : on prend la position du mur, pas celle du
         // portail — sinon la brûlure flotterait devant, dans le vide.
         portailImpact(
-          new THREE.Vector3(LANES[portail.lane], 1.1, -(dMur - distance) + 0.3),
+          // Sa hauteur DU MOMENT : une boule qui s'est affaissée doit brûler la
+          // paroi là où elle l'a heurtée, pas à l'altitude où elle est partie.
+          new THREE.Vector3(LANES[portail.lane], portail.y, -(dMur - distance) + 0.3),
           portail.couleur
         )
         portail = null
@@ -3235,7 +3484,9 @@ function tick(now?: number) {
       } else {
         // L'orbe file, l'anneau tourne, et les arcs se relancent à chaque image
         portailGroup.visible = true
-        portailGroup.position.set(LANES[portail.lane], 1.1, -(portail.d - distance))
+        // `portail.y` et non plus une constante : c'est elle qui porte la
+        // hauteur, du lancer jusqu'à l'affaissement.
+        portailGroup.position.set(LANES[portail.lane], portail.y, -(portail.d - distance))
         portailAnneau.rotation.z += dt * 5
         portailCoeur.scale.setScalar(0.9 + Math.random() * 0.35) // le cœur palpite
         for (const a of portailArcs) jitterArc(a, 0.62, 0.3)
@@ -3305,9 +3556,18 @@ function tick(now?: number) {
         const ph = (v.userData.phase as number) + time * 0.8
         // Chacun tourne à son rythme sur une orbite propre : c'est l'irrégularité
         // qui fait « brume » — alignés, ils redeviendraient une boule.
+        /*
+         * ⚠️ `p.y` : LA BRUME MONTE AVEC SA VICTIME.
+         *
+         * Sa hauteur était écrite en dur, et la brume restait donc au sol
+         * pendant qu'on sautait ou qu'on courait sur un plateau à 2,70 m. Un
+         * poison qu'on laisse en bas en sautant se lit comme un décor posé sur
+         * la piste, pas comme un état qui nous colle — et c'est précisément ce
+         * que cette aura doit dire.
+         */
         v.position.set(
           p.x + Math.cos(ph) * 0.5,
-          0.5 + Math.sin(ph * 1.7) * 0.45 + 0.5,
+          p.y + 1 + Math.sin(ph * 1.7) * 0.45,
           p.z + Math.sin(ph) * 0.5
         )
         v.rotation.z = ph * 0.5
@@ -3754,6 +4014,22 @@ function tick(now?: number) {
     speedEl.style.opacity = '0' // pas de rideau de vitesse hors course
   }
 
+  /*
+   * ————— 🔊 L'ambiance sonore du biome traversé —————
+   *
+   * Appelée à chaque image, y compris pour la COUPER : hors course, ou dans un
+   * biome silencieux, la consigne tombe à 0 et le fondu s'en occupe. Sans cet
+   * appel systématique, le brasier resterait allumé au menu après une course
+   * abandonnée dans le village.
+   *
+   * Le biome se lit par son champ `ambiance`, jamais par son numéro : ajouter
+   * une nappe ailleurs ne demandera pas de revenir ici.
+   */
+  const enCourse = state === 'depart' || state === 'course' || state === 'fini'
+  const biomeIci = enCourse ? BIOMES[indexBiome(distance, COURSE_LENGTH)] : null
+  feuAmbiance(biomeIci?.ambiance === 'feu' ? 1 : 0, dt)
+  oiseauxAmbiance(biomeIci?.ambiance === 'oiseaux' ? 1 : 0, dt)
+
   // La caméra suit en douceur la ligne du joueur
   camera.position.x += (player.mesh.position.x * 0.55 - camera.position.x) * Math.min(1, dt * 5)
 
@@ -3844,6 +4120,33 @@ if (import.meta.env.DEV) {
     /** Quitter la course et revenir au menu, sans recharger la page. */
     quitter() {
       backToMenu()
+    },
+    /**
+     * 🏁 Montre l'écran de fin sans courir les 1 920 m.
+     *
+     * Il fallait sinon 75 secondes de course pour voir un podium — et donc
+     * autant à chaque retouche de sa mise en page. `n` est le nombre de
+     * coureurs, `enLigne` ajoute le bouton « retour au lobby » réservé aux
+     * salons.
+     *
+     * Les temps sont croissants et le joueur placé au milieu du peloton : c'est
+     * le cas qui montre le plus de choses d'un coup — le podium, la liste des
+     * suivants, et le repère doré sur SA ligne.
+     */
+    fin(n = 5, enLigne = false) {
+      const noms = ['Hana', 'Oni-Maru', 'Tamae', 'Kurokumo', 'Ryu', 'Sora', 'Kaze']
+      const moiA = Math.min(2, n - 1)
+      menu.showFin({
+        titre: `⛩️ Torii franchi en <b>72.40 s</b><br>Banc d'essai — ${n} coureurs`,
+        joueurs: Array.from({ length: n }, (_, i) => ({
+          nom: i === moiA ? menu.settings.name || 'Guerrier anonyme' : noms[i % noms.length],
+          // Le dernier abandonne : sans lui, on ne verrait jamais ce cas.
+          temps: i === n - 1 && n > 3 ? null : 70 + i * 1.7,
+          moi: i === moiA,
+        })),
+        canReplay: true,
+        canLobby: enLigne,
+      })
     },
     /** Ce que le jeu retient de nous, pour l'afficher en direct. */
     etat() {

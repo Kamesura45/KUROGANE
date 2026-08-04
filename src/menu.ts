@@ -17,7 +17,7 @@ import { cleanName, loadSettings, saveSettings, type Quality, type Settings } fr
 import { montant } from './icones'
 import type { LobbyView, SalonInfo } from './net'
 import { COURSE_LENGTH } from './track'
-import { chargerScores, effacerScores, formaterTemps, MAX_SCORES } from './scores'
+import { chargerScores, formaterTemps, MAX_SCORES } from './scores'
 import { lireClassement } from './compte'
 
 /** Les trois lectures du classement, cf. buildScores. */
@@ -60,7 +60,15 @@ export interface MenuCallbacks {
   onReady(ready: boolean): void
   onStart(): void
   onChat(text: string): void
+  /**
+   * 🔄 « Rejouer » depuis l'écran de fin — on repart en course DIRECTEMENT.
+   *
+   * En entraînement, on relance la même configuration. En ligne, seul l'hôte
+   * l'a : il renvoie tout le monde au salon et enchaîne le départ.
+   */
   onReplay(): void
+  /** ↩️ « Retour au lobby » — en ligne seulement : le salon, sans relancer. */
+  onRetourLobby(): void
   onLeaveSalon(): void
   /** Le joueur veut ouvrir la boutique (le jeu ira chercher le catalogue) */
   onBoutique(): void
@@ -194,8 +202,12 @@ export class Menu {
     ready: document.getElementById('btnReady')!,
     start: document.getElementById('btnStart')!,
     // ————— Résultats —————
+    scoresRech: document.getElementById('scoresRech') as HTMLInputElement,
     resultsBody: document.getElementById('resultsBody')!,
     replay: document.getElementById('btnReplay')!,
+    finTitre: document.getElementById('finTitre')!,
+    podium: document.getElementById('podium')!,
+    btnLobby: document.getElementById('btnLobby')!,
     // ————— Boutique —————
     bourseRow: document.getElementById('bourseRow')!,
     bourse: document.getElementById('bourse')!,
@@ -258,15 +270,21 @@ export class Menu {
     // 🏆 Le tableau se REBÂTIT à chaque ouverture : on vient souvent d'y ajouter
     // une ligne en finissant une course.
     document.getElementById('btnScores')!.addEventListener('click', () => {
+      // On rouvre sur une recherche VIERGE : retrouver l'écran filtré par une
+      // requête tapée trois jours plus tôt se lirait comme un classement vide.
+      this.el.scoresRech.value = ''
       this.buildScores()
       this.ouvrir('scores')
     })
-    document.getElementById('btnScoresClear')!.addEventListener('click', () => {
-      // Effacer des records est irréversible : on demande.
-      if (!confirm('Effacer tous les meilleurs temps ?')) return
-      effacerScores(COURSE_LENGTH)
-      this.buildScores()
-    })
+    /*
+     * 🔎 La recherche filtre l'onglet AFFICHÉ, et se contente de rebâtir.
+     *
+     * Aucun appel réseau de plus : les trois onglets tiennent déjà en mémoire la
+     * liste qu'ils viennent d'afficher (cf. `dernieresLignes`). Interroger le
+     * serveur à chaque lettre aurait été une requête par frappe, pour filtrer
+     * des données qu'on a déjà sous la main.
+     */
+    this.el.scoresRech.addEventListener('input', () => this.buildScores())
     for (const b of document.querySelectorAll<HTMLElement>('#scoresOnglets button')) {
       b.addEventListener('click', () => {
         this.ongletScore = (b.dataset.t ?? 'mondial') as OngletScore
@@ -369,6 +387,7 @@ export class Menu {
 
     // — Résultats —
     this.el.replay.addEventListener('click', () => cb.onReplay())
+    this.el.btnLobby.addEventListener('click', () => cb.onRetourLobby())
     document.getElementById('btnQuitResults')!.addEventListener('click', () => cb.onLeaveSalon())
   }
 
@@ -460,10 +479,66 @@ export class Menu {
     this.el.chatLog.scrollTop = this.el.chatLog.scrollHeight
   }
 
-  /** Le classement de fin de course. `canReplay` : l'hôte peut relancer. */
-  showResults(html: string, canReplay: boolean) {
-    this.el.resultsBody.innerHTML = html
-    this.el.replay.classList.toggle('hidden', !canReplay)
+  /**
+   * ————— 🏁 L'écran de fin —————
+   *
+   * Le même pour l'entraînement et pour les courses en ligne : c'est le MÊME
+   * moment de jeu, et deux écrans différents auraient fini par diverger.
+   *
+   * `joueurs` arrive DÉJÀ TRIÉ — l'ordre des rangs n'est pas la même question
+   * selon le mode (en ligne, un abandon se range après les arrivés ; en solo,
+   * tout le monde finit), et cet arbitrage appartient à l'appelant.
+   *
+   * ⚠️ Les noms passent par `textContent`, jamais par `innerHTML` : en ligne
+   * ils viennent des autres joueurs.
+   */
+  showFin(opts: {
+    titre: string
+    joueurs: { nom: string; temps: number | null; moi: boolean }[]
+    canReplay: boolean
+    canLobby: boolean
+  }) {
+    this.el.finTitre.innerHTML = opts.titre
+
+    // Les trois marches, dans l'ordre du DOM (2 · 1 · 3) et non du classement.
+    const rangs = [1, 0, 2]
+    const marches = [...this.el.podium.children] as HTMLElement[]
+    marches.forEach((marche, i) => {
+      const j = opts.joueurs[rangs[i]]
+      // Une marche sans joueur disparaît : un podium à trois places dont une
+      // reste vide se lirait comme un abandon.
+      marche.classList.toggle('vide', !j)
+      marche.classList.toggle('moi', !!j?.moi)
+      if (!j) return
+      marche.querySelector<HTMLElement>('.pod-nom')!.textContent = j.nom
+      marche.querySelector<HTMLElement>('.pod-temps')!.textContent =
+        j.temps === null ? 'abandon' : `${j.temps.toFixed(2)} s`
+    })
+
+    // Du 4ᵉ au dernier : la liste, qui existait déjà et n'avait pas à changer.
+    this.el.resultsBody.replaceChildren()
+    if (opts.joueurs.length > 3) {
+      const liste = document.createElement('div')
+      liste.className = 'reslist'
+      opts.joueurs.slice(3).forEach((j, i) => {
+        const ligne = document.createElement('div')
+        ligne.className = `resrow${j.moi ? ' moi' : ''}`
+        const rang = document.createElement('span')
+        rang.textContent = `${i + 4}ᵉ`
+        const nom = document.createElement('span')
+        nom.className = 'resname'
+        nom.textContent = j.nom
+        const temps = document.createElement('span')
+        temps.className = 'restime'
+        temps.textContent = j.temps === null ? 'abandon' : `${j.temps.toFixed(2)} s`
+        ligne.append(rang, nom, temps)
+        liste.appendChild(ligne)
+      })
+      this.el.resultsBody.appendChild(liste)
+    }
+
+    this.el.replay.classList.toggle('hidden', !opts.canReplay)
+    this.el.btnLobby.classList.toggle('hidden', !opts.canLobby)
     this.show('results')
   }
 
@@ -952,12 +1027,6 @@ export class Menu {
     for (const b of document.querySelectorAll<HTMLElement>('#scoresOnglets button')) {
       b.classList.toggle('on', b.dataset.t === this.ongletScore)
     }
-    // « Effacer » ne concerne QUE la table locale : les autres onglets vivent
-    // sur le serveur, on n'efface pas le record d'autrui.
-    document
-      .getElementById('btnScoresClear')
-      ?.classList.toggle('hidden', this.ongletScore !== 'local')
-
     if (this.ongletScore === 'local') {
       this.buildScoresLocal(hote, lead)
       return
@@ -965,19 +1034,64 @@ export class Menu {
     void this.buildScoresServeur(hote, lead, this.ongletScore)
   }
 
+  /**
+   * 🔎 Ce qu'on cherche, en minuscules et sans accents.
+   *
+   * ⚠️ La normalisation n'est pas un luxe : les pseudos portent des accents, et
+   * personne ne les tape pour chercher. « rene » doit trouver « René », sinon la
+   * recherche ne sert qu'à ceux qui écrivent déjà juste. `NFD` sépare la lettre
+   * de son accent, et l'on jette les accents.
+   */
+  private get requeteScore(): string {
+    return this.el.scoresRech.value
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+  }
+
+  private correspond(nom: string, q: string): boolean {
+    if (!q) return true
+    return nom
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .includes(q)
+  }
+
+  /** Le mot qu'on affiche quand le filtre ne laisse rien passer. */
+  private videRecherche(lead: HTMLElement, q: string) {
+    lead.textContent = `Aucun guerrier ne répond à « ${q} » dans ce classement.`
+  }
+
   /** 📱 L'appareil : les temps solo comme en ligne, gardés ici et nulle part ailleurs. */
   private buildScoresLocal(hote: HTMLElement, lead: HTMLElement) {
-    const scores = chargerScores(COURSE_LENGTH)
-    document.getElementById('btnScoresClear')?.classList.toggle('hidden', scores.length === 0)
+    const tous = chargerScores(COURSE_LENGTH)
+    const q = this.requeteScore
+    /*
+     * ⚠️ ON GARDE LE RANG D'ORIGINE. Filtrer puis numéroter la liste réduite
+     * donnerait la médaille d'or au 5ᵉ dès qu'on cherche son nom — la recherche
+     * doit montrer OÙ l'on est, pas réécrire le classement.
+     */
+    const scores = tous
+      .map((s, rang) => ({ s, rang }))
+      .filter(({ s }) => this.correspond(s.nom, q))
 
     hote.replaceChildren()
-    if (scores.length === 0) {
+    if (tous.length === 0) {
       lead.textContent = `Aucun temps pour l'instant. Franchis le torii une fois et ta ligne s'inscrira ici.`
       return
     }
-    lead.textContent = `Tes ${MAX_SCORES} meilleurs temps sur les ${COURSE_LENGTH} m, gardés sur cet appareil.`
+    if (scores.length === 0) {
+      this.videRecherche(lead, this.el.scoresRech.value.trim())
+      return
+    }
+    // « temps » est invariable : seul le VERBE s'accorde.
+    lead.textContent = q
+      ? `${scores.length} temps sur ${tous.length} correspond${scores.length > 1 ? 'ent' : ''} à « ${this.el.scoresRech.value.trim()} ».`
+      : `Tes ${MAX_SCORES} meilleurs temps sur les ${COURSE_LENGTH} m, gardés sur cet appareil.`
 
-    scores.forEach((s, i) => {
+    scores.forEach(({ s, rang }) => {
       const f = fighterById(s.fighter)
       // Ce qui rend deux temps comparables : le mode et le nombre d'adversaires.
       // « rival » fait « rivaux » : le pluriel change le mot entier, on ne peut
@@ -991,12 +1105,12 @@ export class Menu {
       const quand = s.date ? ` · ${new Date(s.date).toLocaleDateString('fr-FR')}` : ''
       hote.append(
         this.ligneScore({
-          rang: this.medaille(i),
+          rang: this.medaille(rang),
           jp: f.jp,
           nom: s.nom,
           detail: `${f.name} · ${quoi}${quand}`,
           temps: formaterTemps(s.temps),
-          premier: i === 0,
+          premier: rang === 0,
         })
       )
     })
@@ -1030,12 +1144,27 @@ export class Menu {
           : 'Aucune course en ligne pour l’instant. Seules les courses en ligne sont enregistrées ici.'
       return
     }
-    lead.textContent =
-      onglet === 'mondial'
+    /*
+     * 🔎 Le filtre, en gardant le rang d'origine — voir `buildScoresLocal` : un
+     * classement mondial qui renumérote ce qu'il montre ne dit plus rien.
+     */
+    const q = this.requeteScore
+    const vues = lignes
+      .map((l, i) => ({ l, i }))
+      .filter(({ l }) => this.correspond(l.pseudo || 'Guerrier anonyme', q))
+
+    if (vues.length === 0) {
+      this.videRecherche(lead, this.el.scoresRech.value.trim())
+      return
+    }
+
+    lead.textContent = q
+      ? `${vues.length} guerrier${vues.length > 1 ? 's' : ''} sur ${lignes.length} répond${vues.length > 1 ? 'ent' : ''} à « ${this.el.scoresRech.value.trim()} ».`
+      : onglet === 'mondial'
         ? `Le meilleur temps de chaque guerrier sur les ${COURSE_LENGTH} m. Seules les courses en ligne comptent : ce sont les seules dont le serveur chronomètre lui-même.`
         : 'Tes dernières courses en ligne, la plus fraîche en tête.'
 
-    lignes.forEach((l, i) => {
+    vues.forEach(({ l, i }) => {
       const f = fighterById(l.fighter)
       const quand = new Date(l.cree_le).toLocaleDateString('fr-FR')
       const place = `${l.rang}ᵉ sur ${l.partants}`

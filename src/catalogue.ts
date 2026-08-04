@@ -202,14 +202,34 @@ const RAYONS: Rayon[] = [
           },
         },
         {
-          titre: 'plateforme',
-          detail: `${PLATEFORME_H} m — trop haut pour un saut`,
+          titre: 'plateforme (rampe)',
+          detail: `${PLATEFORME_H} m — pleine, on la monte par sa pente`,
           faire: () => {
             // La largeur n'est passée qu'à la fabrique du BIOME : biomes.ts ne
             // peut pas importer de valeur depuis track.ts sans créer un cycle.
             // Le repli, lui, vit dans track.ts et lit PLATEFORME_LARG tout seul.
             const p =
-              biome.fabriquePlateforme?.(PLATEFORME_H, PLATEFORME_LARG) ??
+              biome.fabriquePlateforme?.(PLATEFORME_H, PLATEFORME_LARG, true) ??
+              makePlateformeMesh(PLATEFORME_H)
+            p.scale.z = 12
+            return p
+          },
+        },
+        {
+          /*
+           * 🎋 Les DEUX radeaux, côte à côte.
+           *
+           * C'est tout l'intérêt de les voir ici : la différence entre « plein »
+           * et « sur pilotis » se juge à la silhouette, et il fallait sinon
+           * croiser deux plateformes de bambou dans une même course pour espérer
+           * les comparer. Hors bambouseraie, les deux entrées montrent le même
+           * bloc — les autres biomes n'ont qu'un modèle.
+           */
+          titre: 'plateforme (pilotis)',
+          detail: `${PLATEFORME_H} m — ajourée, on passe dessous`,
+          faire: () => {
+            const p =
+              biome.fabriquePlateforme?.(PLATEFORME_H, PLATEFORME_LARG, false) ??
               makePlateformeMesh(PLATEFORME_H)
             p.scale.z = 12
             return p
@@ -225,13 +245,22 @@ const RAYONS: Rayon[] = [
     parBiome: true,
     pieces: (b) => {
       const biome = BIOMES[b]
-      // Le décor est TIRÉ AU HASARD à chaque appel : une seule pièce ne dirait
-      // rien de la variété. On en montre huit, avec des graines différentes.
-      return Array.from({ length: 8 }, (_, i) => ({
-        titre: `bordure ${i + 1}`,
-        detail: `tous les ${biome.ecartDecor} m`,
-        faire: () => biome.fabriqueDecor(mulberry32(0x5eed + i * 977)),
-      }))
+      /*
+       * Le décor est TIRÉ AU HASARD à chaque appel : une seule pièce ne dirait
+       * rien de la variété. On en montre huit, avec des graines différentes.
+       *
+       * ⚠️ QUATRE À GAUCHE, QUATRE À DROITE. Les deux bords ne se ressemblent
+       * plus forcément — le pont y met des maisons de tailles différentes — et
+       * n'en montrer qu'un cacherait la moitié de ce que le biome sait faire.
+       */
+      return Array.from({ length: 8 }, (_, i) => {
+        const cote = i % 2 === 0 ? -1 : 1
+        return {
+          titre: `bordure ${i + 1} · ${cote < 0 ? 'gauche' : 'droite'}`,
+          detail: `tous les ${biome.ecartDecor} m`,
+          faire: () => biome.fabriqueDecor(mulberry32(0x5eed + i * 977), cote),
+        }
+      })
     },
   },
   {

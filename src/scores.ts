@@ -87,14 +87,16 @@ export function ajouterScore(
   return { scores: gardes, rang: rang <= MAX_SCORES ? rang : 0 }
 }
 
-/** Efface le tableau — l'écran des scores propose de repartir de zéro. */
-export function effacerScores(longueur: number) {
-  try {
-    localStorage.removeItem(cle(longueur))
-  } catch {
-    /* rien à faire : il n'y avait déjà rien à effacer */
-  }
-}
+/*
+ * ⚠️ `effacerScores` a été RETIRÉ avec son bouton.
+ *
+ * L'écran des scores proposait « 🗑️ Effacer » ; la place sert désormais à
+ * CHERCHER un pseudo, ce qui est la vraie demande d'un classement — au-delà de
+ * la première page, on ne peut plus se trouver soi-même ni suivre un camarade.
+ *
+ * On ne garde pas la fonction « au cas où » : une fonction que plus rien
+ * n'appelle ne se teste plus, et c'est celle-là qu'on rebranche par erreur.
+ */
 
 /** « 75.07 » → « 1:15.07 » dès qu'on dépasse la minute. */
 export function formaterTemps(t: number): string {

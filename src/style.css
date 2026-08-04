@@ -1808,6 +1808,110 @@ body {
   color: #9aa4c0;
 }
 
+/* ———————————————————————————————————————————————————————————————
+   🏁 L'ÉCRAN DE FIN — le podium
+   ———————————————————————————————————————————————————————————————
+
+   Les trois marches sont posées côte à côte et alignées PAR LE BAS : c'est la
+   hauteur du bloc qui dit le rang, pas sa position dans le flux. Le nom et le
+   temps flottent au-dessus de leur marche, donc au-dessus de hauteurs
+   différentes — d'où `align-items: end` plutôt qu'un empilement régulier.
+
+   Une marche sans joueur (une course à deux) se cache : un podium à trois
+   places dont une reste vide ferait croire à un abandon. */
+.fin-titre {
+  margin: 6px 0 2px;
+  font-size: 1.05rem;
+  line-height: 1.45;
+}
+.podium {
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin: 18px 0 2px;
+}
+.marche {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.marche.vide {
+  display: none;
+}
+.pod-nom {
+  font-weight: 700;
+  font-size: 0.92rem;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pod-temps {
+  font-family: ui-monospace, monospace;
+  font-size: 0.76rem;
+  color: #9aa4c0;
+}
+/* Le bloc porte le chiffre du rang, gros et centré : à cette taille il se lit
+   avant le nom, et c'est bien l'ordre dans lequel on veut être lu. */
+.pod-bloc {
+  width: 100%;
+  border-radius: 7px 7px 0 0;
+  border: 1px solid #2b3350;
+  border-bottom: none;
+  background: rgba(21, 26, 44, 0.55);
+  font-weight: 800;
+  font-size: 1.5rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Les trois hauteurs. L'écart doit rester net sur un petit écran, sinon les
+   marches se valent et le podium ne dit plus rien. */
+.marche.m1 .pod-bloc { height: 92px; }
+.marche.m2 .pod-bloc { height: 66px; }
+.marche.m3 .pod-bloc { height: 48px; }
+
+/* L'or, l'argent, le bronze — la seule couleur de l'écran, donc la seule chose
+   qui attire l'œil. */
+.marche.m1 .pod-bloc {
+  border-color: #d6ac5a;
+  background: linear-gradient(180deg, rgba(214, 172, 90, 0.34), rgba(214, 172, 90, 0.09));
+  color: #f0d9a4;
+}
+.marche.m2 .pod-bloc {
+  border-color: #9fb0c8;
+  background: linear-gradient(180deg, rgba(159, 176, 200, 0.26), rgba(159, 176, 200, 0.07));
+  color: #dfe7f2;
+}
+.marche.m3 .pod-bloc {
+  border-color: #b07d4a;
+  background: linear-gradient(180deg, rgba(176, 125, 74, 0.28), rgba(176, 125, 74, 0.08));
+  color: #edcaa4;
+}
+
+/* 🟡 Notre propre marche, repérée comme dans la liste : même langage que
+   `.resrow.moi`, pour qu'on se retrouve au même signe partout. */
+.marche.moi .pod-nom { color: #d6ac5a; }
+.marche.moi .pod-bloc { box-shadow: 0 0 0 2px rgba(214, 172, 90, 0.5) inset; }
+
+/* Les boutons de fin passent à la ligne quand ils sont trois : sur un
+   téléphone étroit, trois libellés côte à côte deviennent illisibles. */
+.fin-row {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+#overlay button.lobby {
+  background: #3a5ba8;
+  border-color: #4a6fc4;
+  color: #eaf0ff;
+}
+
 /* ——— 🏆 Le tableau des meilleurs temps ——— */
 .scores {
   display: flex;

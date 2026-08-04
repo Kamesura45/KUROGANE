@@ -20,11 +20,24 @@ import { mondial, recentes } from './classement.js'
 const POTS_MAX_MON = 2 * 10
 /**
  * Et le jade. Le plafond suppose le PIRE cas — deux pots, tous deux du jade,
- * tous deux au maximum — alors qu'en pratique un pot sur cinq seulement en
- * contient. Un plafond se calcule sur ce qui est possible, jamais sur ce qui
- * est probable : sinon il refuserait un jour un joueur parfaitement honnête.
+ * tous deux dans le palier le plus riche — alors qu'en pratique un pot sur cinq
+ * environ en contient. Un plafond se calcule sur ce qui est possible, jamais sur
+ * ce qui est probable : sinon il refuserait un jour un joueur parfaitement
+ * honnête.
+ *
+ * ⚠️ 5, et non plus 6 : le jade se tire désormais par PALIERS (cf. JADE_PALIERS
+ * dans src/track.ts), dont le plus généreux plafonne à 5. Laisser 6 ne cassait
+ * rien — un plafond trop large ne refuse personne — mais il aurait menti sur ce
+ * que le jeu peut produire, et c'est ce mensonge qui finit par cacher un vrai
+ * écart le jour où les paliers bougent.
+ *
+ * ⚠️ Et surtout : LES DEUX MONNAIES ARRIVENT MAINTENANT ENSEMBLE. Un pot donne
+ * toujours des Mon, et parfois du jade EN PLUS. Les deux plafonds doivent donc
+ * pouvoir être atteints dans le même versement — ils sont vérifiés séparément
+ * juste en dessous, ce qui est exactement ce qu'il faut ; un plafond commun aux
+ * deux monnaies rejetterait le meilleur pot honnête du jeu.
  */
-const POTS_MAX_HISUI = 2 * 6
+const POTS_MAX_HISUI = 2 * 5
 /** La fenêtre entre deux versements : la durée d'une course propre. */
 const POTS_DELAI_MS = 60_000
 /** Le dernier versement de chaque joueur. En mémoire : un redémarrage la vide,

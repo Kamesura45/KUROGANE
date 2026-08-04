@@ -113,6 +113,267 @@ export function setVolumeSfx(v: number) {
   if (master) master.gain.value = volumeSfx
 }
 
+/* ═══════════════ 🔥 Le brasier du village ═══════════════ */
+
+let feuGain: GainNode | null = null
+/** L'intensité VOULUE, retenue même quand le contexte audio n'existe pas
+ *  encore : le joueur peut entrer dans le village avant d'avoir touché
+ *  l'écran, et le feu doit démarrer au bon niveau dès qu'il y touche. */
+let feuVoulu = 0
+/** Secondes avant le prochain craquement. */
+let crepiteT = 0
+
+/**
+ * ————— 🔥 Une nappe de feu, qu'on ouvre et qu'on ferme —————
+ *
+ * `intensite` va de 0 (silence) à 1 (plein brasier). On l'appelle à CHAQUE
+ * IMAGE : la rampe interne se charge du fondu, il n'y a rien à cadencer côté
+ * jeu.
+ *
+ * ⚠️ UNE SEULE BOUCLE, jamais des crépitements programmés un par un. Un feu
+ * demande des dizaines de pops par seconde ; les planifier depuis la boucle de
+ * jeu ferait autant de nœuds Web Audio à créer et détruire par image, et le
+ * moindre à-coup d'images s'entendrait comme un trou dans le son. On cuit donc
+ * six secondes de matière UNE fois — la nappe grave ET ses crépitements — et on
+ * la joue en boucle. Le coût par image retombe à zéro.
+ *
+ * Six secondes, et non deux : plus court, l'oreille reconnaît le motif et le
+ * feu se met à sonner comme une machine à laver.
+ */
+export function feuAmbiance(intensite: number, dt = 0) {
+  feuVoulu = Math.min(1, Math.max(0, intensite))
+
+  /*
+   * ⚠️ ON NE CUIT PAS POUR RIEN, et l'on ne réveille même pas l'audio.
+   *
+   * Sans ce garde, la toute première image du jeu — au menu, silence demandé —
+   * paierait la fabrication de la boucle, puisque la boucle de jeu appelle
+   * cette fonction à CHAQUE image. Et placé après `audio()`, il laissait encore
+   * 300 appels à `resume()` par seconde pour ne rien faire : mesuré, 0,16 ms
+   * par image gaspillées au menu. Tant qu'on ne demande pas de feu et qu'il n'y
+   * en a pas, il n'y a rien à faire du tout.
+   *
+   * `prechauffeFeu()` sert à provoquer la cuisson au bon moment.
+   */
+  if (!feuGain && feuVoulu <= 0) return
+
+  const ac = audio()
+  if (!ac) return
+
+  if (!feuGain) {
+    const DUREE = 6
+    /*
+     * ⚠️ 22 kHz, et non la fréquence du contexte (souvent 48).
+     *
+     * Web Audio ré-échantillonne tout seul à la lecture, et ce son passe de
+     * toute façon dans un passe-bas à 1 150 Hz : au-delà de 2 300 Hz, il n'y a
+     * rien à représenter. Générer à 48 kHz, c'était donc calculer plus du
+     * double d'échantillons pour un contenu strictement identique — mesuré,
+     * 114 ms de cuisson contre ~50.
+     */
+    const TAUX = 22050
+    const n = Math.floor(TAUX * DUREE)
+    const buf = ac.createBuffer(1, n, TAUX)
+    const d = buf.getChannelData(0)
+
+    /*
+     * LA NAPPE, et elle seule. Du bruit BRUN — du bruit blanc intégré — et non
+     * du blanc : le blanc siffle comme une friture, le brun gronde. C'est la
+     * différence entre « radio mal réglée » et « feu ».
+     */
+    let brun = 0
+    for (let i = 0; i < n; i++) {
+      brun = (brun + (Math.random() * 2 - 1) * 0.02) * 0.996
+      d[i] = brun * 5
+    }
+
+    /*
+     * ⚠️ PLUS DE CRÉPITEMENTS CUITS ICI. Ils y étaient — 260 pops mélangés à la
+     * nappe — et c'était le défaut : les deux ne faisaient qu'UN SEUL volume.
+     * Baisser le grondement, qui couvrait le village, baissait du même coup les
+     * craquements, qui sont justement ce qu'on veut entendre.
+     *
+     * Ils vivent désormais à part, en ÉVÉNEMENTS (cf. `crepitement`). Deux
+     * réglages au lieu d'un, et la nappe peut descendre très bas sans emporter
+     * le bois qui éclate avec elle.
+     */
+    const src = ac.createBufferSource()
+    src.buffer = buf
+    src.loop = true
+
+    // Un passe-bas : un feu n'a pas d'aigus. Sans lui, les crépitements
+    // deviennent des clics numériques.
+    const lp = ac.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.value = 1150
+
+    feuGain = ac.createGain()
+    feuGain.gain.value = 0
+    src.connect(lp)
+    lp.connect(feuGain)
+    feuGain.connect(sortie(ac)) // le volume commun s'applique, comme au reste
+    src.start()
+  }
+
+  /*
+   * Le fondu. `setTargetAtTime` plutôt qu'une rampe : on ne sait pas quand la
+   * prochaine consigne tombera, et une exponentielle qui vise la cible reste
+   * juste quelle que soit la cadence — même si le jeu perd des images.
+   */
+  /*
+   * ⚠️ 0,07, contre 0,18 avant et 0,5 à l'origine. Le grondement est le FOND :
+   * il pose le lieu et rien d'autre. Ce qu'on doit entendre d'un brasier, ce
+   * sont les craquements — et ils ne dépendent plus de ce chiffre.
+   */
+  feuGain.gain.setTargetAtTime(feuVoulu * 0.07, ac.currentTime, 0.5)
+
+  /*
+   * ————— 🔥 Les crépitements, en événements —————
+   *
+   * Deux à huit par seconde, chacun avec sa force propre. C'est cette
+   * IRRÉGULIÈRE qui fait le bois qui éclate : à cadence régulière on entendrait
+   * un métronome, et à force constante une machine.
+   *
+   * Quelques nœuds par seconde, là où les cuire dans la boucle les enfermait
+   * dans le volume de la nappe. Le coût reste sans commune mesure avec ce qu'on
+   * y gagne : deux réglages indépendants.
+   */
+  /*
+   * ⚠️ `dt > 0` ET `feuVoulu > 0`, les deux.
+   *
+   * Sans le premier, la PRÉCHAUFFE — qui appelle avec `dt = 0` pour ne rien
+   * faire entendre — déclencherait un craquement en plein décompte, là où l'on
+   * a justement cuit la boucle pour que rien ne s'entende.
+   *
+   * Sans le second, le feu continuerait de craquer après la sortie du village :
+   * la nappe s'éteint en fondu, mais un événement, lui, ne se fond pas.
+   */
+  if (dt > 0 && feuVoulu > 0) {
+    crepiteT -= dt
+    if (crepiteT <= 0) {
+      crepiteT = 0.12 + Math.random() * 0.38
+      crepitement(ac, feuVoulu)
+    }
+  }
+}
+
+/**
+ * 🔥 Un craquement : une bouffée de bruit très courte, filtrée haut.
+ *
+ * Un crépitement n'a pas de hauteur, c'est un CLAQUEMENT — d'où du bruit et
+ * jamais un oscillateur. Sa brièveté fait tout : au-delà de ~60 ms on entend un
+ * « pschh » de vapeur au lieu d'un éclat de bois.
+ */
+function crepitement(ac: AudioContext, intensite: number) {
+  const t = ac.currentTime + 0.01
+  // Les gros craquements sont RARES : une décroissance sur le hasard, sinon
+  // tous se valent et le feu devient un grésillement uniforme.
+  const force = Math.pow(Math.random(), 2.2)
+  souffle(
+    ac,
+    t,
+    0.02 + force * 0.045,
+    (0.05 + force * 0.16) * intensite,
+    900 + Math.random() * 1700,
+    'bandpass'
+  )
+}
+
+/* ═══════════════ 🐦 Les oiseaux de la bambouseraie ═══════════════ */
+
+/** Secondes avant le prochain chant. 0 = au prochain appel. */
+let oiseauT = 0
+
+/**
+ * ————— 🐦 Un chant, deux ou trois notes —————
+ *
+ * Un vrai chant d'oiseau n'est pas une note tenue : c'est une fréquence qui
+ * GLISSE, vite, sur quelques centaines de hertz. C'est ce glissando qui fait
+ * « oiseau » — une sinusoïde fixe au même endroit sonne comme une alarme.
+ *
+ * Chaque note monte puis retombe, et l'ensemble se décale d'un chant à l'autre
+ * (hauteur, nombre de notes, tempo). Sans cette variation, le même trille
+ * revenant toutes les trois secondes deviendrait vite insupportable.
+ */
+function chantOiseau(ac: AudioContext, volume: number) {
+  const t0 = ac.currentTime + 0.02
+  const notes = 2 + Math.floor(Math.random() * 3)
+  // La hauteur de CET oiseau-là : deux individus ne chantent pas au même ton.
+  const base = 2100 + Math.random() * 1500
+  let t = t0
+
+  for (let i = 0; i < notes; i++) {
+    const duree = 0.055 + Math.random() * 0.07
+    const osc = ac.createOscillator()
+    osc.type = 'sine' // le plus proche d'un sifflement : pas d'harmoniques
+
+    // Le glissando : on monte d'une tierce environ, puis on retombe.
+    const bas = base * (0.92 + Math.random() * 0.16)
+    const haut = bas * (1.22 + Math.random() * 0.3)
+    osc.frequency.setValueAtTime(bas, t)
+    osc.frequency.exponentialRampToValueAtTime(haut, t + duree * 0.42)
+    osc.frequency.exponentialRampToValueAtTime(bas * 0.94, t + duree)
+
+    // L'enveloppe : attaque franche, extinction exponentielle. Un chant qui
+    // s'ouvrirait en fondu sonnerait comme un synthé, pas comme un bec.
+    const g = ac.createGain()
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.exponentialRampToValueAtTime(volume, t + 0.012)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + duree)
+
+    osc.connect(g)
+    g.connect(sortie(ac))
+    osc.start(t)
+    osc.stop(t + duree + 0.02)
+
+    t += duree + 0.03 + Math.random() * 0.05
+  }
+}
+
+/**
+ * 🐦 L'ambiance de la bambouseraie. À appeler à CHAQUE image, avec `dt`.
+ *
+ * ⚠️ Rien à voir avec le brasier, et c'est voulu : un feu est CONTINU, donc une
+ * boucle ; des oiseaux sont ESPACÉS, donc des événements. Boucler un chant
+ * d'oiseau ferait entendre la répétition au bout de deux tours, et poser une
+ * nappe de crépitements par événements coûterait des dizaines de nœuds par
+ * seconde. Chaque son veut sa mécanique.
+ *
+ * Trois à sept secondes entre deux chants : assez pour qu'on l'entende comme
+ * une forêt vivante, assez rare pour ne jamais couvrir le jeu.
+ */
+export function oiseauxAmbiance(intensite: number, dt: number) {
+  if (intensite <= 0) {
+    // On réarme : en revenant dans la forêt, un chant partira sans attendre.
+    oiseauT = 0
+    return
+  }
+  const ac = audio()
+  if (!ac) return
+
+  oiseauT -= dt
+  if (oiseauT > 0) return
+  oiseauT = 3 + Math.random() * 4
+  chantOiseau(ac, 0.05 * intensite)
+}
+
+/**
+ * 🔥 Cuit la boucle du brasier À L'AVANCE, sans la jouer.
+ *
+ * La fabrication coûte quelques dizaines de millisecondes sur le thread
+ * principal — négligeable en soi, mais elle tomberait sinon à l'instant précis
+ * où l'on ENTRE dans le village, à 28 m/s, et un à-coup à cet endroit-là se
+ * sentirait. On la provoque donc pendant le décompte, à l'arrêt sur la grille,
+ * exactement comme la compilation des shaders.
+ *
+ * Appelable autant de fois qu'on veut : la boucle n'est cuite qu'une seule.
+ */
+export function prechauffeFeu() {
+  const avant = feuVoulu
+  feuAmbiance(1) // force la cuisson…
+  feuAmbiance(avant) // …et l'on remet aussitôt le niveau voulu, sans l'entendre
+}
+
 /** Un poil de hasard : ±4 %, assez pour casser la répétition sans dénaturer. */
 const vary = () => 1 + (Math.random() - 0.5) * 0.08
 
