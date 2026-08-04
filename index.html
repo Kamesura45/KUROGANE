@@ -473,10 +473,25 @@
           <button data-t="local">📱 Local</button>
           <button data-t="recentes">🕓 Récentes</button>
         </div>
+        <!--
+          🔎 La recherche remplace « Effacer ».
+          Un classement mondial sans recherche ne sert qu'à ceux du haut : au-delà
+          de la première page, on ne peut plus se trouver soi-même ni suivre un
+          camarade. Elle filtre l'onglet affiché, quel qu'il soit.
+        -->
+        <div class="row">
+          <input
+            id="scoresRech"
+            type="search"
+            class="grow"
+            placeholder="🔎 Chercher un pseudo…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
         <p class="lead" id="scoresLead"></p>
         <div id="scoresBody" class="scores"></div>
         <div class="row">
-          <button id="btnScoresClear" class="ghost">🗑️ Effacer</button>
           <button class="primary grow" data-back>OK</button>
         </div>
       </section>

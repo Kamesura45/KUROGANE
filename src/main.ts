@@ -2341,7 +2341,9 @@ function startRace(seed: number) {
   // La récolte de pots repart de zéro à chaque départ
   recolte.mon = 0
   recolte.hisui = 0
-  track.reset(COURSE_LENGTH, seed)
+  // 🏋️ Les pots verts n'existent qu'EN LIGNE : ils donnent de la monnaie, et
+  // l'entraînement se relance seul, à volonté. Voir buildJarrePlan.
+  track.reset(COURSE_LENGTH, seed, online)
   time = 0
   distance = 0
   speed = 0
@@ -4025,7 +4027,7 @@ function tick(now?: number) {
    */
   const enCourse = state === 'depart' || state === 'course' || state === 'fini'
   const biomeIci = enCourse ? BIOMES[indexBiome(distance, COURSE_LENGTH)] : null
-  feuAmbiance(biomeIci?.ambiance === 'feu' ? 1 : 0)
+  feuAmbiance(biomeIci?.ambiance === 'feu' ? 1 : 0, dt)
   oiseauxAmbiance(biomeIci?.ambiance === 'oiseaux' ? 1 : 0, dt)
 
   // La caméra suit en douceur la ligne du joueur

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>KUROGANE — banc d'essai des bruitages</title>
+    <title>KUROGANE — banc d'essai du son</title>
     <style>
       body {
         margin: 0;
@@ -15,6 +15,21 @@
       h1 {
         font-size: 1.3rem;
         letter-spacing: 0.1em;
+      }
+      h2 {
+        font-size: 0.92rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #d6ac5a;
+        margin: 30px 0 12px;
+        border-bottom: 1px solid #2b3350;
+        padding-bottom: 7px;
+      }
+      /* Un interrupteur allumé doit se voir d'un coup d'œil : c'est le seul
+         moyen de savoir ce qui tourne quand deux ambiances se superposent. */
+      button.on {
+        border-color: #d6ac5a;
+        background: rgba(214, 172, 90, 0.16);
       }
       p {
         color: #9aa4c0;
@@ -68,14 +83,16 @@
     </style>
   </head>
   <body>
-    <h1>⛩️ BANC D'ESSAI — BRUITAGES</h1>
+    <h1>⛩️ BANC D'ESSAI — LE SON DU JEU</h1>
     <p>
-      Tout est synthétisé en direct : aucun fichier. Clique pour écouter.
-      Rejoue plusieurs fois le même son — il change légèrement à chaque
-      fois, c'est voulu (sinon dix jarres d'affilée sonnent comme une
-      mitraillette).
+      <b>Tout ce que le jeu peut émettre</b>, au même endroit : les bruitages,
+      les ambiances de biome et les musiques. Les bruitages sont synthétisés en
+      direct — aucun fichier. Rejoue plusieurs fois le même : il change
+      légèrement à chaque fois, c'est voulu (sinon dix jarres d'affilée sonnent
+      comme une mitraillette).
     </p>
 
+    <h2>🔊 Les bruitages</h2>
     <div class="grille" id="grille"></div>
 
     <button class="rafale" id="rafale">
@@ -83,9 +100,22 @@
       <small>pour juger la répétition — le vrai test</small>
     </button>
 
+    <!--
+      Les ambiances ne se DÉCLENCHENT pas, elles s'ouvrent et se ferment : ce
+      sont des états, pas des événements. D'où des interrupteurs et non des
+      boutons — c'est en les laissant tourner qu'on juge s'ils fatiguent.
+    -->
+    <h2>🌿 Les ambiances de biome</h2>
+    <div class="grille" id="ambiances"></div>
+
+    <h2>🎵 Les musiques</h2>
+    <div class="grille" id="musiques"></div>
+
     <div class="vol">
-      <label>Volume <span id="volVal">60 %</span></label>
+      <label>Volume des bruitages <span id="volVal">60 %</span></label>
       <input id="vol" type="range" min="0" max="100" step="5" value="60" />
+      <label>Volume de la musique <span id="volMusVal">50 %</span></label>
+      <input id="volMus" type="range" min="0" max="100" step="5" value="50" />
     </div>
 
     <script type="module" src="/src/sfx-lab.ts"></script>

@@ -625,7 +625,14 @@ export class Track {
    * Prépare une nouvelle course de `length` mètres à partir d'une graine.
    * En multi, la graine vient du serveur : les deux joueurs ont LA MÊME piste.
    */
-  reset(length: number, seed: number) {
+  /**
+   * Repart d'une piste neuve.
+   *
+   * `avecPots` : les 🟢 pots verts sont-ils semés ? Faux à l'entraînement — ils
+   * donnent de la monnaie, et une course qu'on relance seule à volonté ne doit
+   * pas en distribuer. Tout le reste de la piste est identique.
+   */
+  reset(length: number, seed: number, avecPots = true) {
     for (const o of this.obstacles) {
       o.active = false
       o.mesh.visible = false
@@ -663,7 +670,7 @@ export class Track {
     // Les rouleaux sont places APRES les obstacles : ils doivent s'en ecarter
     this.parcheminPlan = buildParcheminPlan(length, seed, occupe)
     this.parcheminIdx = 0
-    this.jarrePlan = buildJarrePlan(length, seed, occupe)
+    this.jarrePlan = buildJarrePlan(length, seed, occupe, avecPots)
     this.jarreIdx = 0
     for (const p of this.plateformes) {
       p.active = false
@@ -1922,7 +1929,8 @@ function periodeRebond(d: number, length: number): number {
 export function buildJarrePlan(
   length: number,
   seed: number,
-  obstacles: PlannedObstacle[]
+  obstacles: PlannedObstacle[],
+  avecPots = true
 ): PlannedJarre[] {
   const rng = mulberry32(seed ^ 0x2b91e6a7)
   const plan: PlannedJarre[] = []
@@ -2007,6 +2015,22 @@ export function buildJarrePlan(
    * joueurs voient le même pot au même endroit, et se le disputent. Un tirage
    * local en donnerait un à l'un et pas à l'autre, ce qui serait injouable.
    */
+  /*
+   * ————— 🏋️ PAS DE POTS VERTS À L'ENTRAÎNEMENT —————
+   *
+   * Les pots donnent de la MONNAIE, et l'entraînement se relance à volonté,
+   * seul, sans adversaire : les y laisser revenait à ouvrir un robinet. On
+   * pourrait farmer des Mon et du Jade en boucle, ce qui viderait de son sens
+   * la seule ressource que la boutique demande.
+   *
+   * On sort AVANT le tirage, et c'est le point : ne pas consommer le dé laisse
+   * le reste du plan — les jarres, leurs grappes, leurs dorées — strictement
+   * identique. La piste d'entraînement reste donc celle qu'on jouera en ligne,
+   * à ceci près qu'elle ne paie pas. S'entraîner sur une autre piste que la
+   * vraie n'aurait servi à rien.
+   */
+  if (!avecPots) return plan
+
   const candidats = eligibles.filter((i) => plan[i].kind === 'vide')
   const de = rng()
   const combien = de < CHANCE_DEUX_POTS ? 2 : de < CHANCE_UN_POT ? 1 : 0

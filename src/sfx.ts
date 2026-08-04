@@ -120,6 +120,8 @@ let feuGain: GainNode | null = null
  *  encore : le joueur peut entrer dans le village avant d'avoir touché
  *  l'écran, et le feu doit démarrer au bon niveau dès qu'il y touche. */
 let feuVoulu = 0
+/** Secondes avant le prochain craquement. */
+let crepiteT = 0
 
 /**
  * ————— 🔥 Une nappe de feu, qu'on ouvre et qu'on ferme —————
@@ -138,7 +140,7 @@ let feuVoulu = 0
  * Six secondes, et non deux : plus court, l'oreille reconnaît le motif et le
  * feu se met à sonner comme une machine à laver.
  */
-export function feuAmbiance(intensite: number) {
+export function feuAmbiance(intensite: number, dt = 0) {
   feuVoulu = Math.min(1, Math.max(0, intensite))
 
   /*
@@ -175,9 +177,9 @@ export function feuAmbiance(intensite: number) {
     const d = buf.getChannelData(0)
 
     /*
-     * 1. LA NAPPE. Du bruit BRUN — du bruit blanc intégré — et non du blanc :
-     * le blanc siffle comme une friture, le brun gronde. C'est la différence
-     * entre « radio mal réglée » et « feu ».
+     * LA NAPPE, et elle seule. Du bruit BRUN — du bruit blanc intégré — et non
+     * du blanc : le blanc siffle comme une friture, le brun gronde. C'est la
+     * différence entre « radio mal réglée » et « feu ».
      */
     let brun = 0
     for (let i = 0; i < n; i++) {
@@ -186,19 +188,15 @@ export function feuAmbiance(intensite: number) {
     }
 
     /*
-     * 2. LES CRÉPITEMENTS, cuits par-dessus. Une centaine de pops très courts,
-     * chacun avec sa décroissance exponentielle — c'est ce qui donne le bois
-     * qui éclate, et sans eux la nappe seule sonne comme du vent.
+     * ⚠️ PLUS DE CRÉPITEMENTS CUITS ICI. Ils y étaient — 260 pops mélangés à la
+     * nappe — et c'était le défaut : les deux ne faisaient qu'UN SEUL volume.
+     * Baisser le grondement, qui couvrait le village, baissait du même coup les
+     * craquements, qui sont justement ce qu'on veut entendre.
+     *
+     * Ils vivent désormais à part, en ÉVÉNEMENTS (cf. `crepitement`). Deux
+     * réglages au lieu d'un, et la nappe peut descendre très bas sans emporter
+     * le bois qui éclate avec elle.
      */
-    for (let k = 0; k < 260; k++) {
-      const at = Math.floor(Math.random() * (n - 2000))
-      const vie = 120 + Math.floor(Math.random() * 900)
-      const force = 0.12 + Math.random() * 0.5
-      for (let i = 0; i < vie; i++) {
-        d[at + i] += (Math.random() * 2 - 1) * force * Math.exp(-i / (vie * 0.22))
-      }
-    }
-
     const src = ac.createBufferSource()
     src.buffer = buf
     src.loop = true
@@ -223,12 +221,62 @@ export function feuAmbiance(intensite: number) {
    * juste quelle que soit la cadence — même si le jeu perd des images.
    */
   /*
-   * ⚠️ 0,18 et non 0,5. Le brasier est une AMBIANCE : il pose le lieu, il ne
-   * doit pas concurrencer ce qu'on doit entendre pour jouer — les jarres, les
-   * sorts, le décompte. À un demi, il couvrait le village entier et l'on
-   * n'entendait plus sa propre course.
+   * ⚠️ 0,07, contre 0,18 avant et 0,5 à l'origine. Le grondement est le FOND :
+   * il pose le lieu et rien d'autre. Ce qu'on doit entendre d'un brasier, ce
+   * sont les craquements — et ils ne dépendent plus de ce chiffre.
    */
-  feuGain.gain.setTargetAtTime(feuVoulu * 0.18, ac.currentTime, 0.5)
+  feuGain.gain.setTargetAtTime(feuVoulu * 0.07, ac.currentTime, 0.5)
+
+  /*
+   * ————— 🔥 Les crépitements, en événements —————
+   *
+   * Deux à huit par seconde, chacun avec sa force propre. C'est cette
+   * IRRÉGULIÈRE qui fait le bois qui éclate : à cadence régulière on entendrait
+   * un métronome, et à force constante une machine.
+   *
+   * Quelques nœuds par seconde, là où les cuire dans la boucle les enfermait
+   * dans le volume de la nappe. Le coût reste sans commune mesure avec ce qu'on
+   * y gagne : deux réglages indépendants.
+   */
+  /*
+   * ⚠️ `dt > 0` ET `feuVoulu > 0`, les deux.
+   *
+   * Sans le premier, la PRÉCHAUFFE — qui appelle avec `dt = 0` pour ne rien
+   * faire entendre — déclencherait un craquement en plein décompte, là où l'on
+   * a justement cuit la boucle pour que rien ne s'entende.
+   *
+   * Sans le second, le feu continuerait de craquer après la sortie du village :
+   * la nappe s'éteint en fondu, mais un événement, lui, ne se fond pas.
+   */
+  if (dt > 0 && feuVoulu > 0) {
+    crepiteT -= dt
+    if (crepiteT <= 0) {
+      crepiteT = 0.12 + Math.random() * 0.38
+      crepitement(ac, feuVoulu)
+    }
+  }
+}
+
+/**
+ * 🔥 Un craquement : une bouffée de bruit très courte, filtrée haut.
+ *
+ * Un crépitement n'a pas de hauteur, c'est un CLAQUEMENT — d'où du bruit et
+ * jamais un oscillateur. Sa brièveté fait tout : au-delà de ~60 ms on entend un
+ * « pschh » de vapeur au lieu d'un éclat de bois.
+ */
+function crepitement(ac: AudioContext, intensite: number) {
+  const t = ac.currentTime + 0.01
+  // Les gros craquements sont RARES : une décroissance sur le hasard, sinon
+  // tous se valent et le feu devient un grésillement uniforme.
+  const force = Math.pow(Math.random(), 2.2)
+  souffle(
+    ac,
+    t,
+    0.02 + force * 0.045,
+    (0.05 + force * 0.16) * intensite,
+    900 + Math.random() * 1700,
+    'bandpass'
+  )
 }
 
 /* ═══════════════ 🐦 Les oiseaux de la bambouseraie ═══════════════ */

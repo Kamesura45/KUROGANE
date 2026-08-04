@@ -599,9 +599,39 @@ Le mondial fait `distinct on (joueur)`. Sans ça, un joueur très régulier
 occuperait les vingt lignes avec ses vingt meilleures courses, et le tableau ne
 dirait plus rien de la communauté.
 
+### 🔎 Chercher un pseudo
+
+Les trois onglets portent un champ de recherche, à la place du bouton
+« Effacer » qui l'occupait. Un classement mondial sans recherche ne sert qu'à
+ceux du haut : au-delà de la première page, on ne peut plus se trouver soi-même
+ni suivre un camarade.
+
+Deux détails qui décident si elle sert vraiment :
+
+- **Les rangs sont conservés.** Filtrer puis renuméroter donnerait la médaille
+  d'or au 5ᵉ dès qu'il cherche son nom. La recherche montre **où l'on est**,
+  elle ne réécrit pas le classement.
+- **Accents et casse ignorés.** Les pseudos portent des accents, personne ne les
+  tape pour chercher : `rene` doit trouver **René**. Sans cette normalisation,
+  la recherche ne servirait qu'à ceux qui écrivent déjà juste.
+
+Aucun appel réseau de plus : les onglets ont déjà en mémoire la liste qu'ils
+viennent d'afficher. Interroger le serveur à chaque lettre aurait fait **une
+requête par frappe** pour filtrer des données déjà sous la main.
+
 ## 🟢 Les pots verts
 
 Une poterie **jade**, plus grosse que les autres, qui contient de la monnaie.
+
+> 🏋️ **Ils n'existent pas à l'entraînement.** Ils donnent de la monnaie, et
+> l'entraînement se relance à volonté, seul, sans adversaire : les y laisser
+> revenait à ouvrir un robinet qui aurait vidé la boutique de son sens.
+>
+> On sort **avant** le tirage du dé, et c'est le point : ne pas le consommer
+> laisse tout le reste du plan intact. *Mesuré sur 4 000 courses* — 925 pots en
+> ligne, **0 à l'entraînement**, et **4000/4000 pistes identiques par ailleurs**
+> (mêmes jarres, mêmes positions, mêmes dorées). On s'entraîne donc sur
+> exactement la piste qu'on jouera en ligne ; elle ne paie simplement pas.
 
 Mesuré sur 3 000 courses :
 
@@ -1572,9 +1602,10 @@ un déploiement sans clés propose moins, il ne tombe pas en panne.
 
 ### La boutique
 
-Elle ne vend **que des couleurs** — huit teintes traditionnelles, de 500 文 à
-1 500 文, plus deux qui ne s'obtiennent qu'en jade
-([migration 002](server/migrations/002_boutique.sql)). Les 18 couleurs de la
+Elle ne vend **que des couleurs** — dix teintes traditionnelles, de 500 文 à
+1 500 文, plus trois qui ne s'obtiennent qu'en jade
+([migration 002](server/migrations/002_boutique.sql) et
+[004](server/migrations/004_coloris_ornements.sql)). Les 18 couleurs de la
 palette libre restent gratuites : la boutique n'a **rien retiré** à personne,
 elle ajoute.
 
@@ -1582,6 +1613,19 @@ elle ajoute.
 > pas décoratifs : ils **décident du style** du guerrier perso (les cornes
 > donnent la peau d'oni, les oreilles la ruse du renard — cf. `CUSTOM_STYLE`).
 > Les vendre reviendrait à vendre un passif, donc de la puissance.
+
+**Deux coloris pensés pour les cornes et les oreilles** — sans rien vendre
+d'autre qu'une couleur. Dans le maillage, les deux ornements sont taillés dans
+`matAccent`, c'est-à-dire la teinte du **bandeau** : une couleur de bandeau
+*est* donc la couleur de ses cornes.
+
+| Coloris | Prix | Pourquoi celle-là |
+|---|---|---|
+| **Kohaku 琥珀** (ambre) | 800 文 | la corne translucide prise dans la lumière ; sur une oreille de renard, le poil roux qui revient |
+| **Shu 朱** (vermillon) | 40 翡翠 | la couleur que le jeu s'était réservée — liserés, torii, ligatures. La porter, c'est prendre la teinte de la piste |
+
+Ce sont des couleurs de **matière**, de l'os et de la braise : elles ne disent
+pas grand-chose sur un bandeau plat, et beaucoup sur une pointe.
 
 **Le client n'envoie qu'un code.** Jamais un prix, jamais une monnaie, jamais un
 solde : tout est relu dans la base au moment de l'achat, dans une seule
@@ -1611,6 +1655,76 @@ en test :
    jeu échouait.** On répond désormais à `OPTIONS`, et on renvoie l'origine
    exacte de l'appelant — jamais `*`, qui ouvrirait l'API à n'importe quel site
    au nom d'un joueur connecté.
+
+## 🔊 Le son — tout est synthétisé
+
+Pas un seul fichier de bruitage : tout est fabriqué en Web Audio à la volée.
+Rien à télécharger sur mobile, aucun asset à gérer.
+
+### Un feu et des oiseaux, deux mécaniques opposées
+
+Les deux biomes qui parlent le font de façons qui n'ont rien à voir — et c'est
+**le contenu qui impose la forme**, pas l'inverse :
+
+| | 🔥 Brasier du village | 🐦 Oiseaux de la bambouseraie |
+|---|---|---|
+| Nature | **continu** | **espacé** |
+| Donc | une boucle | des événements |
+| Cadence | permanent + 2 à 8 craquements/s | un chant toutes les 3 à 7 s |
+
+Boucler un chant d'oiseau ferait entendre la répétition au deuxième tour ; poser
+une nappe de crépitements par événements coûterait des dizaines de nœuds Web
+Audio par seconde. Chaque son veut sa mécanique.
+
+> **Du bruit BRUN, pas blanc.** Le blanc siffle comme une friture, le brun
+> gronde. C'est toute la différence entre « radio mal réglée » et « feu ».
+>
+> **Un glissando, pas une note.** Un chant d'oiseau est une fréquence qui
+> *glisse* ; une sinusoïde fixe sonne comme une alarme.
+
+### Séparer la nappe des craquements
+
+Les crépitements étaient d'abord **cuits dans la boucle**. Défaut de fond : les
+deux ne faisaient qu'**un seul volume**. Baisser le grondement — qui couvrait le
+village — baissait du même coup les craquements, qui sont justement ce qu'on
+veut entendre. Ils vivent désormais à part : deux réglages indépendants.
+
+La force d'un craquement suit `hasard²·²` : **les gros sont rares**. Sans cette
+décroissance, ils se valent tous et le feu devient un grésillement uniforme.
+
+### Ce que la mesure a changé
+
+La fabrication de la boucle coûtait **114 ms**, et elle serait tombée à
+l'instant exact où l'on entre dans le village, à 28 m/s.
+
+| Correction | Effet |
+|---|---|
+| Génération à 22 kHz au lieu de 48 | 114 → 64 ms *(le passe-bas coupe à 1 150 Hz : au-delà de 2 300 Hz il n'y a rien à représenter)* |
+| Crépitements sortis de la boucle | 64 → **21 ms** |
+| Cuisson **provoquée au décompte** | plus aucun à-coup en course |
+
+La cuisson se fait au même endroit que la compilation des shaders, et pour la
+même raison : à l'arrêt sur la grille, personne ne le sent. Coût par image
+ensuite : **0,001 ms** au menu, 0,010 ms au village, 0,0005 ms en forêt.
+
+Deux gardes non cosmétiques : `dt > 0` (sinon la préchauffe craquerait en plein
+3‑2‑1) et `feuVoulu > 0` (sinon le feu craquerait encore après la sortie du
+village — la nappe s'éteint en fondu, un événement ne se fond pas).
+
+### Le banc d'essai
+
+```bash
+# http://localhost:5173/sfx-lab.html
+```
+
+Il contient **tout ce que le jeu peut émettre** : les 14 bruitages, les deux
+ambiances de biome et les trois musiques, avec deux volumes séparés. Un son
+absent d'ici ne se juge qu'en course, donc au milieu de dix autres et une fois
+sur vingt — autant dire jamais.
+
+Les ambiances y sont des **interrupteurs**, pas des boutons : elles ne se jugent
+pas au clic mais **à la durée**. Une nappe peut être parfaite trois secondes et
+insupportable au bout de trente.
 
 ## 🗺️ Roadmap
 
