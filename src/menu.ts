@@ -60,7 +60,15 @@ export interface MenuCallbacks {
   onReady(ready: boolean): void
   onStart(): void
   onChat(text: string): void
+  /**
+   * 🔄 « Rejouer » depuis l'écran de fin — on repart en course DIRECTEMENT.
+   *
+   * En entraînement, on relance la même configuration. En ligne, seul l'hôte
+   * l'a : il renvoie tout le monde au salon et enchaîne le départ.
+   */
   onReplay(): void
+  /** ↩️ « Retour au lobby » — en ligne seulement : le salon, sans relancer. */
+  onRetourLobby(): void
   onLeaveSalon(): void
   /** Le joueur veut ouvrir la boutique (le jeu ira chercher le catalogue) */
   onBoutique(): void
@@ -196,6 +204,9 @@ export class Menu {
     // ————— Résultats —————
     resultsBody: document.getElementById('resultsBody')!,
     replay: document.getElementById('btnReplay')!,
+    finTitre: document.getElementById('finTitre')!,
+    podium: document.getElementById('podium')!,
+    btnLobby: document.getElementById('btnLobby')!,
     // ————— Boutique —————
     bourseRow: document.getElementById('bourseRow')!,
     bourse: document.getElementById('bourse')!,
@@ -369,6 +380,7 @@ export class Menu {
 
     // — Résultats —
     this.el.replay.addEventListener('click', () => cb.onReplay())
+    this.el.btnLobby.addEventListener('click', () => cb.onRetourLobby())
     document.getElementById('btnQuitResults')!.addEventListener('click', () => cb.onLeaveSalon())
   }
 
@@ -460,10 +472,66 @@ export class Menu {
     this.el.chatLog.scrollTop = this.el.chatLog.scrollHeight
   }
 
-  /** Le classement de fin de course. `canReplay` : l'hôte peut relancer. */
-  showResults(html: string, canReplay: boolean) {
-    this.el.resultsBody.innerHTML = html
-    this.el.replay.classList.toggle('hidden', !canReplay)
+  /**
+   * ————— 🏁 L'écran de fin —————
+   *
+   * Le même pour l'entraînement et pour les courses en ligne : c'est le MÊME
+   * moment de jeu, et deux écrans différents auraient fini par diverger.
+   *
+   * `joueurs` arrive DÉJÀ TRIÉ — l'ordre des rangs n'est pas la même question
+   * selon le mode (en ligne, un abandon se range après les arrivés ; en solo,
+   * tout le monde finit), et cet arbitrage appartient à l'appelant.
+   *
+   * ⚠️ Les noms passent par `textContent`, jamais par `innerHTML` : en ligne
+   * ils viennent des autres joueurs.
+   */
+  showFin(opts: {
+    titre: string
+    joueurs: { nom: string; temps: number | null; moi: boolean }[]
+    canReplay: boolean
+    canLobby: boolean
+  }) {
+    this.el.finTitre.innerHTML = opts.titre
+
+    // Les trois marches, dans l'ordre du DOM (2 · 1 · 3) et non du classement.
+    const rangs = [1, 0, 2]
+    const marches = [...this.el.podium.children] as HTMLElement[]
+    marches.forEach((marche, i) => {
+      const j = opts.joueurs[rangs[i]]
+      // Une marche sans joueur disparaît : un podium à trois places dont une
+      // reste vide se lirait comme un abandon.
+      marche.classList.toggle('vide', !j)
+      marche.classList.toggle('moi', !!j?.moi)
+      if (!j) return
+      marche.querySelector<HTMLElement>('.pod-nom')!.textContent = j.nom
+      marche.querySelector<HTMLElement>('.pod-temps')!.textContent =
+        j.temps === null ? 'abandon' : `${j.temps.toFixed(2)} s`
+    })
+
+    // Du 4ᵉ au dernier : la liste, qui existait déjà et n'avait pas à changer.
+    this.el.resultsBody.replaceChildren()
+    if (opts.joueurs.length > 3) {
+      const liste = document.createElement('div')
+      liste.className = 'reslist'
+      opts.joueurs.slice(3).forEach((j, i) => {
+        const ligne = document.createElement('div')
+        ligne.className = `resrow${j.moi ? ' moi' : ''}`
+        const rang = document.createElement('span')
+        rang.textContent = `${i + 4}ᵉ`
+        const nom = document.createElement('span')
+        nom.className = 'resname'
+        nom.textContent = j.nom
+        const temps = document.createElement('span')
+        temps.className = 'restime'
+        temps.textContent = j.temps === null ? 'abandon' : `${j.temps.toFixed(2)} s`
+        ligne.append(rang, nom, temps)
+        liste.appendChild(ligne)
+      })
+      this.el.resultsBody.appendChild(liste)
+    }
+
+    this.el.replay.classList.toggle('hidden', !opts.canReplay)
+    this.el.btnLobby.classList.toggle('hidden', !opts.canLobby)
     this.show('results')
   }
 

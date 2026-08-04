@@ -585,12 +585,31 @@
         </div>
       </section>
 
-      <!-- Le classement de fin de course en ligne -->
+      <!--
+        L'écran de fin — le MÊME pour l'entraînement et pour les courses en
+        ligne. Le podium se lit d'un coup d'œil ; ceux qui suivent tiennent
+        dans la liste en dessous.
+      -->
       <section id="scr-results" class="screen hidden">
         <div class="jp">黒鉄</div>
+        <p id="finTitre" class="fin-titre"></p>
+
+        <!--
+          Les marches sont dans l'ordre 2 · 1 · 3, celui du VRAI podium : le
+          vainqueur au milieu, encadré. Un ordre 1-2-3 de gauche à droite se
+          lirait comme une simple liste, et l'on perdrait ce que le podium
+          apporte — voir qui a gagné sans lire.
+        -->
+        <div id="podium" class="podium">
+          <div class="marche m2"><div class="pod-nom"></div><div class="pod-temps"></div><div class="pod-bloc">2</div></div>
+          <div class="marche m1"><div class="pod-nom"></div><div class="pod-temps"></div><div class="pod-bloc">1</div></div>
+          <div class="marche m3"><div class="pod-nom"></div><div class="pod-temps"></div><div class="pod-bloc">3</div></div>
+        </div>
+
         <div id="resultsBody"></div>
-        <div class="row">
+        <div class="row fin-row">
           <button id="btnReplay" class="primary hidden">🔄 REJOUER</button>
+          <button id="btnLobby" class="lobby hidden">RETOUR AU LOBBY</button>
           <button id="btnQuitResults" class="secondary">QUITTER</button>
         </div>
       </section>

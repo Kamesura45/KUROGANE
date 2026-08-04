@@ -891,13 +891,50 @@ export class Track {
    * projectile file dessous comme un coureur y passe. Sans cette exception,
    * l'arme la plus lente du jeu aurait été arrêtée par du vide.
    */
-  premierePlateforme(lane: number, d1: number, d2: number): number | null {
+  premierePlateforme(
+    lane: number,
+    d1: number,
+    d2: number,
+    hauteurVol = 0
+  ): number | null {
     let plusProche: number | null = null
+    const retiens = (d: number) => {
+      if (d > d1 && d <= d2 && (plusProche === null || d < plusProche)) plusProche = d
+    }
+
     for (const p of this.plateformePlan) {
-      if (p.lane !== lane || this.ajouree(p.d)) continue
-      if (p.d > d1 && p.d <= d2 && (plusProche === null || p.d < plusProche)) {
-        plusProche = p.d
+      if (p.lane !== lane) continue
+
+      /*
+       * ————— La RAMPE arrête aussi —————
+       *
+       * Elle ne le faisait pas, et l'orbe s'enfonçait DANS la pente : on ne
+       * connaissait ici que le nez du plateau (`p.d`), alors que la rampe
+       * occupe les mètres d'AVANT et monte du sol jusqu'à lui. Un projectile
+       * à 1,10 m traversait donc 3,5 m de coin plein avant d'éclater, très
+       * loin derrière la surface qu'il aurait dû toucher.
+       *
+       * On résout la rencontre au lieu de l'approximer : la pente vaut
+       * `hauteur × (d - début) / rampe`, et l'impact tombe là où elle atteint
+       * la hauteur de vol. Une boule qui rase le sol éclate au PIED de la
+       * rampe, une boule haute presque à son sommet — c'est la même formule
+       * qui donne les deux.
+       *
+       * ⚠️ Valable même devant un radeau AJOURÉ. Le tunnel s'ouvre derrière la
+       * rampe, pas devant : le coin, lui, est plein dans tous les biomes. Un
+       * coureur qui aborde cette ligne monte la pente au lieu de passer
+       * dessous, et ce qui vole doit lire la piste comme lui.
+       */
+      if (p.rampe > 0 && hauteurVol < p.hauteur) {
+        retiens(p.d - p.rampe * (1 - hauteurVol / p.hauteur))
       }
+
+      /*
+       * 🎋 Le CORPS, lui, laisse filer les radeaux ajourés : ils tiennent sur
+       * pilotis, et un projectile passe dessous comme un coureur y passe. Sans
+       * cette exception, l'arme la plus lente du jeu serait arrêtée par du vide.
+       */
+      if (!this.ajouree(p.d)) retiens(p.d)
     }
     return plusProche
   }
@@ -909,10 +946,20 @@ export class Track {
    * Les sorts ne consultaient que les murs et TRAVERSAIENT les plateformes —
    * un kunaï passait au travers d'un wagon massif. C'est ici qu'on répare, en
    * un seul endroit, pour que tout ce qui vole obéisse à la même piste.
+   *
+   * `hauteurVol` est l'altitude du projectile. Elle ne sert qu'aux RAMPES, les
+   * seules barrières en pente du jeu : sur elles, le point d'impact dépend de
+   * la hauteur à laquelle on arrive. Un mur ou un flanc de plateau, eux, sont
+   * verticaux — on les touche au même endroit quelle que soit l'altitude.
    */
-  premierBarrage(lane: number, d1: number, d2: number): number | null {
+  premierBarrage(
+    lane: number,
+    d1: number,
+    d2: number,
+    hauteurVol = 0
+  ): number | null {
     const mur = this.premierMur(lane, d1, d2)
-    const pf = this.premierePlateforme(lane, d1, d2)
+    const pf = this.premierePlateforme(lane, d1, d2, hauteurVol)
     if (mur === null) return pf
     if (pf === null) return mur
     return Math.min(mur, pf)

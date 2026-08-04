@@ -358,6 +358,14 @@ let stumble = 0 // invincibilité après un trébuchement
  */
 let shadersPrets = false
 /**
+ * 🔄 Un « rejouer » en ligne est en cours : il attend que le salon revienne.
+ *
+ * Le serveur n'accepte le départ que depuis le salon, et le retour au salon est
+ * un aller-retour réseau. On note donc l'intention ici, et `onLobby` la
+ * consomme quand le salon est réellement là.
+ */
+let relancerDesLobby = false
+/**
  * 🧪 Le banc d'essai fige la course (cf. le guichet `__sorts` en fin de
  * fichier). Le monde s'arrête, mais TOUT LE RESTE continue de tourner : les
  * sorts, leurs minuteurs, les brumes, les chaînes. C'est ce qui permet de
@@ -456,6 +464,17 @@ let senbonFin = 0 // ☠️ l'écran ondule
  * autre teinte tiendra en une ligne — et sa brûlure suivra toute seule.
  */
 const PORTAIL_BLEU = 0x4db8ff
+
+/**
+ * L'altitude de vol du portail, en mètres.
+ *
+ * ⚠️ Elle est LUE par la piste (`premierBarrage`) autant qu'elle place le
+ * maillage. C'était un `1.1` écrit en dur au seul endroit du dessin, et la
+ * collision, elle, ne connaissait aucune hauteur : l'orbe s'enfonçait dans les
+ * rampes. Une pente ne peut pas dire où l'on tape sans savoir à quelle hauteur
+ * on arrive — les deux usages partagent donc désormais le même chiffre.
+ */
+const PORTAIL_Y = 1.1
 
 /** 🔮 Le portail en vol : il file tout droit dans SA ligne jusqu'au 1er mur. */
 let portail: { d: number; lane: number; couleur: number; sens: 1 | -1 } | null = null
@@ -2465,7 +2484,41 @@ function crossFinishLine() {
   })
   const rangLine = rang > 0 ? `<br>🏆 ${rang}ᵉ meilleur temps` : ''
 
-  backToMenu(`⛩️ Torii sacré franchi en <b>${t} s</b> !<br>${classement()}<br>${bestLine}${rangLine}`)
+  /*
+   * ————— 🏁 L'entraînement a droit au même écran que la course —————
+   *
+   * Il repartait droit au menu-titre avec un bandeau, alors qu'on venait de
+   * courir 75 secondes : le résultat défilait dans un coin et l'on n'avait
+   * même pas de quoi relancer sans retraverser deux menus.
+   *
+   * Les rivaux qui n'ont pas franchi le torii n'ont pas de temps — leur
+   * `tempsArrivee` vaut -1. On les range après les arrivés, comme en ligne
+   * pour un abandon, et non à un temps de 0 qui les mettrait premiers.
+   */
+  const rivaux = botsEnCourse().map((b) => ({
+    nom: b.profil.nom,
+    temps: b.tempsArrivee >= 0 ? b.tempsArrivee : null,
+    moi: false,
+  }))
+  const joueurs = [
+    { nom: menu.settings.name || 'Guerrier anonyme', temps: time, moi: true },
+    ...rivaux,
+  ].sort((a, b) => {
+    if (a.temps === null && b.temps === null) return 0
+    if (a.temps === null) return 1
+    if (b.temps === null) return -1
+    return a.temps - b.temps
+  })
+
+  menu.showFin({
+    titre:
+      `⛩️ Torii franchi en <b>${t} s</b><br>${classement()}<br>${bestLine}${rangLine}`,
+    joueurs,
+    canReplay: true,
+    // 🏋️ Pas de salon en entraînement : le bouton du milieu n'aurait nulle part
+    // où mener. On le cache plutôt que de lui inventer une destination.
+    canLobby: false,
+  })
 }
 
 /** Le classement final : trié, arrivés d'abord (au rang), puis les abandons. */
@@ -2487,19 +2540,20 @@ function showResults(view: LobbyView) {
         : '☁️ Tu n\'as pas fini la course…'
   jouerBruit(rang === 1 ? 'victoire' : 'defaite')
 
-  const lignes = ranked
-    .map((p, i) => {
-      const medaille = ['🥇', '🥈', '🥉'][i] ?? `${i + 1}ᵉ`
-      const chrono = p.rank ? `${p.time.toFixed(2)} s` : 'abandon'
-      const moi = p.id === view.me ? ' moi' : ''
-      // ⚠️ escapeHtml : les pseudos viennent des autres joueurs
-      return `<div class="resrow${moi}"><span>${medaille}</span>` +
-        `<span class="resname">${escapeHtml(p.name || 'Guerrier')}</span>` +
-        `<span class="restime">${chrono}</span></div>`
-    })
-    .join('')
-
-  menu.showResults(`${titre}<div class="reslist">${lignes}</div>`, view.isHost)
+  menu.showFin({
+    titre,
+    joueurs: ranked.map((p) => ({
+      nom: p.name || 'Guerrier',
+      // Un abandon n'a pas de temps : `rank` à 0 le dit, et `time` vaudrait 0.
+      temps: p.rank ? p.time : null,
+      moi: p.id === view.me,
+    })),
+    // Seul l'hôte relance : c'est lui qui commande le départ.
+    canReplay: view.isHost,
+    // Le retour au salon, lui, est pour tout le monde — y compris celui qui
+    // veut juste attendre la manche suivante sans la déclencher.
+    canLobby: true,
+  })
 }
 
 // ————— Le réseau —————
@@ -2512,6 +2566,17 @@ const net = new Net({
     state = 'attente'
     musique.jouer('lobby')
     menu.showLobby(view)
+
+    /*
+     * 🔄 Le « rejouer » demandé depuis l'écran de fin arrive à destination : le
+     * salon est là, on peut enfin lancer. Réservé à l'hôte — lui seul commande
+     * le départ, et l'intention est remise à zéro dans TOUS les cas pour qu'un
+     * clic resté en travers ne relance pas une course trois manches plus tard.
+     */
+    if (relancerDesLobby) {
+      relancerDesLobby = false
+      if (view.isHost && view.phase === 'lobby') net.sendStart()
+    }
   },
   onCountdown(seed) {
     online = true
@@ -2643,10 +2708,33 @@ const menu = new Menu({
   onChat(text) {
     net.sendChat(text)
   },
+  /*
+   * 🔄 REJOUER — on repart en course, sans repasser par les menus.
+   *
+   * En ligne, le départ ne peut PAS être demandé depuis l'écran de fin : le
+   * serveur n'accepte `start` que depuis le salon. On y renvoie donc tout le
+   * monde, et l'on retient qu'il faudra enchaîner — c'est `onLobby` qui
+   * relancera, une fois le salon vraiment revenu. Envoyer les deux d'affilée
+   * ferait courir le départ après un salon qui n'existe pas encore.
+   */
   onReplay() {
+    if (!online) {
+      // 🏋️ Une NOUVELLE graine, comme au bouton « EN PISTE » : rejouer la même
+      // piste par cœur ne serait plus de l'entraînement. Le nombre de rivaux,
+      // lui, ne bouge pas — c'est le réglage qu'on vient de choisir.
+      startRace(Math.floor(Math.random() * 2 ** 31))
+      return
+    }
+    relancerDesLobby = true
+    net.sendToLobby()
+  },
+  /** ↩️ Le salon, sans relancer : on attend la manche suivante. */
+  onRetourLobby() {
     net.sendToLobby()
   },
   onLeaveSalon() {
+    // En entraînement il n'y a rien à quitter : `leave` ne coûte rien et garde
+    // ce chemin unique, mais c'est `backToMenu` qui fait le travail.
     net.leave()
     clearRivals()
     backToMenu()
@@ -3186,7 +3274,9 @@ function tick(now?: number) {
       if (lance === 'onmyoji') {
         // Un bot ne vise pas mieux que nous : son portail part droit devant et
         // meurt au premier obstacle, exactement comme le nôtre.
-        const mur = track.premierBarrage(b.ligne, b.distance, distance)
+        // Le portail d'un bot vole à la même altitude que le nôtre : il doit
+        // donc s'écraser sur les mêmes pentes, aux mêmes endroits.
+        const mur = track.premierBarrage(b.ligne, b.distance, distance, PORTAIL_Y)
         if (devant === null && b.ligne === player.currentLane && mur === null && distance > b.distance) {
           const sien = b.distance
           b.distance = distance
@@ -3211,7 +3301,7 @@ function tick(now?: number) {
       // Un mur OU une plateforme pleine l'avale : c'est la piste qui borne sa
       // portée, pas un chiffre. Les radeaux de bambou, eux, le laissent filer
       // dessous — ils sont sur pilotis.
-      const mur = track.premierBarrage(portail.lane, lo, hi)
+      const mur = track.premierBarrage(portail.lane, lo, hi, PORTAIL_Y)
       // Qui croise-t-il dans sa ligne cette image ? Bots (solo) ET rivaux (en
       // ligne) confondus — le PLUS PROCHE l'emporte. On teste le franchissement :
       // à ~83 m/s il parcourt ~1,4 m par image, un test de proximité le raterait.
@@ -3288,7 +3378,7 @@ function tick(now?: number) {
       } else {
         // L'orbe file, l'anneau tourne, et les arcs se relancent à chaque image
         portailGroup.visible = true
-        portailGroup.position.set(LANES[portail.lane], 1.1, -(portail.d - distance))
+        portailGroup.position.set(LANES[portail.lane], PORTAIL_Y, -(portail.d - distance))
         portailAnneau.rotation.z += dt * 5
         portailCoeur.scale.setScalar(0.9 + Math.random() * 0.35) // le cœur palpite
         for (const a of portailArcs) jitterArc(a, 0.62, 0.3)
@@ -3897,6 +3987,33 @@ if (import.meta.env.DEV) {
     /** Quitter la course et revenir au menu, sans recharger la page. */
     quitter() {
       backToMenu()
+    },
+    /**
+     * 🏁 Montre l'écran de fin sans courir les 1 920 m.
+     *
+     * Il fallait sinon 75 secondes de course pour voir un podium — et donc
+     * autant à chaque retouche de sa mise en page. `n` est le nombre de
+     * coureurs, `enLigne` ajoute le bouton « retour au lobby » réservé aux
+     * salons.
+     *
+     * Les temps sont croissants et le joueur placé au milieu du peloton : c'est
+     * le cas qui montre le plus de choses d'un coup — le podium, la liste des
+     * suivants, et le repère doré sur SA ligne.
+     */
+    fin(n = 5, enLigne = false) {
+      const noms = ['Hana', 'Oni-Maru', 'Tamae', 'Kurokumo', 'Ryu', 'Sora', 'Kaze']
+      const moiA = Math.min(2, n - 1)
+      menu.showFin({
+        titre: `⛩️ Torii franchi en <b>72.40 s</b><br>Banc d'essai — ${n} coureurs`,
+        joueurs: Array.from({ length: n }, (_, i) => ({
+          nom: i === moiA ? menu.settings.name || 'Guerrier anonyme' : noms[i % noms.length],
+          // Le dernier abandonne : sans lui, on ne verrait jamais ce cas.
+          temps: i === n - 1 && n > 3 ? null : 70 + i * 1.7,
+          moi: i === moiA,
+        })),
+        canReplay: true,
+        canLobby: enLigne,
+      })
     },
     /** Ce que le jeu retient de nous, pour l'afficher en direct. */
     etat() {

@@ -185,7 +185,7 @@ C'est une **règle de jeu**, pas une coquetterie : le drapeau `plateformeAjouree
 vit sur le biome, à côté de sa fabrique, et la collision le **lit**. Impossible
 qu'un radeau se dessine ouvert tout en se comportant comme un bloc plein.
 
-Cinq défauts réparés, tous invisibles au typage :
+Six défauts réparés, tous invisibles au typage :
 
 1. **Les sorts traversaient tout.** Ils ne consultaient que les murs — un kunaï
    passait au travers d'un wagon massif. `premierBarrage` prend désormais le
@@ -211,9 +211,23 @@ Cinq défauts réparés, tous invisibles au typage :
    rien changer. Il a maintenant **son propre maillage** (`nez`), posé en
    mètres — exactement le traitement déjà réservé à la rampe, et pour la même
    raison.
+6. **La boule bleue éclatait DANS la pente.** `premierBarrage` ne connaissait
+   que le nez du plateau (`p.d`), alors que la rampe occupe les mètres d'avant
+   et monte du sol jusqu'à lui. Le 🔮 portail, qui vole à **1,10 m**, traversait
+   donc plusieurs mètres de coin plein avant d'éclater — très loin derrière la
+   surface qu'il aurait dû toucher. La rencontre est maintenant **résolue** au
+   lieu d'être approximée : la pente vaut `hauteur × (d − début) / rampe`, et
+   l'impact tombe là où elle atteint la hauteur de vol. Une boule qui rase le
+   sol éclate au **pied** de la rampe, une boule haute presque à son **sommet**
+   — c'est la même formule qui donne les deux. Mesuré sur quatre rampes :
+   impact 3,5 à 4,6 m avant le nez, tous **sur la pente**.
 
 > **La leçon, deux fois apprise :** ce qui doit garder sa taille en mètres ne
 > peut pas être un enfant de ce qu'on étire.
+>
+> **Et une seconde :** une barrière en PENTE ne peut pas dire où l'on tape sans
+> savoir à quelle hauteur on arrive. Un mur est vertical, une rampe non — c'est
+> pourquoi `premierBarrage` prend désormais l'altitude du projectile.
 
 ```bash
 npm run plateformes:test   # 27 plateformes sur une vraie course : 21 arrêtent,
@@ -1281,6 +1295,48 @@ là où le mobile ne peut plus. Il faut donc vider ses rouleaux **avant** les
 Côté réseau, le serveur ne fait que **relayer** le Kusarigama : il ne simule
 aucun effet, c'est la victime qui l'applique. Il vérifie juste que le sort
 existe, pour qu'un client bricolé ne puisse pas inventer de sortilège.
+
+## 🏁 L'écran de fin
+
+Un **podium**, le même pour l'entraînement et pour les courses en ligne. C'est
+le même moment de jeu : deux écrans auraient fini par diverger.
+
+Les marches sont dans l'ordre **2 · 1 · 3**, celui d'un vrai podium — le
+vainqueur au milieu, encadré, sur la marche la plus haute. Un ordre 1-2-3 de
+gauche à droite se lirait comme une liste, et l'on perdrait ce que le podium
+apporte : voir qui a gagné **sans lire**. Du 4ᵉ au dernier, la liste en dessous.
+
+> ⚠️ L'entraînement n'en avait **aucun**. Il repartait droit au menu-titre avec
+> un bandeau, alors qu'on venait de courir 75 secondes : le résultat défilait
+> dans un coin, et relancer demandait de retraverser deux menus.
+
+| | entraînement | en ligne |
+|---|---|---|
+| 🔄 **REJOUER** | nouvelle graine, on repart | l'hôte seulement |
+| ↩️ **RETOUR AU LOBBY** | *caché* | tout le monde |
+| **QUITTER** | le menu du jeu | le menu du jeu |
+
+**Les trois boutons ont trois sens distincts**, ce qui n'était pas le cas avant :
+`REJOUER` renvoyait en réalité tout le monde au salon. Il repart maintenant
+vraiment en course — et en ligne, il passe par le salon *puis* enchaîne le
+départ, parce que le serveur n'accepte `start` que de là. L'intention est
+retenue (`relancerDesLobby`) et consommée quand le salon revient : envoyer les
+deux d'affilée ferait courir le départ après un salon qui n'existe pas encore.
+
+Deux cas que le podium doit tenir, et qu'il tient :
+
+- une **course à deux** cache la 3ᵉ marche — un podium à trois places dont une
+  reste vide se lirait comme un abandon ;
+- un **abandon** s'affiche « abandon » et se range **après** les arrivés, jamais
+  à un temps de 0 s qui le mettrait premier.
+
+Les pseudos passent par `textContent`, jamais par `innerHTML` : en ligne, ils
+viennent des autres joueurs.
+
+```js
+__sorts.fin(5, true)   // le podium sans courir 1 920 m
+                       // 5 = coureurs, true = en ligne (montre le bouton lobby)
+```
 
 ## 🥷 Les rivaux d'entraînement
 
