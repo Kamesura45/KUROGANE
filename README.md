@@ -1751,20 +1751,35 @@ villages en flammes, ponts au clair de lune et flancs enneigés du Fuji. Sur la
 route, des **parchemins de techniques** — pour se surpasser, ou saboter les
 rivaux. Premier au torii sacré, une lame légendaire à la clé.
 
-### Les quatre biomes 🏞️
+### Les biomes 🏞️
 
-La course traverse quatre décors, un par quart de piste (`src/biomes.ts`).
-Ce n'est pas que de l'habillage : sur 1 920 m de couloir uniforme, on perd la
-notion d'avancement. Le chrono dit qu'on progresse, l'œil dit qu'on fait du
-surplace. Quatre décors, c'est quatre repères — « je suis dans les flammes,
-donc à la moitié ».
+La course traverse plusieurs décors, à parts égales (`src/biomes.ts`). Ce n'est
+pas que de l'habillage : sur 1 920 m de couloir uniforme, on perd la notion
+d'avancement. Le chrono dit qu'on progresse, l'œil dit qu'on fait du surplace.
+Des décors qui changent, ce sont des repères — « je suis dans les flammes, donc
+à la moitié ».
 
 | Part | Biome | Brume | Portée | Décor |
 |---|---|---|---|---|
-| 0–25 % | **Forêt de bambous** 竹 | vert d'aube | 32 → 88 | Touffes de tiges hautes |
-| 25–50 % | **Village en flammes** 火 | orange, fumée | 26 → **72** | Masures et braises |
-| 50–75 % | **Pont au clair de lune** 月 | indigo | 30 → 92 | Rambardes, lanternes |
-| 75–100 % | **Flancs du Fuji** 雪 | **gris clair** | 38 → **105** | Rochers neigeux, pins |
+| 0–33 % | **Village en flammes** 火 | orange, fumée | 26 → **72** | Masures et braises |
+| 33–66 % | **Pont au clair de lune** 月 | indigo | 30 → 92 | Rambardes, lanternes |
+| 66–100 % | **Flancs du Fuji** 雪 | **gris clair** | 38 → **105** | Rochers neigeux, pins |
+
+> ⏸️ **La forêt de bambous 竹 est en pause.** Elle ouvrait la course ; elle est
+> retirée de `BIOMES`, mais **pas supprimée** — son code entier vit dans
+> `BIOMES_EN_PAUSE`, et il suffit de la remettre dans la liste pour qu'elle
+> revienne telle quelle.
+>
+> Elle n'est volontairement **pas mise en commentaire** : sept cents lignes de
+> texte mort cesseraient d'être compilées, ne suivraient plus les changements de
+> l'interface `Biome`, et l'on retrouverait dans six mois un biome « en pause »
+> qu'il faudrait en fait réécrire. Parquée dans un tableau, elle reste typée et
+> vérifiée à chaque build.
+>
+> `indexBiome` découpe sur `BIOMES.length` : le partage s'est refait tout seul,
+> en tiers au lieu de quarts. Deux conséquences — la course **commence dans les
+> flammes**, et les 🐦 oiseaux ne se font plus entendre (la bambouseraie était
+> le seul biome à porter `ambiance: 'oiseaux'`).
 
 Trois réglages portent tout le sens :
 
@@ -1908,5 +1923,5 @@ maintenant **26 par course**, un convoi toutes les ~4 s.
 
 ⚠️ **Le visuel et la collision sont séparés** (`TAILLE_OBSTACLE`). Chaque biome
 habille ses obstacles à sa façon ; la boîte, elle, ne dépend jamais du maillage.
-Vérifié en sondant la boîte réelle en pleine course : forêt et pont bloquent aux
-mêmes hauteurs au centimètre près, dans les quatre biomes.
+Vérifié en sondant la boîte réelle en pleine course : les biomes bloquent aux
+mêmes hauteurs au centimètre près, quel que soit leur habillage.

@@ -2566,7 +2566,42 @@ const FUJI: Biome = {
 }
 
 /** Dans l'ordre de la course. */
-export const BIOMES: readonly Biome[] = [BAMBOUS, VILLAGE, PONT, FUJI]
+/*
+ * ⚠️ ————— LA FORÊT DE BAMBOUS EST RETIRÉE DE LA COURSE —————
+ *
+ * Retirée, PAS supprimée : son code entier vit toujours juste au-dessus, et il
+ * suffit de remettre `BAMBOUS` dans cette liste pour qu'elle revienne telle
+ * qu'elle était. Rien d'autre à toucher.
+ *
+ * ⚠️ Et il n'est pas mis en COMMENTAIRE, volontairement. Sept cents lignes de
+ * texte mort cesseraient d'être compilées : elles ne suivraient plus les
+ * changements de l'interface `Biome`, et l'on retrouverait dans six mois du
+ * code qui ne compile plus — un biome qu'on croyait « en pause » et qu'il
+ * faudrait en fait réécrire. `BIOMES_EN_PAUSE`, juste en dessous, le garde
+ * VIVANT : typé, vérifié à chaque build, prêt à revenir.
+ *
+ * ————— Ce que ce retrait change —————
+ *
+ * `indexBiome` découpe la course sur `BIOMES.length` : le partage se refait
+ * tout seul, en tiers au lieu de quarts. Concrètement :
+ *
+ *   · la course COMMENCE dans le village en flammes ;
+ *   · les 🐦 oiseaux ne se font plus entendre — la bambouseraie était le seul
+ *     biome à porter `ambiance: 'oiseaux'` ;
+ *   · ses deux radeaux (le plein et celui sur pilotis) ne se croisent plus en
+ *     piste. Les trois autres biomes ont les leurs, le tunnel existe toujours.
+ */
+export const BIOMES: readonly Biome[] = [/* BAMBOUS, */ VILLAGE, PONT, FUJI]
+
+/**
+ * Les biomes ÉCRITS mais hors course.
+ *
+ * Ils ne sont tirés par rien — ni `indexBiome`, ni le décor, ni les fabriques.
+ * Leur seule raison d'être ici est de rester COMPILÉS : c'est ce qui garantit
+ * qu'ils suivront les changements de l'interface `Biome` au lieu de pourrir en
+ * silence, et qu'ils reviendront en une ligne le jour où on les rappelle.
+ */
+export const BIOMES_EN_PAUSE: readonly Biome[] = [BAMBOUS]
 
 /** L'ambiance à un instant donné : deux biomes et le fondu entre eux. */
 export interface Ambiance {
