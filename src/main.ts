@@ -52,7 +52,16 @@ import {
   connexionEmail,
   verserPots,
 } from './compte'
-import { souffleDeVent, jouerBruit, setVolumeSfx, sonDeSoin } from './sfx'
+import {
+  souffleDeVent,
+  jouerBruit,
+  setVolumeSfx,
+  sonDeSoin,
+  feuAmbiance,
+  oiseauxAmbiance,
+  prechauffeFeu,
+} from './sfx'
+import { BIOMES, indexBiome } from './biomes'
 import type { Quality } from './settings'
 import { Musique } from './audio'
 
@@ -3237,6 +3246,10 @@ function tick(now?: number) {
     if (!shadersPrets) {
       shadersPrets = true
       renderer.compileAsync(scene, camera).catch(() => {})
+      // 🔥 Et la boucle du brasier, pour la même raison exactement : sa
+      // fabrication coûte quelques dizaines de millisecondes, et elle tomberait
+      // sinon à l'instant où l'on entre dans le village, à pleine vitesse.
+      prechauffeFeu()
     }
   } else if (state === 'course') {
     time += dt
@@ -3998,6 +4011,22 @@ function tick(now?: number) {
     if (state === 'fini' && online) for (const r of rivals.values()) r.opp.update(dt, distance)
     speedEl.style.opacity = '0' // pas de rideau de vitesse hors course
   }
+
+  /*
+   * ————— 🔊 L'ambiance sonore du biome traversé —————
+   *
+   * Appelée à chaque image, y compris pour la COUPER : hors course, ou dans un
+   * biome silencieux, la consigne tombe à 0 et le fondu s'en occupe. Sans cet
+   * appel systématique, le brasier resterait allumé au menu après une course
+   * abandonnée dans le village.
+   *
+   * Le biome se lit par son champ `ambiance`, jamais par son numéro : ajouter
+   * une nappe ailleurs ne demandera pas de revenir ici.
+   */
+  const enCourse = state === 'depart' || state === 'course' || state === 'fini'
+  const biomeIci = enCourse ? BIOMES[indexBiome(distance, COURSE_LENGTH)] : null
+  feuAmbiance(biomeIci?.ambiance === 'feu' ? 1 : 0)
+  oiseauxAmbiance(biomeIci?.ambiance === 'oiseaux' ? 1 : 0, dt)
 
   // La caméra suit en douceur la ligne du joueur
   camera.position.x += (player.mesh.position.x * 0.55 - camera.position.x) * Math.min(1, dt * 5)

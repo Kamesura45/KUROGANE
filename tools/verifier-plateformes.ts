@@ -71,11 +71,39 @@ for (const b of BIOMES) {
     `  · ${b.nom.padEnd(22)} ${b.plateformeAjouree ? 'AJOURE — on passe dessous' : 'plein — il arrete'}`
   )
 }
-verifier(
-  'un seul biome est ajoure',
-  BIOMES.filter((b) => b.plateformeAjouree).length === 1,
-  `${BIOMES.filter((b) => b.plateformeAjouree).length} biome(s)`
-)
+/*
+ * ⚠️ Ce banc verifiait « un seul biome est ajoure ». Ce n'est plus la question :
+ * les QUATRE savent desormais batir un radeau sur pilotis, chacun a sa matiere.
+ * Compter les biomes ne dit donc plus rien.
+ *
+ * L'invariant qui a remplace celui-la est ailleurs, et il est plus fort : c'est
+ * la RAMPE qui decide, et elle decide pour les deux a la fois — le maillage et
+ * la collision. Une plateforme a rampe n'est JAMAIS ajouree (on la monte, on
+ * n'arrive jamais dessous) ; une plateforme sans rampe l'est toujours, dans un
+ * biome qui sait en batir. C'est ce lien-la qu'on verifie.
+ */
+{
+  const plan = new Track(new THREE.Scene())
+  plan.reset(LONGUEUR, GRAINE)
+  const toutes = plan.plateformesPrevues()
+  const avecRampeEtAjouree = toutes.filter((p) => p.rampe > 0 && ajouree(p)).length
+  const sansRampePasAjouree = toutes.filter(
+    (p) =>
+      p.rampe === 0 &&
+      BIOMES[indexBiome(p.d, LONGUEUR)].plateformeAjouree === true &&
+      !ajouree(p)
+  ).length
+  verifier(
+    'aucune plateforme a rampe n est ajouree',
+    avecRampeEtAjouree === 0,
+    `${avecRampeEtAjouree} contre-exemple(s)`
+  )
+  verifier(
+    'toute plateforme sans rampe l est, dans un biome qui sait en batir',
+    sansRampePasAjouree === 0,
+    `${sansRampePasAjouree} contre-exemple(s)`
+  )
+}
 
 // ————— Les sorts —————
 console.log('\n————— Un projectile est arrete par une plateforme pleine —————')
