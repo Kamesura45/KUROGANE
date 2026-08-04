@@ -349,6 +349,15 @@ export const PLATEFORME_H = 2.7
 interface Decor {
   mesh: THREE.Group
   biome: number
+  /**
+   * Le bord pour lequel ce massif a été bâti : -1 à gauche, +1 à droite.
+   *
+   * Il ne se recycle QUE de son côté. Deux raisons, et la seconde est un bug
+   * corrigé : d'une part un biome peut vouloir deux rives différentes ; d'autre
+   * part un pool commun donnait la priorité à la gauche, qui demande la
+   * première à chaque image (cf. spawnDecor).
+   */
+  cote: number
   active: boolean
 }
 
@@ -1418,11 +1427,26 @@ export class Track {
    * barrière transforme le joli en injuste.
    */
   private spawnDecor(biome: number, cote: number, z: number) {
-    let dec = this.decors.find((d) => !d.active && d.biome === biome)
+    /*
+     * ⚠️ LE POOL EST INDEXÉ PAR BIOME **ET PAR CÔTÉ**.
+     *
+     * Il ne l'était que par biome, et les deux bords y puisaient. Or la boucle
+     * d'apparition demande TOUJOURS la gauche en premier (`for (const cote of
+     * [-1, 1])`) et `find` rend le premier libre : un massif remarquable — une
+     * maison, disons — placé tôt dans le tableau partait donc
+     * systématiquement à gauche. Symptôme observé en jeu : des maisons d'un
+     * seul côté de la piste, jamais de l'autre.
+     *
+     * Séparer les deux réserves supprime la préférence, et permet en prime aux
+     * deux bords de ne pas se ressembler (cf. `fabriqueDecor`, qui reçoit
+     * désormais le côté).
+     */
+    let dec = this.decors.find((d) => !d.active && d.biome === biome && d.cote === cote)
     if (!dec) {
       dec = {
-        mesh: BIOMES[biome].fabriqueDecor(this.graineDecor),
+        mesh: BIOMES[biome].fabriqueDecor(this.graineDecor, cote),
         biome,
+        cote,
         active: false,
       }
       this.decors.push(dec)

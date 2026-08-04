@@ -1781,6 +1781,26 @@ Des décors qui changent, ce sont des repères — « je suis dans les flammes, 
 > flammes**, et les 🐦 oiseaux ne se font plus entendre (la bambouseraie était
 > le seul biome à porter `ambiance: 'oiseaux'`).
 
+### 🏠 Les deux rives du pont
+
+Le pont borde sa voie de **maisons sur pilotis** — toit pyramidal rouge, véranda,
+volets bleus. Le toit vif porte seul la lecture : c'est le biome le plus froid et
+le plus sombre, une maison de bois brun s'y noierait.
+
+**Les deux bords n'ont pas la même échelle** — petites à gauche (faîte 3,5 à
+4,8 m), grandes à droite (5,7 à 7,9 m). Deux rives identiques se lisent comme un
+couloir tapissé ; en cassant la symétrie, on donne une **orientation** au
+paysage.
+
+> 🐛 **Le pool de décors donnait la priorité à la gauche.** Il n'était indexé que
+> par biome, les deux bords y puisaient, et la boucle d'apparition demande
+> toujours la gauche en premier (`for (const cote of [-1, 1])`) — `find` rendant
+> le premier libre, un massif remarquable partait systématiquement du même côté.
+> *Symptôme observé en jeu : des maisons à gauche, jamais à droite.*
+>
+> Le pool est désormais indexé par biome **et par côté**. Mesuré après
+> correction : **6,8 % à gauche, 7,0 % à droite** — l'écart a disparu.
+
 Trois réglages portent tout le sens :
 
 - **Le village voit le moins loin** (72 m). On y réagit plus vite : c'est le pic

@@ -245,13 +245,22 @@ const RAYONS: Rayon[] = [
     parBiome: true,
     pieces: (b) => {
       const biome = BIOMES[b]
-      // Le décor est TIRÉ AU HASARD à chaque appel : une seule pièce ne dirait
-      // rien de la variété. On en montre huit, avec des graines différentes.
-      return Array.from({ length: 8 }, (_, i) => ({
-        titre: `bordure ${i + 1}`,
-        detail: `tous les ${biome.ecartDecor} m`,
-        faire: () => biome.fabriqueDecor(mulberry32(0x5eed + i * 977)),
-      }))
+      /*
+       * Le décor est TIRÉ AU HASARD à chaque appel : une seule pièce ne dirait
+       * rien de la variété. On en montre huit, avec des graines différentes.
+       *
+       * ⚠️ QUATRE À GAUCHE, QUATRE À DROITE. Les deux bords ne se ressemblent
+       * plus forcément — le pont y met des maisons de tailles différentes — et
+       * n'en montrer qu'un cacherait la moitié de ce que le biome sait faire.
+       */
+      return Array.from({ length: 8 }, (_, i) => {
+        const cote = i % 2 === 0 ? -1 : 1
+        return {
+          titre: `bordure ${i + 1} · ${cote < 0 ? 'gauche' : 'droite'}`,
+          detail: `tous les ${biome.ecartDecor} m`,
+          faire: () => biome.fabriqueDecor(mulberry32(0x5eed + i * 977), cote),
+        }
+      })
     },
   },
   {
