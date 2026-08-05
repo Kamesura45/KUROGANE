@@ -374,6 +374,29 @@ let shadersPrets = false
  * consomme quand le salon est réellement là.
  */
 let relancerDesLobby = false
+
+/**
+ * ⏳ Combien de temps on passe SUR LA GRILLE avant le GO, en ms.
+ *
+ * Le décompte total est posé par le serveur (`startAt`, l'instant du GO) ; ce
+ * chiffre-ci ne décide que du moment où l'on QUITTE LE SALON pour rejoindre la
+ * piste. Les secondes d'avant se passent au salon, à regarder qui court.
+ *
+ * ⚠️ Il a un jumeau côté serveur (`PISTE_MS` dans RaceRoom.ts), et les deux
+ * doivent rester d'accord — mais une divergence ne casserait RIEN : le GO tombe
+ * à la milliseconde près sur tous les téléphones quoi qu'il arrive, puisqu'il
+ * ne dépend que de `startAt`. On verrait seulement la grille un peu plus tôt ou
+ * un peu plus tard.
+ */
+const PISTE_MS = 4_000
+
+/**
+ * ⚔️ La graine d'une course lancée mais pas encore rejointe.
+ *
+ * Non nulle pendant les secondes de salon qui précèdent la grille. C'est la
+ * boucle de jeu qui la consomme, au moment dit.
+ */
+let departImminent: number | null = null
 /**
  * 🧪 Le banc d'essai fige la course (cf. le guichet `__sorts` en fin de
  * fichier). Le monde s'arrête, mais TOUT LE RESTE continue de tourner : les
@@ -2289,6 +2312,20 @@ function inSprintZone() {
 function backToMenu(banner?: string) {
   state = 'menu'
   online = false
+  /*
+   * ⏳ UNE COURSE LANCÉE MAIS PAS ENCORE REJOINTE S'ANNULE ICI.
+   *
+   * Sans cette ligne, quitter le salon pendant les secondes d'attente
+   * n'empêchait rien : la boucle de jeu tenait toujours sa graine et
+   * rapatriait le joueur sur la piste quelques secondes plus tard, depuis le
+   * menu principal. Le décompte en deux temps a ouvert cette fenêtre — avant,
+   * on partait à l'instant même et il n'y avait rien à annuler.
+   *
+   * ⚠️ C'est le passage OBLIGÉ de tous les abandons (quitter le salon,
+   * annuler, erreur réseau) : le poser ailleurs en oublierait un.
+   */
+  departImminent = null
+  menu.setDepartSalon(null)
   musique.jouer('menu')
   clearRivals()
   for (const b of bots) {
@@ -2507,6 +2544,9 @@ function crossFinishLine() {
       mode: 'ligne',
       rivaux: rivals.size,
       date: Date.now(),
+      // 🌍 Figé avec le temps : changer de pays plus tard ne réécrit pas
+      // l'histoire des courses déjà couponnées.
+      pays: menu.settings.pays,
     })
     const restants = [...rivals.values()].filter((r) => !r.finished).length
     menu.showStatus(
@@ -2543,6 +2583,7 @@ function crossFinishLine() {
     mode: 'solo',
     rivaux: bots.filter((b) => b.actif).length,
     date: Date.now(),
+    pays: menu.settings.pays, // 🌍 le drapeau du jour, figé avec le temps
   })
   const rangLine = rang > 0 ? `<br>🏆 ${rang}ᵉ meilleur temps` : ''
 
@@ -2642,8 +2683,17 @@ const net = new Net({
   },
   onCountdown(seed) {
     online = true
+    /*
+     * ⚠️ ON NE PART PAS TOUT DE SUITE. Le décompte se joue en deux temps : on
+     * patiente d'abord au SALON, et l'on ne rejoint la grille que pour les
+     * dernières secondes (cf. PISTE_MS). On retient donc la graine, et c'est la
+     * boucle de jeu qui déclenchera le départ à l'heure.
+     *
+     * Basculer ici, comme on le faisait, envoyait sur la piste à la seconde même
+     * où l'hôte lançait : on n'avait pas le temps de voir qui courait.
+     */
+    departImminent = seed
     toast('⚔️ La course commence !')
-    startRace(seed)
   },
   onGo() {
     raceGo = true
@@ -3120,6 +3170,33 @@ function tick(now?: number) {
   requestAnimationFrame(tick)
   timer.update(now)
   const dt = Math.min(timer.getDelta(), 0.05) // temps écoulé depuis la dernière image
+
+  /*
+   * ————— ⏳ Le salon avant la grille —————
+   *
+   * Une course est lancée mais on patiente encore au salon. On y reste jusqu'à
+   * ce qu'il ne reste plus que `PISTE_MS` avant le GO, puis on rejoint la piste.
+   *
+   * ⚠️ Le repli sans horloge : si la synchronisation n'a pas abouti, on part
+   * TOUT DE SUITE plutôt que d'attendre un instant qu'on ne sait pas calculer.
+   * Rester bloqué au salon pendant que les autres courent serait bien pire que
+   * quelques secondes de grille en trop.
+   */
+  if (departImminent !== null) {
+    const pret = net.startAt > 0 && net.clockReady
+    const resteMs = pret ? net.startAt - net.serverNow() : 0
+    if (!pret || resteMs <= PISTE_MS) {
+      const graine = departImminent
+      departImminent = null
+      menu.setDepartSalon(null)
+      startRace(graine)
+    } else {
+      // Le décompte du salon : on montre les secondes qui restent AVANT la
+      // grille, pas avant le GO. Annoncer 10 puis repartir de 4 sur la piste
+      // se lirait comme un bug.
+      menu.setDepartSalon(Math.ceil((resteMs - PISTE_MS) / 1000))
+    }
+  }
 
   if (state === 'depart') {
     // 3… 2… 1… GO ! En duel, le départ est PROGRAMMÉ à une heure serveur

@@ -67,13 +67,27 @@ export class RaceState extends Schema {
 const MAX_CLIENTS = 10
 
 /**
- * Décompte avant le GO, une fois la partie lancée (ms).
+ * ————— Le décompte se joue en DEUX TEMPS —————
  *
- * ⚠️ C'est le serveur qui fait autorité : il pose `startAt` et le jeu ne fait
- * qu'afficher ce qui l'en sépare. Changer ce chiffre suffit donc — il n'y a pas
- * de durée à tenir en accord côté client.
+ * On patiente d'abord dans le SALON, puis sur la GRILLE de départ.
+ *
+ *   · les 6 premières secondes, on reste au salon. On y voit qui court, qui
+ *     s'est déclaré prêt, et l'on a le temps de lire la liste — ce qui était
+ *     impossible avant, puisqu'on basculait sur la piste à la seconde même où
+ *     l'hôte lançait.
+ *   · les 4 dernières, on est déjà sur la piste, à sa place sur la grille.
+ *     C'est là qu'on martèle pour le départ canon, et 4 s suffisent : au-delà,
+ *     le pouce fatigue avant le GO.
+ *
+ * ⚠️ LE SERVEUR NE POSE QU'UNE DATE : `startAt`, l'instant du GO. La coupure
+ * entre les deux temps est une affaire d'AFFICHAGE, et le client la calcule
+ * seul (cf. PISTE_MS dans main.ts). Si les deux valeurs venaient à diverger, le
+ * GO tomberait quand même à la milliseconde près sur tous les téléphones — on
+ * verrait seulement la grille un peu plus tôt ou un peu plus tard.
  */
-const COUNTDOWN_MS = 6_000
+const SALON_MS = 6_000
+const PISTE_MS = 4_000
+const COUNTDOWN_MS = SALON_MS + PISTE_MS
 /**
  * 👻 La trêve du départ : 5 s après le GO, aucune attaque ne passe — ni sort,
  * ni coup. Le client affiche la même fenêtre ; ICI elle est appliquée pour de

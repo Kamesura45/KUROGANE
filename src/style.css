@@ -1672,11 +1672,49 @@ body {
 }
 
 /* ——— Le lobby ——— */
+/* ——— 🌍 Le choix du pays, dans l'écran Compte ———
+   Encadré comme l'état du compte juste au-dessus : c'est un bloc d'identité,
+   pas un réglage perdu au milieu des boutons de connexion. */
+.drapeau-choix {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin: 14px 0 4px;
+  padding: 13px 15px;
+  border-radius: 10px;
+  background: rgba(21, 26, 44, 0.55);
+  border: 1px solid #2b3350;
+}
+.drapeau-choix > b {
+  font-size: 0.95rem;
+}
+.drapeau-choix > small {
+  color: #9aa4c0;
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+/* Les drapeaux émoji ne s'alignent pas avec le texte du menu déroulant sans un
+   peu d'air : deux espaces dans l'option ne suffisent pas sur tous les systèmes. */
+.drapeau-choix select {
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
 .lobbyhint {
   font-size: 0.85rem;
   color: #9aa4c0;
   min-height: 1.2em;
   text-align: center;
+}
+/* ⏳ Le décompte du salon : le même mot d'ambiance, mais il ne dit plus une
+   ambiance — il dit qu'il faut se tenir prêt. Vermillon et plus gros, parce que
+   c'est la seule ligne de l'écran qui compte à ce moment-là. */
+.lobbyhint.compte {
+  color: #e24b3a;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
 }
 .lobbylist {
   display: flex;
