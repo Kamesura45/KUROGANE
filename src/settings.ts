@@ -7,6 +7,7 @@ import {
   type FighterId,
   type Head,
 } from './roster'
+import { valider } from './pays'
 
 /**
  * La qualité graphique.
@@ -36,6 +37,18 @@ export interface Settings {
    * de progression à gauche garde ses noms, puisqu'elle ne masque rien de la piste.
    */
   afficherNoms: boolean
+
+  /**
+   * 🌍 Le pays qu'on représente — code ISO à deux lettres, `''` si aucun.
+   *
+   * ⚠️ Un réglage LOCAL, comme le pseudo, et surtout PAS une donnée de compte :
+   * se déclarer d'un pays ne demande aucune connexion. C'est une façon de se
+   * présenter, pas une identité vérifiée — et un joueur sans compte doit pouvoir
+   * le faire comme les autres.
+   */
+  pays: string
+  /** La région dans ce pays, `''` si aucune (ou si le pays n'en détaille pas). */
+  region: string
 }
 
 /** Le volume par défaut : présent sans couvrir le reste. */
@@ -108,6 +121,9 @@ export function loadSettings(): Settings {
     // Absent d'une vieille sauvegarde = allumé : on ne fait pas disparaître les
     // pseudos chez qui ne les a jamais éteints.
     afficherNoms: raw.afficherNoms !== false,
+    // 🌍 Validés ENSEMBLE : une région n'a de sens que dans son pays, et un
+    // couple incohérent (japonais et normand) doit se réduire au pays seul.
+    ...valider(raw.pays, raw.region),
   }
 }
 

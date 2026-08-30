@@ -215,6 +215,32 @@
           <small id="compteDetail">Tes Mon sont gardés sur ce serveur.</small>
         </div>
 
+        <!--
+          🌍 Les couleurs qu'on porte.
+          Volontairement AU-DESSUS de tout ce qui parle de connexion : ce choix
+          ne demande aucun compte, et le placer plus bas laisserait croire qu'il
+          faut d'abord s'inscrire.
+        -->
+        <div class="drapeau-choix">
+          <b>🌍 Les couleurs que tu portes</b>
+          <small>
+            Aucun compte nécessaire. Ton drapeau apparaît à côté de ton nom dans
+            les classements.
+          </small>
+          <div class="field">
+            <label for="selPays">Pays</label>
+            <select id="selPays"></select>
+          </div>
+          <!--
+            Région pour les pays qu'on détaille, capitale pour les autres :
+            l'étiquette suit, elle est posée par le JS (cf. majRegions).
+          -->
+          <div class="field hidden" id="champRegion">
+            <label for="selRegion" id="labRegion">Région</label>
+            <select id="selRegion"></select>
+          </div>
+        </div>
+
         <!-- L'avertissement : il ne s'affiche QUE pour un compte anonyme -->
         <p class="alerte hidden" id="compteAlerte">
           ⚠️ Ce compte est lié à <b>ce navigateur seulement</b>. Si tu vides tes

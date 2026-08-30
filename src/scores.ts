@@ -22,6 +22,14 @@ export interface Score {
   rivaux: number
   /** Date en ms epoch */
   date: number
+  /**
+   * 🌍 Le pays porté CE JOUR-LÀ (code ISO, `''` si aucun).
+   *
+   * Figé avec le temps, et non relu du réglage courant : changer de pays ne
+   * doit pas réécrire l'histoire de ses courses passées. Absent d'une vieille
+   * sauvegarde — d'où l'optionnel.
+   */
+  pays?: string
 }
 
 /** On n'en garde que dix : au-delà, plus personne ne lit. */

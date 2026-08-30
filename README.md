@@ -110,6 +110,7 @@ kurogane/
 │   ├── parchemin.ts    Le catalogue des sorts et tous leurs réglages
 │   ├── bot.ts          Les rivaux d'entraînement : esquive scriptée, parchemins
 │   ├── scores.ts       🏆 Les meilleurs temps gardés sur l'appareil
+│   ├── pays.ts         🌍 Les 194 pays, leurs régions et leurs villes
 │   ├── catalogue.ts    🏮 Le banc d'essai : tout ce que le jeu sait fabriquer
 │   ├── net.ts          La connexion au serveur : rejoindre, envoyer, recevoir
 │   ├── input.ts        Clavier + swipes + double-tap + martèlement du sprint
@@ -616,6 +617,56 @@ Aucun appel réseau de plus : les onglets ont déjà en mémoire la liste qu'ils
 viennent d'afficher. Interroger le serveur à chaque lettre aurait fait **une
 requête par frappe** pour filtrer des données déjà sous la main.
 
+### 🌍 Les couleurs qu'on porte
+
+Dans l'écran **Compte**, on choisit un **pays** et, dessous, une **région** ou
+une **ville**. Le drapeau apparaît alors à côté du nom dans les classements.
+Tout est dans [src/pays.ts](src/pays.ts) — **194 pays**.
+
+⚠️ **Aucun compte n'est nécessaire**, et c'est le point. C'est un réglage
+**local**, comme le pseudo : se déclarer breton ou marocain est une façon de se
+présenter, pas une identité vérifiée. Le bloc est d'ailleurs placé **au-dessus**
+de tout ce qui parle de connexion — plus bas, il laisserait croire qu'il faut
+d'abord s'inscrire.
+
+**Le drapeau ne coûte aucune image.** Les codes ISO à deux lettres se
+convertissent en émoji en décalant chaque lettre vers les *indicateurs
+régionaux* (`0x1F1E6 - 65`) : `FR` → 🇫🇷. Deux points de code, et le système
+dessine le drapeau. Embarquer 194 images aurait pesé plus que le jeu.
+
+**Ce qu'on propose sous le pays, et pourquoi trois minimum :**
+
+| Cas | Ce qu'on liste |
+|---|---|
+| Pays détaillés (🇫🇷 🇧🇪 🇨🇭 🇨🇦) | Leurs vraies **régions** — 18 pour la France. |
+| Tous les autres | **3 villes connues**, la capitale en tête : 🇯🇵 Tokyo · Osaka · Kyoto. |
+
+Un seul choix n'est pas un menu. Ouvrir aux villes secondaires demanderait des
+dizaines de milliers d'entrées à tenir à jour, pour des classements qui
+resteraient vides. Trois suffisent à se situer et tiennent dans un fichier qu'un
+humain peut relire. **L'ordre du fichier est celui du menu** : on ne trie pas
+alphabétiquement, la capitale doit venir en premier.
+
+*Une exception assumée : le **Saint-Siège** n'a qu'une entrée. C'est un État
+d'un demi-kilomètre carré ; lui inventer deux villes serait faux, et la fausseté
+coûte plus cher ici qu'un menu court.*
+
+Trois règles tiennent le reste :
+
+- **L'étiquette suit ce que la liste contient vraiment** — « Région » ou
+  « Ville ». Appeler « Région » une liste de trois villes ferait chercher la
+  sienne dans un menu qui ne l'a pas.
+- **La région tombe avec le pays.** La garder ferait un *japonais normand*.
+  Elle est aussi **revalidée au chargement** (`valider`) : un couple incohérent
+  venu d'un `localStorage` modifié à la main se réduit au pays seul.
+- **Le pays est figé avec le temps**, pas relu du réglage courant. Changer de
+  pays ne doit pas réécrire l'histoire de ses courses passées. Il est
+  `optionnel` dans `Score` — les vieilles sauvegardes n'en ont pas, et leur
+  ligne s'affiche simplement sans drapeau.
+
+Les 194 options sont bâties **une seule fois à l'allumage** : les recréer à
+chaque ouverture de l'écran ferait ramer pour rien.
+
 ## 🟢 Les pots verts
 
 Une poterie **jade**, plus grosse que les autres, qui contient de la monnaie.
@@ -776,6 +827,33 @@ peut **lancer dès que la moitié est prête** — pas besoin d'attendre les
 traînards. Le lancement déclenche un **décompte de 10 s commun** (l'heure du GO
 est programmée à la milliseconde, comme en 1v1), puis la course. À l'arrivée,
 un **classement** de 1 à 10, et l'hôte peut **rejouer** sans quitter le salon.
+
+#### Ces 10 secondes se jouent en DEUX TEMPS
+
+| Où | Combien | Ce qu'on y fait |
+|---|---|---|
+| 🏮 **Au salon** | 6 s | On lit la liste : qui court, qui s'était déclaré prêt. Le mot d'ambiance devient un décompte vermillon, et « Prêt » / « Lancer » se verrouillent. |
+| 🏁 **Sur la grille** | 4 s | On est déjà sur la piste, à sa place. C'est là qu'on martèle pour le départ canon. |
+
+Avant, on basculait sur la piste **à la seconde même** où l'hôte lançait : on
+n'avait pas le temps de voir contre qui l'on courait. Et 4 s de grille
+suffisent — au-delà, le pouce fatigue avant le GO.
+
+⚠️ **Le serveur ne pose qu'une date** : `startAt`, l'instant du GO
+([RaceRoom.ts](server/src/RaceRoom.ts)). La coupure entre les deux temps est une
+affaire d'**affichage**, que le jeu calcule seul (`PISTE_MS` dans
+[main.ts](src/main.ts)). Les deux valeurs doivent rester d'accord, mais une
+divergence ne casserait **rien** : le GO tombe à la milliseconde près sur tous
+les téléphones quoi qu'il arrive, puisqu'il ne dépend que de `startAt`. On
+verrait seulement la grille un peu plus tôt ou un peu plus tard.
+
+⚠️ **Une course lancée s'annule si l'on quitte.** Attendre au salon ouvre une
+fenêtre qui n'existait pas quand le départ était immédiat : pendant ces 6 s, la
+graine est retenue et c'est la boucle de jeu qui la consomme à l'heure dite. Si
+on quitte entre-temps, il faut donc **l'oublier** — sinon le jeu rapatrie le
+joueur sur la piste quelques secondes plus tard, depuis le menu principal. C'est
+fait dans `backToMenu`, **passage obligé de tous les abandons** (quitter,
+annuler, erreur réseau) ; le poser sur chaque bouton en oublierait un.
 
 Un **chat** occupe l'attente. Tout ce qui vient d'un autre joueur (pseudo, message)
 est **échappé** avant affichage — on ne fait jamais confiance au client.

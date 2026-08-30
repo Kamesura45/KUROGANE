@@ -18,6 +18,7 @@ import { montant } from './icones'
 import type { LobbyView, SalonInfo } from './net'
 import { COURSE_LENGTH } from './track'
 import { chargerScores, formaterTemps, MAX_SCORES } from './scores'
+import { PAYS, drapeau, regionsDe, aDesRegions } from './pays'
 import { lireClassement } from './compte'
 
 /** Les trois lectures du classement, cf. buildScores. */
@@ -203,6 +204,10 @@ export class Menu {
     start: document.getElementById('btnStart')!,
     // ————— Résultats —————
     scoresRech: document.getElementById('scoresRech') as HTMLInputElement,
+    selPays: document.getElementById('selPays') as HTMLSelectElement,
+    selRegion: document.getElementById('selRegion') as HTMLSelectElement,
+    champRegion: document.getElementById('champRegion')!,
+    labRegion: document.getElementById('labRegion')!,
     resultsBody: document.getElementById('resultsBody')!,
     replay: document.getElementById('btnReplay')!,
     finTitre: document.getElementById('finTitre')!,
@@ -291,6 +296,33 @@ export class Menu {
         this.buildScores()
       })
     }
+
+    /*
+     * ————— 🌍 Le pays et la région —————
+     *
+     * Bâtis UNE FOIS à l'allumage : deux cent cinquante options recréées à
+     * chaque ouverture de l'écran feraient ramer l'ouverture pour rien.
+     */
+    this.el.selPays.appendChild(new Option('— Aucun —', ''))
+    for (const p of PAYS) {
+      this.el.selPays.appendChild(new Option(`${drapeau(p.code)}  ${p.nom}`, p.code))
+    }
+    this.el.selPays.value = this.settings.pays
+    this.majRegions()
+
+    this.el.selPays.addEventListener('change', () => {
+      this.settings.pays = this.el.selPays.value
+      // ⚠️ La région TOMBE avec le pays : garder celle d'avant ferait un
+      // japonais normand. `majRegions` reconstruit la liste, cette ligne
+      // s'assure que l'ancienne valeur ne survit pas au changement.
+      this.settings.region = ''
+      this.majRegions()
+      saveSettings(this.settings)
+    })
+    this.el.selRegion.addEventListener('change', () => {
+      this.settings.region = this.el.selRegion.value
+      saveSettings(this.settings)
+    })
 
     document.getElementById('btnBoutique')!.addEventListener('click', () => cb.onBoutique())
     document.getElementById('btnCompte')!.addEventListener('click', () => this.ouvrir('compte'))
@@ -420,6 +452,65 @@ export class Menu {
   }
 
   /** (Re)dessine le lobby à partir de la vue serveur. */
+  /**
+   * ⏳ Le décompte AVANT de rejoindre la grille, affiché dans le salon.
+   *
+   * `null` l'efface et rend la main aux boutons. Appelée à chaque image pendant
+   * l'attente : elle doit donc rester bon marché, d'où le garde sur la valeur
+   * déjà affichée — réécrire le même texte soixante fois par seconde ferait
+   * recalculer la mise en page à chaque fois.
+   *
+   * ⚠️ Les boutons se VERROUILLENT pendant ce temps. « Prêt » et « Lancer »
+   * n'ont plus aucun sens une fois la partie lancée, et un clic qui ne fait
+   * rien se lit comme un bouton cassé.
+   */
+  setDepartSalon(secondes: number | null) {
+    if (this.departAffiche === secondes) return
+    this.departAffiche = secondes
+
+    const enAttente = secondes !== null
+    // On n'ÉCRIT que pendant l'attente. En sortie, on laisse le mot en place :
+    // `showLobby` le réécrira au prochain rafraîchissement, et lui seul sait
+    // quoi y mettre (le mode, le nombre de prêts…).
+    if (enAttente) {
+      this.el.lobbyHint.textContent = `⚔️ Départ dans ${secondes}… rejoins la grille !`
+    }
+    this.el.lobbyHint.classList.toggle('compte', enAttente)
+    ;(this.el.ready as HTMLButtonElement).disabled = enAttente
+    ;(this.el.start as HTMLButtonElement).disabled = enAttente
+  }
+
+  /** Le dernier chiffre passé à `setDepartSalon`, pour ne pas réécrire pour rien. */
+  private departAffiche: number | null = null
+
+  /**
+   * 🌍 Reconstruit la liste des régions pour le pays choisi, et masque le champ
+   * quand ce pays n'en détaille aucune.
+   *
+   * On MASQUE plutôt que d'afficher une liste vide : un menu déroulant sans
+   * options se lit comme un bug, alors que son absence ne dit rien de faux — ce
+   * pays n'a simplement pas de subdivision chez nous.
+   */
+  private majRegions() {
+    const regions = regionsDe(this.settings.pays)
+    // Vide UNIQUEMENT quand aucun pays n'est choisi : tout pays connu offre au
+    // moins sa capitale.
+    this.el.champRegion.classList.toggle('hidden', regions.length === 0)
+    this.el.selRegion.replaceChildren()
+    if (regions.length === 0) return
+
+    /*
+     * L'étiquette suit ce que la liste contient VRAIMENT. Appeler « Région »
+     * une liste d'une seule ville serait faux, et le joueur chercherait la
+     * sienne dans un menu qui n'en propose qu'une.
+     */
+    const vraiesRegions = aDesRegions(this.settings.pays)
+    this.el.labRegion.textContent = vraiesRegions ? 'Région' : 'Ville'
+    this.el.selRegion.appendChild(new Option(vraiesRegions ? '— Aucune —' : '— Aucun —', ''))
+    for (const r of regions) this.el.selRegion.appendChild(new Option(r, r))
+    this.el.selRegion.value = this.settings.region
+  }
+
   showLobby(view: LobbyView) {
     this.view = view
     this.el.lobbyCode.textContent = view.code === 'PUBLIC' ? '' : view.code
@@ -449,6 +540,17 @@ export class Menu {
     // Le bouton « lancer » : à l'hôte seul, actif dès la moitié prête (≥ 2 joueurs)
     const peutLancer = total >= 2 && prets >= Math.ceil(total / 2)
     this.el.start.classList.toggle('hidden', !view.isHost)
+
+    /*
+     * ⏳ LE DÉCOMPTE A LA PRIORITÉ.
+     *
+     * Une vue du salon peut très bien arriver PENDANT l'attente — il suffit
+     * qu'un joueur s'en aille. Sans ce garde, elle rendrait la main aux boutons
+     * et remplacerait « Départ dans 3… » par le nombre de prêts, alors que la
+     * course est déjà lancée et que plus rien de tout cela n'est vrai.
+     */
+    if (this.departAffiche !== null) return
+
     ;(this.el.start as HTMLButtonElement).disabled = !peutLancer
 
     // Le mot d'ambiance : le MODE (duel à 2, chacun pour soi à 3+) puis le statut
@@ -1103,11 +1205,15 @@ export class Menu {
             ? `🏋️ ${s.rivaux} ${s.rivaux > 1 ? 'rivaux' : 'rival'}`
             : '🏋️ en solitaire'
       const quand = s.date ? ` · ${new Date(s.date).toLocaleDateString('fr-FR')}` : ''
+      // 🌍 Le drapeau précède le nom. Vide si aucun pays n'était choisi ce
+      // jour-là — d'où l'espace conditionnel, sinon toutes les vieilles lignes
+      // seraient décalées d'un cran pour rien.
+      const dr = drapeau(s.pays ?? '')
       hote.append(
         this.ligneScore({
           rang: this.medaille(rang),
           jp: f.jp,
-          nom: s.nom,
+          nom: dr ? `${dr} ${s.nom}` : s.nom,
           detail: `${f.name} · ${quoi}${quand}`,
           temps: formaterTemps(s.temps),
           premier: rang === 0,
