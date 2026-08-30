@@ -223,6 +223,38 @@ réparer :
 base ; une valeur recopiée se périme alors en silence, et l'on obtient `28P01`
 des semaines après un déploiement qui marchait. La référence
 `${{Postgres.DATABASE_URL}}`, elle, suit toute seule.
+
+### ♻️ La base est reprise TOUTE SEULE — pas besoin de redéployer
+
+⚠️ **`ENOTFOUND` au démarrage ne veut pas dire que la base est morte.**
+
+Le réseau privé de Railway — les noms en `*.railway.internal` — **n'existe pas
+encore** quand le conteneur démarre. Il se monte un instant APRÈS. Un serveur
+qui interroge sa base dès sa première ligne reçoit donc `ENOTFOUND` alors que
+tout va bien : il a simplement demandé trop tôt.
+
+Le serveur ne tentait qu'**une seule fois**, au démarrage. L'échec était donc
+définitif : la base revenait, et le jeu affichait toujours « comptes hors
+ligne » jusqu'à ce qu'un humain pense à redéployer.
+
+Il réessaie maintenant en arrière-plan — 2 s, 5 s, 10 s, 20 s, 30 s, puis une
+fois par minute — **sans jamais bloquer les courses**. Concrètement :
+
+> Relance le service Postgres sur Railway, attends une minute, recharge
+> `/sante`. Il passe à `"saine":true` **tout seul**. Aucun redéploiement du
+> serveur de jeu n'est nécessaire.
+
+Le journal l'annonce :
+
+```
+✅ BASE REBRANCHÉE — comptes, boutique et classement mondial sont revenus.
+   (après 3 tentatives, sans redéploiement)
+```
+
+Les journaux ne se répètent pas pour rien : tant que la cause ne change pas, un
+rappel tous les trente essais suffit. Un journal qui radote est un journal qu'on
+cesse de lire — juste avant le jour où il aurait quelque chose à dire.
+
 ## 🚨 « Serveur injoignable » — l'entraînement marche, pas le multi
 
 Ce message vient du jeu quand la connexion au serveur échoue. **L'entraînement

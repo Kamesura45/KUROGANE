@@ -97,6 +97,86 @@ function codeErreur(e: unknown): string {
   return 'INCONNUE'
 }
 
+/**
+ * Une tentative de branchement, migrations comprises.
+ *
+ * Ne lève jamais : elle rend `true` ou note la raison de l'échec.
+ */
+async function tenterBase(): Promise<boolean> {
+  try {
+    await migrer()
+    // Puis les tables d'IDENTITÉ, qui appartiennent à Better Auth et vivent hors
+    // de nos fichiers .sql. Sans cet appel il fallait lancer sa CLI à la main —
+    // ce que personne n'avait fait sur la production, d'où un serveur qui
+    // répondait `relation "user" does not exist` à chaque connexion.
+    await migreAuth()
+    baseSaine = true
+    baseRaison = ''
+    return true
+  } catch (e) {
+    // Le CODE seul part vers `/sante`, qui est public (cf. baseRaison) ; le
+    // message complet, lui, ne va que dans les journaux — là il peut tout dire.
+    baseRaison = codeErreur(e)
+    return false
+  }
+}
+
+/**
+ * ————— ⏳ ON N'ABANDONNE PLUS APRÈS UN SEUL ESSAI —————
+ *
+ * ⚠️ LE RÉSEAU PRIVÉ DE RAILWAY N'EXISTE PAS ENCORE AU DÉMARRAGE DU CONTENEUR.
+ *
+ * Les noms en `*.railway.internal` ne résolvent qu'une fois le réseau interne
+ * monté, ce qui prend un instant APRÈS que le processus a démarré. Un serveur
+ * qui interroge la base dès sa première ligne reçoit donc `ENOTFOUND` — non
+ * parce que la base est morte, mais parce qu'on a demandé trop tôt.
+ *
+ * Le même raisonnement vaut au-delà de Railway : la base peut être redémarrée,
+ * déplacée, restaurée. Ce sont des minutes, pas des jours.
+ *
+ * Or on ne tentait qu'UNE FOIS, au démarrage. L'échec était donc DÉFINITIF :
+ * la base revenait, et le jeu continuait d'afficher « comptes hors ligne »
+ * jusqu'à ce qu'un humain pense à redéployer. C'était l'ennui le plus bête de
+ * tous — celui qui se répare tout seul, mais que personne ne voit se réparer.
+ *
+ * On réessaie donc en arrière-plan, de plus en plus espacé, sans jamais bloquer
+ * le jeu : les courses tournent pendant ce temps.
+ */
+async function insister(): Promise<void> {
+  // 2 s, 5 s, 10 s… puis une fois par minute. Serré au début parce que le cas
+  // le plus fréquent — le réseau privé qui se monte — se règle en secondes.
+  const PALIERS = [2, 5, 10, 20, 30, 60]
+  let derniereRaison = baseRaison
+
+  for (let n = 0; ; n++) {
+    const attente = PALIERS[Math.min(n, PALIERS.length - 1)]!
+    await new Promise((r) => setTimeout(r, attente * 1000))
+
+    if (await tenterBase()) {
+      console.log(
+        '✅ BASE REBRANCHÉE — comptes, boutique et classement mondial sont revenus.\n' +
+          `   (après ${n + 1} tentative${n > 0 ? 's' : ''}, sans redéploiement)`
+      )
+      return
+    }
+
+    /*
+     * On se TAIT, sauf quand ça change.
+     *
+     * Une adresse durablement fausse ferait sinon une ligne par minute, à
+     * jamais — et un journal qui se répète est un journal qu'on cesse de lire,
+     * précisément avant le jour où il aurait quelque chose à dire. Un rappel
+     * tous les trente essais suffit à ne pas croire le serveur muet.
+     */
+    if (baseRaison !== derniereRaison) {
+      derniereRaison = baseRaison
+      console.error(`⚠️  la base refuse toujours, autrement : ${baseRaison}`)
+    } else if (n > 0 && n % 30 === 0) {
+      console.error(`⚠️  base toujours injoignable (${baseRaison}) — ${n + 1} essais`)
+    }
+  }
+}
+
 // La base d'abord : si des migrations manquent, on les applique avant
 // d'accepter le moindre joueur. Un serveur qui tourne sur un schéma périmé
 // échoue de façon incompréhensible, plusieurs minutes plus tard.
@@ -119,25 +199,17 @@ if (baseDispo()) {
    *
    * On note l'incident très fort, et l'on continue.
    */
-  try {
-    await migrer()
-    // Puis les tables d'IDENTITÉ, qui appartiennent à Better Auth et vivent hors
-    // de nos fichiers .sql. Sans cet appel il fallait lancer sa CLI à la main —
-    // ce que personne n'avait fait sur la production, d'où un serveur qui
-    // répondait `relation "user" does not exist` à chaque connexion.
-    await migreAuth()
-    baseSaine = true
-  } catch (e) {
-    // Le CODE seul part vers `/sante`, qui est public (cf. baseRaison) ; le
-    // message complet, lui, ne va que dans les journaux — là il peut tout dire.
-    baseRaison = codeErreur(e)
+  if (!(await tenterBase())) {
     console.error(
       '❌ BASE INJOIGNABLE OU MIGRATION ÉCHOUÉE — on démarre quand même.\n' +
+        `   · cause : ${baseRaison}\n` +
         '   · les COURSES en ligne fonctionnent normalement ;\n' +
         '   · comptes, boutique et classement mondial sont HORS SERVICE.\n' +
-        '   Vérifie DATABASE_URL et que la base tourne encore.\n',
-      e
+        '   On réessaie en arrière-plan : si la base revient, elle sera reprise\n' +
+        '   toute seule, SANS redéploiement.\n'
     )
+    // ⚠️ Surtout PAS de `await` : les courses ne doivent pas attendre la base.
+    void insister()
   }
 }
 

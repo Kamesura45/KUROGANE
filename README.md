@@ -891,6 +891,13 @@ service principal.
 quand il ne revient jamais.** C'est exactement ce qui est arrivé. Le détail des
 symptômes et la façon de les reconnaître sont dans [DEPLOY.md](DEPLOY.md).
 
+⚠️ **Et l'on ne renonce plus après un seul essai.** Le réseau privé de Railway
+n'existe pas encore quand le conteneur démarre : demander la base à la première
+ligne rend `ENOTFOUND` alors que tout va bien. On réessaie donc en arrière-plan,
+de plus en plus espacé, et la base est reprise **sans redéploiement** dès
+qu'elle répond. Une panne qui se répare toute seule ne doit pas attendre qu'un
+humain s'en aperçoive.
+
 Un **sort offensif** vise le rival le plus proche **devant** (calculé côté jeu) ;
 le serveur ne l'applique qu'à cette cible. Le 🔮 portail, lui, file tout droit
 et échange les places du premier croisé dans sa ligne.
