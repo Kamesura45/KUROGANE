@@ -63,6 +63,40 @@ const port = Number(process.env.PORT ?? 2567)
  */
 export let baseSaine = false
 
+/**
+ * 🩺 POURQUOI la base a refusé — le CODE seul (`ECONNREFUSED`, `28P01`,
+ * `ETIMEDOUT`…), jamais le message complet.
+ *
+ * ⚠️ Cette valeur est publiée sur `/sante`, qui est PUBLIC. Un message d'erreur
+ * Postgres entier y trahirait l'adresse de la base, voire le nom d'utilisateur.
+ * Un code suffit à savoir quoi réparer : `ECONNREFUSED` = la base est éteinte,
+ * `28P01` = le mot de passe a changé, `ETIMEDOUT` = elle ne répond plus.
+ */
+export let baseRaison = ''
+
+/**
+ * Réduit une erreur Postgres à un code court et SÛR à publier.
+ *
+ * ⚠️ Jamais le message complet : `/sante` est public, et pg y met volontiers
+ * l'hôte et le nom d'utilisateur de la base. Les codes, eux, ne trahissent
+ * rien et disent quoi réparer :
+ *
+ *   · `ECONNREFUSED` — la base est éteinte : la relancer
+ *   · `ENOTFOUND`    — l'adresse ne résout plus : la base a été supprimée
+ *   · `ETIMEDOUT` / `TIMEOUT` — elle ne répond plus : réseau ou surcharge
+ *   · `28P01`        — mot de passe refusé : reposer DATABASE_URL en référence
+ *   · `42P01`        — une table manque : la migration n'est pas passée
+ *
+ * Le délai du pool est le seul cas SANS code — d'où le repli sur le mot-clé.
+ */
+function codeErreur(e: unknown): string {
+  const o = e as { code?: unknown; message?: unknown }
+  if (typeof o?.code === 'string' && o.code) return o.code
+  const msg = typeof o?.message === 'string' ? o.message.toLowerCase() : ''
+  if (msg.includes('timeout')) return 'TIMEOUT'
+  return 'INCONNUE'
+}
+
 // La base d'abord : si des migrations manquent, on les applique avant
 // d'accepter le moindre joueur. Un serveur qui tourne sur un schéma périmé
 // échoue de façon incompréhensible, plusieurs minutes plus tard.
@@ -94,6 +128,9 @@ if (baseDispo()) {
     await migreAuth()
     baseSaine = true
   } catch (e) {
+    // Le CODE seul part vers `/sante`, qui est public (cf. baseRaison) ; le
+    // message complet, lui, ne va que dans les journaux — là il peut tout dire.
+    baseRaison = codeErreur(e)
     console.error(
       '❌ BASE INJOIGNABLE OU MIGRATION ÉCHOUÉE — on démarre quand même.\n' +
         '   · les COURSES en ligne fonctionnent normalement ;\n' +
@@ -568,7 +605,24 @@ gameServer.listen(port).then(() => {
       repondre(
         res,
         200,
-        { ok: true, base: baseDispo(), comptes: authHandler !== null, google: GOOGLE_DISPO },
+        {
+          ok: true,
+          base: baseDispo(),
+          /*
+           * 🩺 LA question quand « les comptes sont hors ligne ».
+           *
+           * `base` ne dit que si l'ADRESSE est posée, et `comptes` que si Better
+           * Auth a été BÂTI — or ces deux-là restent VRAIS quand Postgres est
+           * mort. Ce point de santé s'affichait donc tout vert pendant que plus
+           * rien ne marchait, et ne servait à rien le jour où il aurait dû
+           * servir. `saine` est le seul témoin qui distingue les deux.
+           */
+          saine: baseSaine,
+          // Vide quand tout va bien : un champ absent se lit mieux qu'un « ok ».
+          raison: baseRaison || undefined,
+          comptes: authHandler !== null,
+          google: GOOGLE_DISPO,
+        },
         req
       )
       return

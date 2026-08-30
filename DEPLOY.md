@@ -172,6 +172,57 @@ http://localhost:2567/api/auth/callback/google
 
 ---
 
+
+## 🩺 Le point de santé — à interroger EN PREMIER
+
+Avant toute enquête, ouvrir cette adresse dans un navigateur :
+
+```
+https://kurogane-production.up.railway.app/sante
+```
+
+```json
+{"ok":true,"base":true,"saine":true,"comptes":true,"google":true}
+```
+
+| Champ | Ce qu'il dit VRAIMENT |
+|---|---|
+| `ok` | Le serveur écoute. S'il n'y a **aucune** réponse, voir la section suivante |
+| `base` | `DATABASE_URL` est **renseignée** — rien de plus |
+| `saine` | **La base a réellement répondu au démarrage.** C'est LE champ qui compte |
+| `raison` | Présent seulement si `saine` est faux : le code de la panne (voir plus bas) |
+| `comptes` | Better Auth a été **bâti** — vrai même si la base est morte |
+| `google` | Les clés OAuth sont posées |
+
+⚠️ **`base` et `comptes` restent VRAIS quand Postgres est mort.** L'un ne teste
+que la présence d'une variable, l'autre que la construction d'un objet. Un point
+de santé tout vert ne prouvait donc rien le jour où il aurait dû servir — d'où
+`saine`, seul témoin d'une base qui a répondu pour de bon.
+
+### Les comptes sont hors ligne, mais les courses marchent
+
+C'est le cas `saine: false`. **C'est voulu** : une panne de base ne doit plus
+emporter le jeu en ligne (cf. la section du README). Le champ `raison` dit quoi
+réparer :
+
+| `raison` | Cause | Réparation |
+|---|---|---|
+| `ECONNREFUSED` | La base est éteinte | La relancer sur Railway |
+| `ENOTFOUND` | L'adresse ne résout plus | La base a été supprimée — en recréer une |
+| `TIMEOUT` / `ETIMEDOUT` | Elle ne répond plus | Réseau, surcharge, ou service en veille |
+| `28P01` | Mot de passe refusé | Reposer `DATABASE_URL = ${{Postgres.DATABASE_URL}}` **en référence** |
+| `42P01` | Une table manque | La migration n'est pas passée — lire les journaux |
+| `INCONNUE` | Autre | Les journaux Railway portent le message complet |
+
+> ⚠️ **`raison` ne porte QUE le code.** `/sante` est public, et un message
+> Postgres entier y trahirait l'hôte et le nom d'utilisateur de la base. Le
+> message complet ne va que dans les journaux.
+
+**Le cas le plus fréquent, et le plus sournois** : `DATABASE_URL` a été
+**recopiée à la main**. Railway renouvelle périodiquement le mot de passe de la
+base ; une valeur recopiée se périme alors en silence, et l'on obtient `28P01`
+des semaines après un déploiement qui marchait. La référence
+`${{Postgres.DATABASE_URL}}`, elle, suit toute seule.
 ## 🚨 « Serveur injoignable » — l'entraînement marche, pas le multi
 
 Ce message vient du jeu quand la connexion au serveur échoue. **L'entraînement
