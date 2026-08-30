@@ -56,16 +56,52 @@ const dernierPot = new Map<string, number>()
  */
 const port = Number(process.env.PORT ?? 2567)
 
+/**
+ * 🩺 La base a-t-elle répondu au démarrage ? Faux quand elle est absente ou
+ * fâchée — les comptes, la boutique et le classement mondial sont alors hors
+ * service, mais on COURT quand même.
+ */
+export let baseSaine = false
+
 // La base d'abord : si des migrations manquent, on les applique avant
 // d'accepter le moindre joueur. Un serveur qui tourne sur un schéma périmé
 // échoue de façon incompréhensible, plusieurs minutes plus tard.
 if (baseDispo()) {
-  await migrer()
-  // Puis les tables d'IDENTITÉ, qui appartiennent à Better Auth et vivent hors
-  // de nos fichiers .sql. Sans cet appel il fallait lancer sa CLI à la main —
-  // ce que personne n'avait fait sur la production, d'où un serveur qui
-  // répondait `relation "user" does not exist` à chaque connexion.
-  await migreAuth()
+  /*
+   * ————— ⚠️ UN ENNUI DE BASE NE DOIT PAS EMPÊCHER DE COURIR —————
+   *
+   * Ces deux appels étaient attendus SANS FILET, juste avant le `listen()` plus
+   * bas. Le moindre refus de Postgres — base supprimée, mot de passe renouvelé,
+   * crédits épuisés — remontait donc en promesse non rattrapée, et Node
+   * s'arrêtait AVANT d'écouter. L'hébergeur relançait, la base refusait encore,
+   * et ainsi de suite : le jeu en ligne était entièrement mort, tandis que
+   * l'entraînement continuait de marcher puisqu'il ne parle à personne.
+   *
+   * Or LA COURSE N'A PAS BESOIN DE LA BASE. La graine, le salon, le GO, le
+   * vainqueur : tout cela vit en mémoire, dans Colyseus. Seuls les comptes, la
+   * boutique et le classement mondial la consultent. Laisser la base décider si
+   * l'on peut jouer, c'était donc laisser une panne d'accessoire emporter le
+   * jeu tout entier — y compris pour ceux qui n'ont pas de compte.
+   *
+   * On note l'incident très fort, et l'on continue.
+   */
+  try {
+    await migrer()
+    // Puis les tables d'IDENTITÉ, qui appartiennent à Better Auth et vivent hors
+    // de nos fichiers .sql. Sans cet appel il fallait lancer sa CLI à la main —
+    // ce que personne n'avait fait sur la production, d'où un serveur qui
+    // répondait `relation "user" does not exist` à chaque connexion.
+    await migreAuth()
+    baseSaine = true
+  } catch (e) {
+    console.error(
+      '❌ BASE INJOIGNABLE OU MIGRATION ÉCHOUÉE — on démarre quand même.\n' +
+        '   · les COURSES en ligne fonctionnent normalement ;\n' +
+        '   · comptes, boutique et classement mondial sont HORS SERVICE.\n' +
+        '   Vérifie DATABASE_URL et que la base tourne encore.\n',
+      e
+    )
+  }
 }
 
 const authHandler = auth ? toNodeHandler(auth) : null
@@ -543,5 +579,18 @@ gameServer.listen(port).then(() => {
   })
 
   console.log(`⛩️  Serveur KUROGANE prêt sur ws://localhost:${port}`)
-  console.log(`   comptes : ${authHandler ? '✅ actifs' : '⚠️  inactifs (pas de DATABASE_URL)'}`)
+  // ⚠️ On distingue les TROIS cas, parce qu'ils se réparent différemment :
+  // pas d'adresse de base (variable à poser), base qui refuse (base à relancer),
+  // ou tout va bien. Un simple « inactifs » les confondait.
+  console.log(
+    `   comptes : ${
+      !baseDispo()
+        ? '⚠️  inactifs (pas de DATABASE_URL)'
+        : !baseSaine
+          ? '❌ HORS SERVICE (la base a refusé — les courses, elles, marchent)'
+          : authHandler
+            ? '✅ actifs'
+            : '⚠️  inactifs'
+    }`
+  )
 })

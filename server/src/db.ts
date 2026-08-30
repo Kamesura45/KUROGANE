@@ -31,8 +31,39 @@ export const pool = url
       // certificat que Node ne reconnaît pas d'office. En local, pas de TLS.
       ssl: url.includes('localhost') ? false : { rejectUnauthorized: false },
       max: 8,
+      /**
+       * ⚠️ SANS CE DÉLAI, `pg` ATTEND POUR TOUJOURS (son défaut est `0`,
+       * c'est-à-dire sans limite).
+       *
+       * Une base injoignable ne rendait alors JAMAIS la main : le serveur
+       * restait bloqué avant même de se mettre à écouter. Vu du dehors,
+       * l'hébergeur acceptait bien la connexion, mais plus rien ne répondait
+       * derrière — et le jeu affichait « Serveur injoignable » sans que la
+       * moindre erreur apparaisse dans les journaux, puisque rien n'avait
+       * échoué : on attendait, simplement.
+       *
+       * Mieux vaut renoncer au bout de dix secondes et le DIRE.
+       */
+      connectionTimeoutMillis: 10_000,
     })
   : null
+
+/*
+ * ⚠️ UNE BASE QUI TOMBE NE DOIT PAS TUER LE SERVEUR.
+ *
+ * `Pool` est un émetteur d'événements : quand Postgres ferme une connexion au
+ * repos — redémarrage, coupure réseau, expiration — il émet `error`. SANS
+ * ÉCOUTEUR, Node en fait une exception non rattrapée et ARRÊTE LE PROCESSUS.
+ * Un serveur qui tournait très bien mourait donc d'une secousse réseau, puis
+ * repartait en boucle : personne ne pouvait plus jouer en ligne, alors que la
+ * course n'a pas besoin de la base.
+ *
+ * On note l'incident et l'on continue : le pool remplacera tout seul la
+ * connexion perdue à la requête suivante.
+ */
+pool?.on('error', (e) => {
+  console.error('⚠️  connexion Postgres perdue (le serveur continue) :', e.message)
+})
 
 /** La base est-elle branchée ? Le jeu doit tourner même si elle ne l'est pas. */
 export function baseDispo() {

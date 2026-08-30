@@ -172,6 +172,85 @@ http://localhost:2567/api/auth/callback/google
 
 ---
 
+## 🚨 « Serveur injoignable » — l'entraînement marche, pas le multi
+
+Ce message vient du jeu quand la connexion au serveur échoue. **L'entraînement
+continue de marcher**, puisqu'il tourne entièrement dans le navigateur et ne
+parle à personne — c'est le signe que le problème est côté serveur, pas côté
+jeu.
+
+### D'abord : distinguer « service inconnu » de « service muet »
+
+⚠️ **Le DNS ne prouve rien.** `*.up.railway.app` est un joker : n'importe quel
+nom inventé résout vers une adresse Railway. Ce n'est donc pas parce que
+l'adresse résout que le service existe.
+
+Le vrai test compare **notre adresse à un nom bidon** :
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" --max-time 20 https://ce-nom-nexiste-pas-12345.up.railway.app
+```
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" --max-time 20 https://kurogane-production.up.railway.app
+```
+
+| Ce qu'on obtient | Ce que ça veut dire |
+|---|---|
+| Les deux → `404` | Le service **n'existe plus** sur Railway (supprimé, ou projet fermé) |
+| Bidon → `404`, le nôtre → **rien, timeout** | Le service existe, mais **le programme dedans n'écoute pas** — il a planté au démarrage, ou il y est resté bloqué |
+| Le nôtre → `200` | Le serveur va bien : chercher ailleurs (CORS, `ORIGINES_AUTORISEES`) |
+
+### Le cas « service muet » : lire les journaux Railway
+
+C'est presque toujours le **démarrage** qui a échoué. Par ordre de fréquence :
+
+| Dans les journaux | Cause | Réparation |
+|---|---|---|
+| `AUTH_SECRET manquante` | La variable a disparu | La reposer (cf. plus haut). **Voulu** : sans elle, les jetons seraient signés avec une valeur publique |
+| `BASE INJOIGNABLE OU MIGRATION ÉCHOUÉE` | Postgres est mort, endormi, ou `DATABASE_URL` est périmée | Relancer la base, ou remettre la référence `${{Postgres.DATABASE_URL}}` |
+| `connexion Postgres perdue` | Simple secousse réseau | Rien à faire, le serveur continue |
+| Rien du tout, redémarrages en boucle | Le processus meurt avant d'écrire | Vérifier les variables obligatoires |
+
+### ⚠️ Pourquoi une base morte ne doit PAS empêcher de courir
+
+**Une course n'a pas besoin de la base.** La graine, le salon, le GO, le
+vainqueur : tout vit en mémoire, dans Colyseus. Seuls les comptes, la boutique
+et le classement mondial la consultent.
+
+Ça n'a pourtant pas toujours été vrai. Trois défauts faisaient qu'un ennui de
+base emportait **le jeu en ligne tout entier**, y compris pour les joueurs sans
+compte :
+
+1. `pg` n'avait **aucun délai de connexion** — son défaut est d'attendre
+   *indéfiniment*. Une base injoignable figeait le démarrage pour toujours, et
+   comme rien n'avait échoué, **les journaux restaient vides**.
+2. Les migrations étaient attendues **sans filet** juste avant le `listen()` :
+   le moindre refus de Postgres tuait le processus avant qu'il n'écoute.
+3. Il manquait un écouteur `error` sur le pool. `Pool` est un émetteur
+   d'événements ; quand Postgres ferme une connexion au repos, Node en fait une
+   exception non rattrapée et **arrête le processus** — un serveur qui tournait
+   très bien mourait d'une secousse réseau.
+
+Les trois sont corrigés. Le serveur démarre désormais **même sans base**, et le
+dit dans son journal :
+
+```
+⛩️  Serveur KUROGANE prêt sur ws://localhost:2567
+   comptes : ❌ HORS SERVICE (la base a refusé — les courses, elles, marchent)
+```
+
+**Reproduire la panne** (démarrage avec une base qui n'arrive jamais) :
+
+```bash
+cd server && npm run build && PORT=2599 AUTH_SECRET=test DATABASE_URL=postgresql://u:p@10.255.255.1:5432/x node dist/index.js
+```
+
+Le serveur doit annoncer « prêt » en une dizaine de secondes. S'il reste muet,
+c'est qu'un blocage a été réintroduit sur le chemin du démarrage.
+
+---
+
 ## 🧰 Pense-bête Git
 
 ```bash

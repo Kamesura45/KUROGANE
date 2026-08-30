@@ -792,6 +792,27 @@ relaie les sorts et tient le classement. Les clients ne font que lui raconter
 où ils en sont (20 fois par seconde). Les avatars des 9 autres sont un **pool
 recyclé** côté jeu : on n'en crée jamais en pleine course.
 
+### ⚠️ La base ne décide pas si l'on peut courir
+
+**Une course ne consulte JAMAIS Postgres.** La graine, le salon, le GO, le
+vainqueur : tout vit en mémoire, dans Colyseus. Seuls les **comptes**, la
+**boutique** et le **classement mondial** touchent la base.
+
+Cette séparation doit se voir dans le code du démarrage, et elle ne s'y voyait
+pas : les migrations étaient attendues **sans filet** juste avant le `listen()`,
+`pg` n'avait **aucun délai de connexion** (son défaut est d'attendre sans fin),
+et il manquait un écouteur `error` sur le pool — or `Pool` est un émetteur
+d'événements, et un `error` sans écouteur **arrête le processus** en Node.
+
+Résultat : une base morte emportait le jeu en ligne **tout entier**, y compris
+pour les joueurs sans compte, pendant que l'entraînement continuait de tourner
+puisqu'il ne parle à personne. Une panne d'accessoire ne doit pas coûter le
+service principal.
+
+⚠️ **Si tu ajoutes un `await` avant le `listen()`, demande-toi ce qui se passe
+quand il ne revient jamais.** C'est exactement ce qui est arrivé. Le détail des
+symptômes et la façon de les reconnaître sont dans [DEPLOY.md](DEPLOY.md).
+
 Un **sort offensif** vise le rival le plus proche **devant** (calculé côté jeu) ;
 le serveur ne l'applique qu'à cette cible. Le 🔮 portail, lui, file tout droit
 et échange les places du premier croisé dans sa ligne.
