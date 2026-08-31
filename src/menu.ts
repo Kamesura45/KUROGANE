@@ -18,7 +18,7 @@ import { montant } from './icones'
 import type { LobbyView, SalonInfo } from './net'
 import { COURSE_LENGTH } from './track'
 import { chargerScores, meilleuresInfini, formaterTemps, MAX_SCORES } from './scores'
-import { PAYS, drapeau, regionsDe, aDesRegions } from './pays'
+import { PAYS, drapeau, regionsDe, niveauDe } from './pays'
 import { lireClassement } from './compte'
 
 /** Les trois lectures du classement, cf. buildScores. */
@@ -525,13 +525,22 @@ export class Menu {
     if (regions.length === 0) return
 
     /*
-     * L'étiquette suit ce que la liste contient VRAIMENT. Appeler « Région »
-     * une liste d'une seule ville serait faux, et le joueur chercherait la
-     * sienne dans un menu qui n'en propose qu'une.
+     * L'étiquette suit ce que la liste contient VRAIMENT — et il y a désormais
+     * TROIS échelles possibles. Appeler « Région » les cent-un départements
+     * français serait aussi faux que d'appeler « Ville » les provinces belges :
+     * le joueur chercherait la sienne dans un menu qui ne l'a pas.
+     *
+     * Le genre du « — Aucun(e) — » suit le mot : on ne dit pas « aucun région ».
      */
-    const vraiesRegions = aDesRegions(this.settings.pays)
-    this.el.labRegion.textContent = vraiesRegions ? 'Région' : 'Ville'
-    this.el.selRegion.appendChild(new Option(vraiesRegions ? '— Aucune —' : '— Aucun —', ''))
+    const MOTS = {
+      departement: ['Département', '— Aucun —'],
+      region: ['Région', '— Aucune —'],
+      ville: ['Ville', '— Aucune —'],
+      aucun: ['Région', '— Aucune —'],
+    } as const
+    const [etiquette, vide] = MOTS[niveauDe(this.settings.pays)]
+    this.el.labRegion.textContent = etiquette
+    this.el.selRegion.appendChild(new Option(vide, ''))
     for (const r of regions) this.el.selRegion.appendChild(new Option(r, r))
     this.el.selRegion.value = this.settings.region
   }

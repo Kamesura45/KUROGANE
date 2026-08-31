@@ -2564,6 +2564,20 @@ body {
    zone tactile invisible qui déborde de 6 px tout autour (`::after`). Le bouton
    paraît discret, mais il se touche toujours aussi bien — 46 px de cible. */
 .hudbtn {
+  /*
+   * ⚠️ SANS CECI, LE BOUTON NE RÉPOND À RIEN.
+   *
+   * `#hud` est en `pointer-events: none` — et il le faut : c'est un calque qui
+   * couvre tout le haut de l'écran, et sans ça il avalerait les swipes destinés
+   * à la piste. Mais la règle s'HÉRITE, donc elle éteignait aussi le seul
+   * enfant qui doit, lui, se laisser toucher.
+   *
+   * Le défaut est passé au travers de mes essais parce que je déclenchais le
+   * bouton en JavaScript (`.click()`), ce qui court-circuite le test de
+   * collision du pointeur : le code s'exécutait, alors qu'un vrai doigt — et
+   * une vraie souris — n'atteignait jamais le bouton.
+   */
+  pointer-events: auto;
   position: relative;
   width: 34px;
   height: 34px;

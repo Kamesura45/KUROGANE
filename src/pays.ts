@@ -263,45 +263,78 @@ export const PAYS: readonly Pays[] = BRUT.trim()
  * drapeau — ce qui suffit largement au classement mondial. En ajouter un plus
  * tard est une ligne dans cette table, rien de plus.
  */
-export const REGIONS: Readonly<Record<string, readonly string[]>> = {
-  FR: [
-    'Auvergne-Rhône-Alpes',
-    'Bourgogne-Franche-Comté',
-    'Bretagne',
-    'Centre-Val de Loire',
-    'Corse',
-    'Grand Est',
-    'Hauts-de-France',
-    'Île-de-France',
-    'Normandie',
-    'Nouvelle-Aquitaine',
-    'Occitanie',
-    'Pays de la Loire',
-    "Provence-Alpes-Côte d'Azur",
-    'Guadeloupe',
-    'Guyane',
-    'La Réunion',
-    'Martinique',
-    'Mayotte',
-  ],
-  BE: ['Bruxelles-Capitale', 'Flandre', 'Wallonie'],
-  CH: ['Suisse romande', 'Suisse alémanique', 'Tessin'],
-  CA: [
-    'Alberta',
-    'Colombie-Britannique',
-    'Île-du-Prince-Édouard',
-    'Manitoba',
-    'Nouveau-Brunswick',
-    'Nouvelle-Écosse',
-    'Nunavut',
-    'Ontario',
-    'Québec',
-    'Saskatchewan',
-    'Terre-Neuve-et-Labrador',
-    'Territoires du Nord-Ouest',
-    'Yukon',
-  ],
+/**
+ * ————— 🏞️ Les subdivisions, par ordre de finesse —————
+ *
+ * ⚠️ TROIS NIVEAUX, ET C'EST UNE PRIORITÉ, pas un mélange : on donne les
+ * DÉPARTEMENTS si on les a, sinon les RÉGIONS, sinon les VILLES. Un joueur doit
+ * pouvoir se situer aussi finement que possible, mais jamais choisir entre deux
+ * échelles dans la même liste — « Bretagne » et « Finistère » côte à côte ne se
+ * comparent pas.
+ *
+ * Le format est compact À DESSEIN. En tableaux imbriqués, ces quelques milliers
+ * de noms auraient fait autant de lignes que personne ne relit ; en texte, une
+ * subdivision se vérifie d'un coup d'œil et s'ajoute en une ligne. L'ordre du
+ * fichier est celui du menu — on ne trie pas.
+ */
+const DEPARTEMENTS_BRUT = `
+FR 01 Ain, 02 Aisne, 03 Allier, 04 Alpes-de-Haute-Provence, 05 Hautes-Alpes, 06 Alpes-Maritimes, 07 Ardèche, 08 Ardennes, 09 Ariège, 10 Aube, 11 Aude, 12 Aveyron, 13 Bouches-du-Rhône, 14 Calvados, 15 Cantal, 16 Charente, 17 Charente-Maritime, 18 Cher, 19 Corrèze, 2A Corse-du-Sud, 2B Haute-Corse, 21 Côte-d'Or, 22 Côtes-d'Armor, 23 Creuse, 24 Dordogne, 25 Doubs, 26 Drôme, 27 Eure, 28 Eure-et-Loir, 29 Finistère, 30 Gard, 31 Haute-Garonne, 32 Gers, 33 Gironde, 34 Hérault, 35 Ille-et-Vilaine, 36 Indre, 37 Indre-et-Loire, 38 Isère, 39 Jura, 40 Landes, 41 Loir-et-Cher, 42 Loire, 43 Haute-Loire, 44 Loire-Atlantique, 45 Loiret, 46 Lot, 47 Lot-et-Garonne, 48 Lozère, 49 Maine-et-Loire, 50 Manche, 51 Marne, 52 Haute-Marne, 53 Mayenne, 54 Meurthe-et-Moselle, 55 Meuse, 56 Morbihan, 57 Moselle, 58 Nièvre, 59 Nord, 60 Oise, 61 Orne, 62 Pas-de-Calais, 63 Puy-de-Dôme, 64 Pyrénées-Atlantiques, 65 Hautes-Pyrénées, 66 Pyrénées-Orientales, 67 Bas-Rhin, 68 Haut-Rhin, 69 Rhône, 70 Haute-Saône, 71 Saône-et-Loire, 72 Sarthe, 73 Savoie, 74 Haute-Savoie, 75 Paris, 76 Seine-Maritime, 77 Seine-et-Marne, 78 Yvelines, 79 Deux-Sèvres, 80 Somme, 81 Tarn, 82 Tarn-et-Garonne, 83 Var, 84 Vaucluse, 85 Vendée, 86 Vienne, 87 Haute-Vienne, 88 Vosges, 89 Yonne, 90 Territoire de Belfort, 91 Essonne, 92 Hauts-de-Seine, 93 Seine-Saint-Denis, 94 Val-de-Marne, 95 Val-d'Oise, 971 Guadeloupe, 972 Martinique, 973 Guyane, 974 La Réunion, 976 Mayotte
+`
+
+/**
+ * Le premier niveau administratif — régions, provinces, cantons, préfectures,
+ * États — quel que soit son nom local.
+ *
+ * ⚠️ ON NE DÉTAILLE QUE CE DONT ON EST SÛR. Inventer les provinces d'un pays
+ * qu'on connaît mal serait pire qu'un menu court : le joueur y lirait des noms
+ * faux, et l'erreur nous serait invisible. Les pays absents gardent leurs trois
+ * villes — un plancher honnête. En ajouter un est une ligne ici.
+ */
+const REGIONS_BRUT = `
+BE Anvers, Brabant flamand, Brabant wallon, Bruxelles-Capitale, Flandre-Occidentale, Flandre-Orientale, Hainaut, Liège, Limbourg, Luxembourg, Namur
+CH Argovie, Appenzell Rhodes-Extérieures, Appenzell Rhodes-Intérieures, Bâle-Campagne, Bâle-Ville, Berne, Fribourg, Genève, Glaris, Grisons, Jura, Lucerne, Neuchâtel, Nidwald, Obwald, Saint-Gall, Schaffhouse, Schwytz, Soleure, Tessin, Thurgovie, Uri, Valais, Vaud, Zoug, Zurich
+CA Alberta, Colombie-Britannique, Île-du-Prince-Édouard, Manitoba, Nouveau-Brunswick, Nouvelle-Écosse, Nunavut, Ontario, Québec, Saskatchewan, Terre-Neuve-et-Labrador, Territoires du Nord-Ouest, Yukon
+LU Capellen, Clervaux, Diekirch, Echternach, Esch-sur-Alzette, Grevenmacher, Luxembourg, Mersch, Redange, Remich, Vianden, Wiltz
+MC Monaco-Ville, Monte-Carlo, La Condamine, Fontvieille
+MA Tanger-Tétouan-Al Hoceïma, L'Oriental, Fès-Meknès, Rabat-Salé-Kénitra, Béni Mellal-Khénifra, Casablanca-Settat, Marrakech-Safi, Drâa-Tafilalet, Souss-Massa, Guelmim-Oued Noun, Laâyoune-Sakia El Hamra, Dakhla-Oued Ed-Dahab
+DZ Adrar, Alger, Annaba, Batna, Béchar, Béjaïa, Biskra, Blida, Bouira, Chlef, Constantine, Djelfa, El Oued, Ghardaïa, Guelma, Jijel, Laghouat, Mascara, Médéa, Mostaganem, M'Sila, Oran, Ouargla, Relizane, Saïda, Sétif, Sidi Bel Abbès, Skikda, Souk Ahras, Tébessa, Tiaret, Tizi Ouzou, Tlemcen
+TN Ariana, Béja, Ben Arous, Bizerte, Gabès, Gafsa, Jendouba, Kairouan, Kasserine, Kébili, Le Kef, Mahdia, La Manouba, Médenine, Monastir, Nabeul, Sfax, Sidi Bouzid, Siliana, Sousse, Tataouine, Tozeur, Tunis, Zaghouan
+SN Dakar, Diourbel, Fatick, Kaffrine, Kaolack, Kédougou, Kolda, Louga, Matam, Saint-Louis, Sédhiou, Tambacounda, Thiès, Ziguinchor
+CI Abidjan, Bas-Sassandra, Comoé, Denguélé, Gôh-Djiboua, Lacs, Lagunes, Montagnes, Sassandra-Marahoué, Savanes, Vallée du Bandama, Woroba, Yamoussoukro, Zanzan
+CM Adamaoua, Centre, Est, Extrême-Nord, Littoral, Nord, Nord-Ouest, Ouest, Sud, Sud-Ouest
+US Alabama, Alaska, Arizona, Arkansas, Californie, Caroline du Nord, Caroline du Sud, Colorado, Connecticut, Dakota du Nord, Dakota du Sud, Delaware, Floride, Géorgie, Hawaï, Idaho, Illinois, Indiana, Iowa, Kansas, Kentucky, Louisiane, Maine, Maryland, Massachusetts, Michigan, Minnesota, Mississippi, Missouri, Montana, Nebraska, Nevada, New Hampshire, New Jersey, Nouveau-Mexique, New York, Ohio, Oklahoma, Oregon, Pennsylvanie, Rhode Island, Tennessee, Texas, Utah, Vermont, Virginie, Virginie-Occidentale, Washington, Washington D.C., Wisconsin, Wyoming
+DE Bade-Wurtemberg, Basse-Saxe, Bavière, Berlin, Brandebourg, Brême, Hambourg, Hesse, Mecklembourg-Poméranie, Rhénanie-du-Nord-Westphalie, Rhénanie-Palatinat, Sarre, Saxe, Saxe-Anhalt, Schleswig-Holstein, Thuringe
+ES Andalousie, Aragon, Asturies, Baléares, Canaries, Cantabrie, Castille-et-León, Castille-La Manche, Catalogne, Communauté de Madrid, Communauté valencienne, Estrémadure, Galice, La Rioja, Murcie, Navarre, Pays basque, Ceuta, Melilla
+IT Abruzzes, Basilicate, Calabre, Campanie, Émilie-Romagne, Frioul-Vénétie Julienne, Latium, Ligurie, Lombardie, Marches, Molise, Ombrie, Piémont, Pouilles, Sardaigne, Sicile, Toscane, Trentin-Haut-Adige, Val d'Aoste, Vénétie
+PT Aveiro, Beja, Braga, Bragance, Castelo Branco, Coimbra, Évora, Faro, Guarda, Leiria, Lisbonne, Portalegre, Porto, Santarém, Setúbal, Viana do Castelo, Vila Real, Viseu, Açores, Madère
+NL Brabant-Septentrional, Drenthe, Flevoland, Frise, Gueldre, Groningue, Hollande-Méridionale, Hollande-Septentrionale, Limbourg, Overijssel, Utrecht, Zélande
+GB Angleterre, Écosse, Pays de Galles, Irlande du Nord
+IE Connacht, Leinster, Munster, Ulster
+AT Burgenland, Carinthie, Basse-Autriche, Haute-Autriche, Salzbourg, Styrie, Tyrol, Vorarlberg, Vienne
+PL Basse-Silésie, Cujavie-Poméranie, Lublin, Lubusz, Łódź, Petite-Pologne, Mazovie, Opole, Basses-Carpates, Podlachie, Poméranie, Silésie, Sainte-Croix, Varmie-Mazurie, Grande-Pologne, Poméranie-Occidentale
+JP Hokkaidō, Aomori, Iwate, Miyagi, Akita, Yamagata, Fukushima, Ibaraki, Tochigi, Gunma, Saitama, Chiba, Tokyo, Kanagawa, Niigata, Toyama, Ishikawa, Fukui, Yamanashi, Nagano, Gifu, Shizuoka, Aichi, Mie, Shiga, Kyoto, Osaka, Hyōgo, Nara, Wakayama, Tottori, Shimane, Okayama, Hiroshima, Yamaguchi, Tokushima, Kagawa, Ehime, Kōchi, Fukuoka, Saga, Nagasaki, Kumamoto, Ōita, Miyazaki, Kagoshima, Okinawa
+BR Acre, Alagoas, Amapá, Amazonas, Bahia, Ceará, District fédéral, Espírito Santo, Goiás, Maranhão, Mato Grosso, Mato Grosso do Sul, Minas Gerais, Pará, Paraíba, Paraná, Pernambouc, Piauí, Rio de Janeiro, Rio Grande do Norte, Rio Grande do Sul, Rondônia, Roraima, Santa Catarina, São Paulo, Sergipe, Tocantins
+MX Aguascalientes, Basse-Californie, Basse-Californie du Sud, Campeche, Chiapas, Chihuahua, Coahuila, Colima, Durango, Guanajuato, Guerrero, Hidalgo, Jalisco, Mexico, État de Mexico, Michoacán, Morelos, Nayarit, Nuevo León, Oaxaca, Puebla, Querétaro, Quintana Roo, San Luis Potosí, Sinaloa, Sonora, Tabasco, Tamaulipas, Tlaxcala, Veracruz, Yucatán, Zacatecas
+AU Australie-Méridionale, Australie-Occidentale, Nouvelle-Galles du Sud, Queensland, Tasmanie, Victoria, Territoire du Nord, Territoire de la capitale
+`
+
+/** Lit un bloc « CODE Nom1, Nom2, … » et en fait une table par code pays. */
+function lireBloc(brut: string): Record<string, readonly string[]> {
+  return Object.fromEntries(
+    brut
+      .trim()
+      .split('\n')
+      .map((l) => {
+        const i = l.indexOf(' ')
+        return [l.slice(0, i), l.slice(i + 1).split(', ')]
+      })
+  )
 }
+
+export const DEPARTEMENTS: Readonly<Record<string, readonly string[]>> = lireBloc(
+  DEPARTEMENTS_BRUT
+)
+export const REGIONS: Readonly<Record<string, readonly string[]>> = lireBloc(REGIONS_BRUT)
 
 /*
  * ————— Les VILLES : le plancher, à trois choix minimum —————
@@ -544,17 +577,27 @@ export function nomPays(code: string): string {
  * où qu'il soit, a de quoi se situer plus finement que son drapeau.
  */
 export function regionsDe(code: string): readonly string[] {
-  return REGIONS[code] ?? VILLES[code] ?? []
+  // ⚠️ L'ORDRE EST LA RÈGLE : le plus fin d'abord. Départements, sinon régions,
+  // sinon villes. Jamais deux échelles mélangées dans la même liste.
+  return DEPARTEMENTS[code] ?? REGIONS[code] ?? VILLES[code] ?? []
 }
 
+/** Ce qu'on propose sous un pays — sert à nommer le champ dans le menu. */
+export type Niveau = 'departement' | 'region' | 'ville' | 'aucun'
+
 /**
- * A-t-on de vraies subdivisions pour ce pays, ou seulement sa capitale ?
+ * À quelle échelle ce pays est-il détaillé ?
  *
- * Sert à l'étiquette du menu : appeler « Région » une liste qui ne contient
- * qu'une ville serait faux, et l'inverse tout autant.
+ * ⚠️ L'ÉTIQUETTE DOIT DIRE LA VÉRITÉ. Appeler « Région » une liste de trois
+ * villes ferait chercher la sienne dans un menu qui ne l'a pas ; appeler
+ * « Ville » les cent-un départements français serait tout aussi faux. Le menu ne
+ * devine pas : il demande ici.
  */
-export function aDesRegions(code: string): boolean {
-  return REGIONS[code] !== undefined
+export function niveauDe(code: string): Niveau {
+  if (DEPARTEMENTS[code]) return 'departement'
+  if (REGIONS[code]) return 'region'
+  if (VILLES[code]) return 'ville'
+  return 'aucun'
 }
 
 /**
