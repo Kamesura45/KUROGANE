@@ -424,6 +424,30 @@ export class Track {
   private planBots: PlannedObstacle[] = []
   private courseLength = 0
 
+  /*
+   * ————— ♾️ LE MODE INFINI —————
+   *
+   * `cycle` vaut 0 en course normale. Au-delà, il dit deux choses à la fois :
+   * qu'on est sans fin, et tous les combien les BIOMES se répètent. Une course
+   * ordinaire étale ses décors sur sa longueur totale ; sans fin, il n'y a pas
+   * de total — alors on boucle.
+   *
+   * ⚠️ La piste n'est plus décidée d'un bloc. `bord` dit jusqu'où le plan va
+   * aujourd'hui ; quand le coureur s'en approche, on coud le tronçon suivant
+   * (cf. `etendre`). Les plans ne sont jamais purgés : quinze tronçons font
+   * quelques milliers de petits objets, et les garder permet aux bots de
+   * continuer à lire la piste derrière eux.
+   */
+  private cycle = 0
+  /** La graine de la course, gardée pour bâtir les tronçons suivants. */
+  private graine = 0
+  /** Jusqu'où le plan est bâti, en mètres. */
+  private bord = 0
+  /** Combien de tronçons ont été cousus : chacun a sa propre graine. */
+  private tronçons = 0
+  /** Retenu au reset : les tronçons suivants doivent en hériter. */
+  private avecPots = true
+
   // ————— Les biomes —————
   private decors: Decor[] = []
   private barrieres: Barriere[] = []
@@ -641,7 +665,7 @@ export class Track {
    * donnent de la monnaie, et une course qu'on relance seule à volonté ne doit
    * pas en distribuer. Tout le reste de la piste est identique.
    */
-  reset(length: number, seed: number, avecPots = true) {
+  reset(length: number, seed: number, avecPots = true, infini = false) {
     for (const o of this.obstacles) {
       o.active = false
       o.mesh.visible = false
@@ -712,6 +736,94 @@ export class Track {
       b.mesh.visible = false
     }
     this.prochaineBarriere = 0
+
+    /*
+     * ♾️ En infini, `length` n'est plus la longueur de la course — il n'y en a
+     * pas — mais celle d'un TRONÇON, et la période des biomes. Le premier
+     * tronçon vient d'être bâti juste au-dessus, exactement comme une course
+     * ordinaire : on garde donc ses marges de chauffe. Les suivants seront
+     * cousus au fur et à mesure, sans marges.
+     */
+    this.cycle = infini ? length : 0
+    this.graine = seed
+    this.bord = length
+    this.tronçons = 0
+    this.avecPots = avecPots
+    // Il n'y a pas de ligne d'arrivée à une course sans fin.
+    this.finish.visible = !infini
+  }
+
+  /**
+   * Le biome à cette distance.
+   *
+   * ⚠️ Une course répartit ses décors sur sa longueur ; l'infini n'a pas de
+   * longueur, alors il les fait BOUCLER. Sans ce repli, `indexBiome` bornerait
+   * au dernier biome dès le premier cycle dépassé — et l'on courrait sur le
+   * flanc du Fuji jusqu'à la fin des temps.
+   */
+  private biomeDe(d: number): number {
+    return this.cycle > 0
+      ? indexBiome(d % this.cycle, this.cycle)
+      : indexBiome(d, this.courseLength)
+  }
+
+  /**
+   * ————— ♾️ Coud le tronçon suivant au bout du plan —————
+   *
+   * On rebâtit un tronçon ORDINAIRE, avec les mêmes générateurs que n'importe
+   * quelle course, puis on décale tous ses mètres de `bord`. Rien n'est
+   * réécrit : la piste sans fin est faite des mêmes morceaux que l'autre, mis
+   * bout à bout.
+   *
+   * ⚠️ DEUX PRÉCAUTIONS AU RACCORD, et la seconde est la plus importante.
+   *
+   * · Les marges tombent (`depart` court, `garde` nul). Les garder creuserait
+   *   plus de 150 m sans rien à chaque couture — un hoquet régulier que le
+   *   joueur finirait par sentir.
+   *
+   * · LES PLATEFORMES À CHEVAL SONT REPASSÉES AU GÉNÉRATEUR D'OBSTACLES. Une
+   *   plateforme du tronçon précédent peut déborder sur le nouveau ; le
+   *   générateur, qui ne connaît que son propre tronçon, poserait alors des
+   *   barrières sur les deux lignes restantes sans savoir que la troisième est
+   *   déjà prise. On obtiendrait une rangée SANS AUCUN PASSAGE — le seul défaut
+   *   vraiment injuste que cette piste puisse produire.
+   */
+  private etendre() {
+    const base = this.bord
+    const long = this.cycle
+    // Une graine par tronçon, dérivée de celle de la course : deux joueurs sur
+    // la même graine voient la même piste, aussi loin qu'ils aillent.
+    const g = (this.graine + Math.imul(this.tronçons + 1, 0x9e3779b9)) | 0
+    const DEBUT = 12 // de quoi ne pas coller un obstacle sur la couture
+
+    const platsLoc = buildPlateformePlan(long, g, DEBUT, 0)
+    // Ce qui déborde du tronçon d'avant, ramené en coordonnées locales.
+    const aCheval = this.plateformePlan
+      .filter((p) => p.d + p.longueur > base)
+      .map((p) => ({ ...p, d: p.d - base }))
+
+    const obstLoc = buildPlan(long, g, [...aCheval, ...platsLoc], DEBUT, 0)
+    const occupeLoc = [...obstLoc, ...commeObstacles(platsLoc)]
+    const parchLoc = buildParcheminPlan(long, g, occupeLoc, DEBUT, 0)
+    const jarreLoc = buildJarrePlan(long, g, occupeLoc, this.avecPots, DEBUT, 0)
+    const murLoc = buildMurPlan(long, g, DEBUT, 0)
+
+    // On ne décale que `d` : longueurs, rampes et lignes ne bougent pas.
+    const glisse = <T extends { d: number }>(xs: T[]): T[] =>
+      xs.map((x) => ({ ...x, d: x.d + base }))
+
+    const obst = glisse(obstLoc)
+    const plats = glisse(platsLoc)
+    this.plan.push(...obst)
+    this.plateformePlan.push(...plats)
+    this.parcheminPlan.push(...glisse(parchLoc))
+    this.jarrePlan.push(...glisse(jarreLoc))
+    this.murPlan.push(...glisse(murLoc))
+    // Les bots LISENT le plan pour esquiver : il doit grandir avec la piste.
+    this.planBots.push(...obst, ...commeObstacles(plats))
+
+    this.bord += long
+    this.tronçons++
   }
 
   /**
@@ -806,7 +918,7 @@ export class Track {
      * le maillage, pour que le dessin et la règle ne puissent pas diverger.
      */
     return (
-      BIOMES[indexBiome(p.d, this.courseLength)].plateformeAjouree === true &&
+      BIOMES[this.biomeDe(p.d)].plateformeAjouree === true &&
       p.rampe === 0
     )
   }
@@ -1264,7 +1376,12 @@ export class Track {
     // On repeint d'après la distance PARCOURUE, jamais par accumulation : si une
     // image saute ou si l'on rejoint une course en retard, la couleur est juste
     // malgré tout. Même principe que la ligne d'arrivée plus bas.
-    const amb = enCourse ? ambianceA(distance, this.courseLength) : ambianceA(0, 1)
+    // ♾️ En infini, l'ambiance boucle avec les biomes (cf. biomeDe).
+    const amb = enCourse
+      ? this.cycle > 0
+        ? ambianceA(distance % this.cycle, this.cycle)
+        : ambianceA(distance, this.courseLength)
+      : ambianceA(0, 1)
     this.brume.color.copy(amb.brume)
     this.brume.near = amb.brumeNear
     this.brume.far = amb.brumeFar
@@ -1308,7 +1425,7 @@ export class Track {
      * planter le décor en avance pour qu'il ait le temps d'apparaître dans la
      * brume.
      */
-    const devant = enCourse ? indexBiome(distance + LOOKAHEAD, this.courseLength) : 0
+    const devant = enCourse ? this.biomeDe(distance + LOOKAHEAD) : 0
     const biome = BIOMES[devant]
     /*
      * ⚠️ Aucun offset au premier semis.
@@ -1357,9 +1474,16 @@ export class Track {
     }
 
     if (distance >= 0) {
-      // La ligne d'arrivée est TOUJOURS placée d'après la distance parcourue :
-      // impossible qu'elle se désynchronise.
-      this.finish.position.z = -(this.courseLength - distance)
+      /*
+       * ♾️ On coud le tronçon suivant AVANT de faire apparaître quoi que ce
+       * soit. Le seuil garde une longueur d'avance sur `LOOKAHEAD` : cousu
+       * juste à temps, les obstacles du nouveau tronçon naîtraient DANS le
+       * champ de vision, sous les yeux du joueur.
+       */
+      if (this.cycle > 0 && distance + LOOKAHEAD * 2 > this.bord) this.etendre()
+
+      // (En infini, il n'y a pas de ligne d'arrivée à placer.)
+      if (this.cycle === 0) this.finish.position.z = -(this.courseLength - distance)
 
       // Fait apparaître les obstacles prévus qui entrent dans notre champ de vision
       while (
@@ -1370,7 +1494,7 @@ export class Track {
         // L'obstacle porte l'habillage du biome où il SE TROUVE, pas de celui
         // où l'on court : il apparaît 85 m devant, parfois de l'autre côté
         // d'une frontière.
-        this.spawn(p.kind, p.lane, -(p.d - distance), indexBiome(p.d, this.courseLength))
+        this.spawn(p.kind, p.lane, -(p.d - distance), this.biomeDe(p.d))
         this.planIdx++
       }
 
@@ -1484,7 +1608,7 @@ export class Track {
   }
 
   private spawnPlateforme(p: PlannedPlateforme, z: number) {
-    const biome = indexBiome(p.d, this.courseLength)
+    const biome = this.biomeDe(p.d)
     /*
      * 🎋 Le pool est indexé par biome ET par VARIANTE.
      *
@@ -1551,7 +1675,7 @@ export class Track {
     // Il prend la matière du biome qu'il TRAVERSE, pas celle où l'on court :
     // un mur long de 40 m apparaît 125 m devant, parfois de l'autre côté d'une
     // frontière.
-    const biome = indexBiome(p.d, this.courseLength)
+    const biome = this.biomeDe(p.d)
     let m = this.murs.find((m) => !m.active && m.biome === biome)
     if (!m) {
       const habille = BIOMES[biome].fabriqueMur
@@ -1820,14 +1944,24 @@ export class Track {
 export function buildPlan(
   length: number,
   seed: number,
-  plateformes: PlannedPlateforme[] = []
+  plateformes: PlannedPlateforme[] = [],
+  /**
+   * Où commencent les obstacles, et combien de mètres restent libres à la fin.
+   *
+   * ⚠️ Les valeurs par défaut sont celles d'une COURSE : on se chauffe 45 m,
+   * et les 120 derniers sont dégagés pour le sprint. En mode INFINI, chaque
+   * tronçon est recousu au précédent — garder ces marges creuserait un vide de
+   * plus de 150 m à chaque raccord, comme un hoquet régulier tous les cycles.
+   */
+  depart = 45,
+  garde = SPRINT_ZONE
 ): PlannedObstacle[] {
   const rng = mulberry32(seed)
   const kinds: Kind[] = ['saut', 'glissade', 'mur']
   const plan: PlannedObstacle[] = []
 
-  let d = 45 // premiers mètres tranquilles pour se chauffer
-  while (d < length - SPRINT_ZONE) {
+  let d = depart // (45 m en course : premiers mètres tranquilles pour se chauffer)
+  while (d < length - garde) {
     /*
      * ⚠️ Les PLATEFORMES sont posées en premier, et les obstacles se rangent
      * autour. L'ordre inverse — obstacles d'abord, plateformes dans les trous —
@@ -1873,13 +2007,15 @@ export function buildPlan(
 function buildParcheminPlan(
   length: number,
   seed: number,
-  obstacles: PlannedObstacle[]
+  obstacles: PlannedObstacle[],
+  depart = 120,
+  garde = SPRINT_ZONE + 15
 ): PlannedParchemin[] {
   const rng = mulberry32(seed ^ 0x5f3a7c1d)
   const plan: PlannedParchemin[] = []
 
-  let d = 120 // on laisse le temps de prendre sa vitesse
-  while (d < length - SPRINT_ZONE - 15) {
+  let d = depart // (120 m en course : le temps de prendre sa vitesse)
+  while (d < length - garde) {
     // Un rouleau collé à une barrière serait un piège : il faudrait se blesser
     // pour l'attraper. On ne cherche PAS un trou vide — les rangées tombent
     // tous les 10-17 m, il n'en existe pas toujours. On cherche une LIGNE que
@@ -1954,15 +2090,17 @@ export function buildJarrePlan(
   length: number,
   seed: number,
   obstacles: PlannedObstacle[],
-  avecPots = true
+  avecPots = true,
+  depart = 90,
+  garde = SPRINT_ZONE + 30
 ): PlannedJarre[] {
   const rng = mulberry32(seed ^ 0x2b91e6a7)
   const plan: PlannedJarre[] = []
   /** Les jarres qui POURRAIENT devenir dorées (jamais la 1re d'une grappe). */
   const eligibles: number[] = []
 
-  let d = 90 // le temps d'avoir pris sa vitesse
-  while (d < length - SPRINT_ZONE - 30) {
+  let d = depart // (90 m en course : le temps d'avoir pris sa vitesse)
+  while (d < length - garde) {
     const taille = 2 + Math.floor(rng() * 3) // 2 à 4 jarres
     // L'écart SUIT la période du rebond à cet endroit de la course : on
     // retombe pile sur la jarre suivante. Comme la vitesse de croisière monte
@@ -1993,7 +2131,7 @@ export function buildJarrePlan(
     // La grappe doit tenir ENTIÈREMENT dans le 2ᵉ acte. Une jarre posée dans
     // la zone de sprint serait incassable — le combat y est éteint — donc on
     // arrête d'en poser dès que la grappe déborderait.
-    if (d + ecart * (taille - 1) >= length - SPRINT_ZONE) break
+    if (d + ecart * (taille - 1) >= length - garde) break
 
     if (lane >= 0) {
       // Une grappe sur trois cache une dorée, jamais en première position :
@@ -2137,12 +2275,17 @@ function commeObstacles(plateformes: PlannedPlateforme[]): PlannedObstacle[] {
  * Graine décalée (`^`) : sans ça les plateformes tomberaient sur les mêmes
  * points que tout le reste.
  */
-export function buildPlateformePlan(length: number, seed: number): PlannedPlateforme[] {
+export function buildPlateformePlan(
+  length: number,
+  seed: number,
+  depart = 200,
+  garde = SPRINT_ZONE + 40
+): PlannedPlateforme[] {
   const rng = mulberry32(seed ^ 0x3fa17c05)
   const plan: PlannedPlateforme[] = []
 
-  let d = 200 // le temps d'avoir compris la course avant d'en changer les règles
-  while (d < length - SPRINT_ZONE - 40) {
+  let d = depart // (200 m en course : le temps de comprendre avant d'en changer les règles)
+  while (d < length - garde) {
     /*
      * Un CONVOI : une à trois plateformes à la suite, toutes à hauteur de mur,
      * séparées de trous qu'on franchit d'un saut.
@@ -2211,7 +2354,7 @@ export function buildPlateformePlan(length: number, seed: number): PlannedPlatef
     const lane = dispo.length > 1 ? dispo[Math.floor(rng() * dispo.length)] : -1
 
     // Tout doit tenir hors de la zone de sprint, où l'on ne peut plus swiper.
-    if (d + portee >= length - SPRINT_ZONE) break
+    if (d + portee >= length - garde) break
 
     if (lane >= 0) {
       let dd = d
@@ -2362,12 +2505,17 @@ const NEZ_EP = 0.05
  * Graine décalée (`^`) : sans ça les murs tomberaient sur les mêmes points
  * que les obstacles, les rouleaux et les jarres.
  */
-export function buildMurPlan(length: number, seed: number): PlannedMur[] {
+export function buildMurPlan(
+  length: number,
+  seed: number,
+  depart = 140,
+  garde = SPRINT_ZONE + 50
+): PlannedMur[] {
   const rng = mulberry32(seed ^ 0x7d3e5b19)
   const plan: PlannedMur[] = []
 
-  let d = 140 // le temps d'avoir pris sa vitesse et compris la course
-  while (d < length - SPRINT_ZONE - 50) {
+  let d = depart // (140 m en course : le temps d'avoir pris sa vitesse)
+  while (d < length - garde) {
     plan.push({
       d,
       longueur: 26 + rng() * 16,

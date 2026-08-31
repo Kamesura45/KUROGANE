@@ -322,6 +322,9 @@ const flashEl = document.getElementById('flash')!
 const fumeeEl = document.getElementById('fumee')!
 /** 🎯 La terre du kunai : des éclaboussures sur les BORDS de l'écran, jusqu'au 🍵 thé */
 const terreEl = document.getElementById('terre')!
+// ♾️ Le brasier du mode infini. Toute sa mise en scène vit dans la CSS ; le jeu
+// ne touche qu'à une variable, `--proche` (cf. #brasier dans style.css).
+const brasierEl = document.getElementById('brasier')!
 const progressEl = document.getElementById('progressfill')!
 const gapEl = document.getElementById('gap')!
 const aspiEl = document.getElementById('aspi')!
@@ -407,6 +410,53 @@ let departImminent: number | null = null
  * ce drapeau y reste donc à `false` pour toujours.
  */
 let gele = false
+
+/*
+ * ————— ♾️ LE MODE INFINI —————
+ *
+ * Pas de ligne d'arrivée : on court jusqu'à ce que les flammes vous rattrapent.
+ * Ce qui les rapproche n'est pas le temps, c'est la MALADRESSE — six obstacles
+ * encaissés et c'est fini.
+ *
+ * ⚠️ SIX COUPS, PAS SIX RENCONTRES. Ne comptent que les vrais trébuchements :
+ *   · l'armure qui encaisse ne compte pas — c'est tout son intérêt ;
+ *   · une escalade ne compte pas — on a franchi l'obstacle, pas subi.
+ * Les deux sont déjà des branches distinctes au moment de la collision, si
+ * bien que la règle s'écrit là où le joueur perd VRAIMENT sa vitesse, et nulle
+ * part ailleurs.
+ */
+let modeInfini = false
+/** Combien de coups encaissés, de 0 à DEGATS_MAX. Ne redescend jamais. */
+let degats = 0
+const DEGATS_MAX = 6
+
+/**
+ * L'avancement dans la course, de 0 à 1 — ce qui fait monter la croisière.
+ *
+ * ⚠️ EN INFINI, ÇA PLAFONNE. `distance / COURSE_LENGTH` grandit sans borne
+ * quand il n'y a plus de ligne d'arrivée : la vitesse de croisière doublerait
+ * tous les deux kilomètres et le jeu deviendrait injouable au bout de quelques
+ * minutes, non par difficulté mais par absurdité. On monte donc jusqu'au
+ * maximum d'une course ordinaire, puis on s'y tient — la tension vient des
+ * flammes, pas d'une vitesse que personne ne peut plus tenir.
+ */
+function avancement() {
+  const t = distance / COURSE_LENGTH
+  return modeInfini ? Math.min(1, t) : t
+}
+
+/**
+ * Est-on dans les derniers mètres, ceux du sprint final ?
+ *
+ * ⚠️ Toujours FAUX en infini. Le test d'origine (`distance >= COURSE_LENGTH -
+ * SPRINT_ZONE`) deviendrait vrai pour de bon passé 1 800 m, et le jeu resterait
+ * en « sprint final » jusqu'à la fin de la partie : bannière collée à l'écran,
+ * foulée pressée en permanence, sorts bridés. Une course sans fin n'a pas de
+ * dernière ligne droite.
+ */
+function versLaFin() {
+  return !modeInfini && distance >= COURSE_LENGTH - SPRINT_ZONE
+}
 let escaladeT = 0 // temps de freinage restant après une escalade
 let stumblePrec = 0 // sa valeur à l'image d'avant : sert à repérer le choc
 let netTimer = 0 // pour n'envoyer notre position que 10 fois/s
@@ -1730,7 +1780,7 @@ function botsEnCourse() {
  */
 function majTetes() {
   // Toi : ta tete et ton nom, a ta hauteur de course
-  coureurMoi.wrap.style.bottom = `${Math.min(100, (distance / COURSE_LENGTH) * 100)}%`
+  coureurMoi.wrap.style.bottom = `${Math.min(100, (((modeInfini ? distance % COURSE_LENGTH : distance)) / COURSE_LENGTH) * 100)}%`
   coureurMoi.etiq.textContent = menu.settings.name || 'Toi'
 
   // Les rivaux : les bots en entrainement, les joueurs en ligne. Le meme banc
@@ -2034,7 +2084,7 @@ function combatActif() {
  * canon ; après, le sprint final — deux moments où seul le martèlement compte.
  */
 function acte2() {
-  return state === 'course' && distance < COURSE_LENGTH - SPRINT_ZONE
+  return state === 'course' && !versLaFin()
 }
 
 /**
@@ -2303,7 +2353,7 @@ function resoudCoup() {
  */
 function inSprintZone() {
   return (
-    (state === 'course' && distance >= COURSE_LENGTH - SPRINT_ZONE) ||
+    (state === 'course' && versLaFin()) ||
     state === 'depart'
   )
 }
@@ -2312,6 +2362,12 @@ function inSprintZone() {
 function backToMenu(banner?: string) {
   state = 'menu'
   online = false
+  // ♾️ On quitte le mode infini en même temps que la course : sans ça, le
+  // brasier resterait allumé derrière le menu, et la course suivante hériterait
+  // d'une règle qu'on n'a pas choisie.
+  modeInfini = false
+  degats = 0
+  majBrasier()
   /*
    * ⏳ UNE COURSE LANCÉE MAIS PAS ENCORE REJOINTE S'ANNULE ICI.
    *
@@ -2359,6 +2415,92 @@ function backToMenu(banner?: string) {
   menu.showTitle(banner)
 }
 
+
+/**
+ * ♾️ Rapproche (ou éteint) le brasier, d'après les dégâts encaissés.
+ *
+ * Une seule variable CSS porte tout : la hauteur des flammes, leur emprise sur
+ * les bords, leur éclat. Écrire les six paliers en dur des deux côtés aurait
+ * demandé de les tenir d'accord à jamais.
+ *
+ * Le plancher à 0,1 n'est pas décoratif : sans lui, un joueur qui n'a rien
+ * encaissé ne verrait AUCUN feu et ne saurait pas qu'il est poursuivi. La règle
+ * doit s'apprendre en jouant, pas dans un écran d'aide.
+ */
+function majBrasier() {
+  const p = modeInfini ? 0.1 + 0.9 * (degats / DEGATS_MAX) : 0
+  brasierEl.style.setProperty('--proche', p.toFixed(3))
+  // Le dernier palier bat plus vite : on doit sentir que c'est maintenant,
+  // sans avoir à lire un chiffre.
+  brasierEl.classList.toggle('critique', modeInfini && DEGATS_MAX - degats <= 1)
+}
+/**
+ * ————— ♾️ Un coup encaissé, en mode infini —————
+ *
+ * Appelée depuis la SEULE branche où le joueur perd vraiment sa vitesse :
+ * l'armure et l'escalade passent ailleurs, et ne comptent donc jamais.
+ *
+ * Le compteur ne redescend pas. C'était tentant — récompenser une longue série
+ * propre en éloignant un peu les flammes — mais cela changerait la règle
+ * annoncée : « six obstacles et c'est fini » deviendrait « six obstacles
+ * rapprochés ». Une règle qu'on ne peut pas énoncer en une phrase ne se retient
+ * pas, et le joueur ne saurait plus combien il lui reste de droit à l'erreur.
+ */
+function encaisserCoup() {
+  degats = Math.min(DEGATS_MAX, degats + 1)
+  majBrasier()
+  const reste = DEGATS_MAX - degats
+  if (reste <= 0) {
+    finInfini()
+    return
+  }
+  // On annonce ce qui RESTE, pas ce qui est perdu : c'est ce que le joueur a
+  // besoin de savoir pour décider s'il tente le passage serré.
+  toast(reste === 1 ? '🔥 Un seul faux pas et tu brûles !' : `🔥 Encore ${reste} avant les flammes`)
+}
+
+/**
+ * ————— ♾️ Les flammes ont rattrapé le coureur —————
+ *
+ * On mesure en MÈTRES, et le plus loin gagne — l'inverse d'une course. Le
+ * record vit donc sous sa propre clé : le mêler aux chronos rendrait les deux
+ * illisibles, puisqu'ils ne se comparent pas dans le même sens.
+ */
+function finInfini() {
+  if (state === 'fini') return // deux obstacles dans la même image ne tuent qu'une fois
+  state = 'fini'
+  const metres = Math.floor(distance)
+
+  const CLE = 'kurogane-infini-record'
+  let record = 0
+  try {
+    record = Number(localStorage.getItem(CLE) ?? 0) || 0
+  } catch {
+    record = 0
+  }
+  const bat = metres > record
+  if (bat) {
+    try {
+      localStorage.setItem(CLE, String(metres))
+    } catch {
+      // Mode privé, quota plein : la course reste jouable, le record s'oublie.
+    }
+  }
+  jouerBruit(bat ? 'victoire' : 'defaite')
+
+  menu.showFin({
+    titre: bat
+      ? `🔥 Rattrapé — mais c'est ton RECORD&nbsp;!<br><small>${metres} m</small>`
+      : `🔥 Les flammes t'ont rattrapé<br><small>Record&nbsp;: ${Math.max(record, metres)} m</small>`,
+    joueurs: [
+      { nom: menu.settings.name || 'Guerrier anonyme', temps: metres, moi: true },
+    ],
+    canReplay: true,
+    canLobby: false,
+    format: (m) => `${Math.round(m)} m`,
+  })
+}
+
 /** Lance une course. En ligne, la graine vient du serveur : même piste pour les deux ! */
 function startRace(seed: number) {
   // Le décompte fait déjà partie de la course : la piste démarre avec lui.
@@ -2368,7 +2510,8 @@ function startRace(seed: number) {
   // On aligne joueur + bots sur la MÊME ligne, répartis de gauche à droite sur
   // les 3 voies (le joueur à gauche, les bots vers la droite). En duel, c'est le
   // serveur qui donne la place ; ici on ne gère que la grille solo.
-  const nbCoureurs = 1 + nbBots
+  // ♾️ Seul sur la piste en infini : la grille n'a qu'un coureur, donc le milieu.
+  const nbCoureurs = modeInfini ? 1 : 1 + nbBots
   const voieDe = (k: number) => (nbCoureurs === 1 ? 1 : Math.round((k / (nbCoureurs - 1)) * 2))
   player.reset(online ? net.myStartLane : voieDe(0))
   // Les avatars des rivaux sont (re)placés par syncRivals dès la 1re position
@@ -2380,7 +2523,7 @@ function startRace(seed: number) {
   recolte.hisui = 0
   // 🏋️ Les pots verts n'existent qu'EN LIGNE : ils donnent de la monnaie, et
   // l'entraînement se relance seul, à volonté. Voir buildJarrePlan.
-  track.reset(COURSE_LENGTH, seed, online)
+  track.reset(COURSE_LENGTH, seed, online, modeInfini)
   time = 0
   distance = 0
   speed = 0
@@ -2399,6 +2542,9 @@ function startRace(seed: number) {
   ventFin = 0
   kusarigamaFin = 0
   armure = 0
+  // ♾️ Le droit à l'erreur repart entier à chaque partie, et le feu recule.
+  degats = 0
+  majBrasier()
   grueFin = 0
   miroirFin = 0
   fumigeneFin = 0
@@ -2464,7 +2610,8 @@ function startRace(seed: number) {
   const rangees = construireRangees(track.obstaclesPrevus())
   const rouleaux = track.parcheminsPrevus()
   bots.forEach((b, i) => {
-    b.actif = !online && i < nbBots
+    // ♾️ Pas de rivaux en course sans fin : on court contre les flammes.
+    b.actif = !online && !modeInfini && i < nbBots
     // Graine dérivée : chaque rival tire ses fautes ailleurs dans la suite,
     // sinon les 4 rateraient exactement les mêmes obstacles au même endroit.
     // Le joueur est l'indice 0 de la grille, les bots suivent (voie répartie).
@@ -2785,7 +2932,21 @@ const identity = () => ({
 const menu = new Menu({
   onSolo() {
     online = false
+    modeInfini = false
     menu.showBotPick()
+  },
+  /**
+   * ♾️ La course sans fin part TOUT DE SUITE.
+   *
+   * Pas d'écran de choix : il n'y a ni rivaux à doser ni longueur à régler.
+   * Passer par la fiche des bots pour n'y rien décider ferait un détour que le
+   * joueur devrait refaire à chaque partie — or c'est un mode où l'on
+   * recommence beaucoup.
+   */
+  onInfini() {
+    online = false
+    modeInfini = true
+    startRace(Math.floor(Math.random() * 2 ** 31))
   },
   onOnline() {
     // Plus de recherche 1v1 : on ouvre l'accueil des salons (créer / rejoindre).
@@ -3361,7 +3522,7 @@ function tick(now?: number) {
     aspiEl.classList.toggle('hidden', aspiCharge < 0.25)
 
     // La vitesse de croisière augmente au fil de la course…
-    let cruise = 22 + 8 * (distance / COURSE_LENGTH)
+    let cruise = 22 + 8 * avancement()
     // …la course propre et le sillage la portent dans le corps de course…
     cruise *= 1 + LIGNE_BOOST * ligneCharge + ASPI_BOOST * aspiCharge
     // …le martèlement la pousse encore un peu dans les derniers mètres…
@@ -3799,7 +3960,7 @@ function tick(now?: number) {
      * sprinterait sur la ligne de départ.
      */
     player.presse =
-      time < ventFin || distance >= COURSE_LENGTH - SPRINT_ZONE
+      time < ventFin || versLaFin()
     // 🧪 Banc d'essai figé : on se tient debout au lieu de pédaler sur place.
     // La foulée « repos » existe déjà pour la grille de départ, on la réutilise.
     player.auRepos = gele
@@ -3895,7 +4056,10 @@ function tick(now?: number) {
         flash()
         boom(new THREE.Vector3(player.mesh.position.x, 0.9, player.mesh.position.z)) // 💥
         jouerBruit('chute')
-        toast('💥 Trébuché !')
+        // ♾️ ICI, et nulle part ailleurs : c'est la seule branche où le coup
+        // est réellement encaissé. L'armure et l'escalade sont au-dessus.
+        if (modeInfini) encaisserCoup()
+        else toast('💥 Trébuché !')
         // Le rival doit le voir TOUT DE SUITE : sa version de nous ralentit
         // immédiatement (au lieu que son extrapolation nous fasse dépasser à tort)
         if (online) net.sendAction({ t: 'stumble', keep: player.grip })
@@ -4002,9 +4166,14 @@ function tick(now?: number) {
     }
 
     // Interface : chrono + progression
-    scoreEl.textContent = `${time.toFixed(1)} s`
+    // ♾️ En infini, c'est la DISTANCE qui compte, et c'est elle qu'on classe.
+    // Afficher un chrono donnerait à surveiller un chiffre qui ne décide de
+    // rien, pendant que le seul qui compte resterait invisible.
+    scoreEl.textContent = modeInfini ? `${Math.floor(distance)} m` : `${time.toFixed(1)} s`
     // La colonne monte : le remplissage ET ta tete suivent ta distance
-    const pct = Math.min(100, (distance / COURSE_LENGTH) * 100)
+    // ♾️ En infini, la colonne montre l'avancée DANS LE CYCLE : une jauge qui
+    // resterait pleine à jamais ne dirait plus rien.
+    const pct = Math.min(100, ((modeInfini ? distance % COURSE_LENGTH : distance) / COURSE_LENGTH) * 100)
     progressEl.style.height = `${pct}%`
 
     // Interface du sprint : on annonce, puis la jauge suit le martèlement
@@ -4066,7 +4235,9 @@ function tick(now?: number) {
     }
 
     // ⛩️ Ligne d'arrivée !
-    if (distance >= COURSE_LENGTH) crossFinishLine()
+    // ♾️ Une course sans fin n'a pas de ligne d'arrivée à franchir : ce sont
+    // les flammes qui décident, et elles passent par encaisserCoup().
+    if (!modeInfini && distance >= COURSE_LENGTH) crossFinishLine()
   } else {
     // Au menu / en attente : le décor défile doucement.
     //
@@ -4103,8 +4274,22 @@ function tick(now?: number) {
    * une nappe ailleurs ne demandera pas de revenir ici.
    */
   const enCourse = state === 'depart' || state === 'course' || state === 'fini'
-  const biomeIci = enCourse ? BIOMES[indexBiome(distance, COURSE_LENGTH)] : null
-  feuAmbiance(biomeIci?.ambiance === 'feu' ? 1 : 0, dt)
+  // ♾️ En infini les biomes BOUCLENT (cf. Track.biomeDe) : sans le modulo, on
+  // resterait sur le dernier décor — et son ambiance sonore — pour toujours.
+  const biomeIci = enCourse
+    ? BIOMES[indexBiome(modeInfini ? distance % COURSE_LENGTH : distance, COURSE_LENGTH)]
+    : null
+  /*
+   * ♾️ En infini, le feu qui poursuit COUVRE celui du décor.
+   *
+   * Les deux se disputeraient le même bruit de flammes, et le joueur ne saurait
+   * plus lequel il entend : celui du village qu'il traverse, ou celui qui va le
+   * rattraper. Le second est le seul qui puisse le tuer — il gagne, et il monte
+   * avec les dégâts pour qu'on l'entende approcher sans quitter la piste des
+   * yeux.
+   */
+  const feuPoursuite = modeInfini && enCourse ? 0.25 + 0.75 * (degats / DEGATS_MAX) : 0
+  feuAmbiance(Math.max(feuPoursuite, biomeIci?.ambiance === 'feu' ? 1 : 0), dt)
   oiseauxAmbiance(biomeIci?.ambiance === 'oiseaux' ? 1 : 0, dt)
 
   // La caméra suit en douceur la ligne du joueur

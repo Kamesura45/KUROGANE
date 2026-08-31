@@ -2228,3 +2228,83 @@ body {
   text-align: left;
   line-height: 1.4;
 }
+
+/* ————— ♾️ Le brasier qui poursuit, en mode infini —————
+
+   Un effet d'ÉCRAN, pas un décor : la caméra regarde devant, un mur de feu
+   dans le dos du coureur ne se verrait jamais. Le feu envahit donc l'image par
+   le bas et par les bords, là où l'œil le perçoit sans quitter la piste des
+   yeux.
+
+   ⚠️ TOUT EST PILOTÉ PAR UNE SEULE VARIABLE, `--proche` (0 → 1). Le jeu ne
+   touche qu'à elle ; la mise en scène vit ici. Sans ça, il faudrait écrire six
+   états en dur des deux côtés et les tenir d'accord.
+
+   `--proche` vaut 0 hors du mode infini : l'élément est alors totalement
+   transparent et ne coûte rien. */
+#brasier {
+  --proche: 0;
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /*
+   * ⚠️ PAS DE `z-index` ICI, comme #terre et #flash juste au-dessus.
+   *
+   * Un `z-index: 3` faisait passer le brasier PAR-DESSUS le menu : à la mort,
+   * l'écran de fin s'affichait noyé d'orange et le bouton « rejouer » devenait
+   * illisible. `#overlay` se peint en `auto`, donc selon l'ordre du DOM — il
+   * suffit que le brasier soit déclaré avant lui dans index.html, ce qui est le
+   * cas. Le feu reste alors visible EN FOND derrière le menu translucide, ce
+   * qui est exactement l'effet voulu.
+   */
+  opacity: var(--proche);
+  /* La lueur monte du bas ; sa hauteur suit `--proche`, si bien que le feu
+     paraît GAGNER du terrain plutôt que simplement s'éclaircir. */
+  background:
+    radial-gradient(
+      ellipse 140% calc(18% + var(--proche) * 42%) at 50% 104%,
+      rgba(255, 214, 120, 0.95) 0 12%,
+      rgba(255, 122, 34, 0.85) 30%,
+      rgba(190, 44, 12, 0.55) 55%,
+      transparent 80%
+    ),
+    radial-gradient(
+      ellipse calc(10% + var(--proche) * 16%) 90% at -2% 70%,
+      rgba(255, 120, 40, 0.7) 0 40%,
+      transparent 75%
+    ),
+    radial-gradient(
+      ellipse calc(10% + var(--proche) * 16%) 90% at 102% 70%,
+      rgba(255, 120, 40, 0.7) 0 40%,
+      transparent 75%
+    );
+  /* Le vacillement : jamais tout à fait immobile, jamais régulier non plus. */
+  animation: brasierVacille 0.9s ease-in-out infinite alternate;
+}
+@keyframes brasierVacille {
+  from {
+    filter: brightness(0.92) saturate(1);
+    transform: scaleY(0.985);
+  }
+  to {
+    filter: brightness(1.12) saturate(1.15);
+    transform: scaleY(1.02);
+  }
+}
+
+/* Le dernier palier : il ne reste qu'un coup à encaisser. Le rythme double et
+   la teinte vire au blanc-jaune — on doit SENTIR que c'est maintenant, sans
+   avoir à lire un chiffre. */
+#brasier.critique {
+  animation-duration: 0.32s;
+}
+
+/* ⚠️ Certains joueurs ne supportent pas les clignotements rapides, et un feu
+   qui bat à 3 Hz en plein écran en est un. On garde la couleur — c'est elle
+   qui porte l'information — et l'on retire le battement. */
+@media (prefers-reduced-motion: reduce) {
+  #brasier,
+  #brasier.critique {
+    animation: none;
+  }
+}

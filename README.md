@@ -35,6 +35,9 @@
 - 💬 **Chat de salon** en attendant le départ
 - 🏋️ Mode **entraînement solo** contre **1 à 4 rivaux** (voir
   [le roster](#-les-rivaux-dentraînement)), avec record personnel sauvegardé
+- ♾️ Mode **course sans fin** : pas de ligne d'arrivée, pas de rivaux. **Six
+  obstacles encaissés et les flammes te rattrapent** — on marque en mètres
+  ([voir le mode](#️-la-course-sans-fin))
 - 🏆 **Le classement**, en trois lectures : **Mondial** (le meilleur temps de
   chaque joueur), **Local** (tes temps sur cet appareil) et **Récentes** (tes
   dernières courses). Seules les courses **en ligne** entrent au mondial — ce
@@ -122,7 +125,8 @@ kurogane/
 ├── animation/          Les .fbx Mixamo déposés (la SOURCE des mouvements)
 ├── tools/
 │   ├── cuire-anims.mjs    La cuisson : .fbx → anims-cuites.json
-│   └── verifier-anims.ts  Le contrôle anatomique des mouvements reciblés
+│   ├── verifier-anims.ts  Le contrôle anatomique des mouvements reciblés
+│   └── verifier-infini.ts ♾️ La piste sans fin : coutures, biomes, équité
 └── server/
     └── src/
         ├── index.ts    Démarrage du serveur (port 2567) + les routes /api
@@ -562,6 +566,109 @@ On ne sonde que les **membres solides**. Les queues, capes et écharpes traînen
 volontiers plus bas : les inclure relèverait le corps entier pour sauver un
 bout de tissu, et la glissade se jouerait debout.
 
+
+## ♾️ La course sans fin
+
+Pas de ligne d'arrivée, pas de rivaux, pas de chrono : on court jusqu'à ce que
+les flammes vous rattrapent, et l'on marque en **mètres**.
+
+### La règle tient en une phrase
+
+**Six obstacles encaissés, et c'est fini.** Chacun rapproche le feu d'un
+sixième ; au sixième, il vous prend.
+
+⚠️ **Six COUPS, pas six rencontres.** Deux façons de croiser un obstacle sans
+rien payer :
+
+| Ce qui arrive | Compté ? | Pourquoi |
+|---|---|---|
+| 🛡️ L'armure encaisse | **non** | C'est tout l'intérêt de l'armure. La faire compter quand même la viderait de son sens |
+| 🧗 On escalade | **non** | On a franchi l'obstacle, pas subi. Le prix est déjà payé en vitesse |
+| 💥 On trébuche | **oui** | La seule branche où l'on perd vraiment son élan |
+
+Ce n'est pas trois règles mais une seule, et le code le dit : le compteur
+s'incrémente **dans la branche du trébuchement**, celle qui casse la vitesse.
+L'armure et l'escalade sont des branches sœurs, en amont ; elles ne peuvent pas
+compter par construction, sans qu'on ait à les traiter à part.
+
+**Le compteur ne redescend jamais.** C'était tentant — récompenser une longue
+série propre en éloignant un peu les flammes — mais « six obstacles et c'est
+fini » deviendrait « six obstacles rapprochés ». Une règle qu'on ne peut plus
+énoncer en une phrase ne se retient pas, et le joueur ne saurait plus combien il
+lui reste de droit à l'erreur.
+
+### Les flammes sont un effet d'ÉCRAN, pas un décor
+
+⚠️ **La caméra est derrière le coureur et regarde devant : un mur de feu dans
+son dos ne se verrait jamais.** Le brasier envahit donc l'image par le bas et
+par les bords — là où l'œil le perçoit sans quitter la piste des yeux.
+
+Tout est piloté par **une seule variable CSS**, `--proche` (0 → 1) : le jeu n'y
+touche qu'au moment d'un coup, et la mise en scène (hauteur des flammes, emprise
+sur les bords, éclat, vacillement) vit entièrement dans `style.css`. Écrire les
+six paliers en dur des deux côtés aurait demandé de les tenir d'accord à jamais.
+
+Deux détails qui font la différence :
+
+- **Un feu de fond dès le premier mètre** (`--proche` part à 0,1). Sans lui, un
+  joueur qui n'a rien encaissé ne verrait aucun feu et ne saurait pas qu'il est
+  poursuivi. La règle doit s'apprendre en jouant, pas dans un écran d'aide.
+- **Pas de `z-index`.** Il en portait un, et le brasier passait alors PAR-DESSUS
+  le menu : à la mort, l'écran de fin s'affichait noyé d'orange et le bouton
+  « rejouer » devenait illisible. `#overlay` se peint en `auto`, donc selon
+  l'ordre du DOM — il suffit que le brasier soit déclaré avant lui.
+
+Le feu qui poursuit **couvre** celui du village en flammes, côté son : les deux
+se disputeraient le même bruit, et le joueur ne saurait plus lequel il entend —
+or un seul peut le tuer.
+
+### La piste se coud au fur et à mesure
+
+Une course ordinaire est décidée d'un bloc. Sans fin, il n'y a pas de bloc : on
+bâtit des **tronçons** de 1 920 m avec les mêmes générateurs, puis on décale
+leurs mètres et on les rattache. La piste sans fin est faite des mêmes morceaux
+que l'autre, mis bout à bout.
+
+Trois pièges, tous traités dans `Track.etendre()` :
+
+- **Les marges tombent au raccord.** Chaque générateur laisse des mètres calmes
+  au début et dégage la zone de sprint à la fin. Les garder creuserait plus de
+  150 m sans rien **à chaque couture** — un hoquet régulier que le joueur
+  finirait par sentir. D'où les paramètres `depart` et `garde`.
+- ⚠️ **Les plateformes à cheval sont repassées au générateur d'obstacles.** Une
+  plateforme du tronçon précédent peut déborder sur le suivant ; le générateur,
+  qui ne connaît que son propre tronçon, poserait des barrières sur les deux
+  lignes restantes sans savoir que la troisième est prise. On obtiendrait une
+  rangée **sans aucun passage** — le seul défaut vraiment injuste que cette
+  piste puisse produire.
+- **Les biomes bouclent.** `indexBiome` borne au dernier décor dès qu'on dépasse
+  la longueur : sans modulo, on courrait sur le flanc du Fuji jusqu'à la fin des
+  temps, ambiance sonore comprise.
+
+Et **la vitesse plafonne**. `distance / COURSE_LENGTH` grandit sans borne quand
+il n'y a plus d'arrivée : la croisière doublerait tous les deux kilomètres et le
+jeu deviendrait injouable au bout de quelques minutes — non par difficulté, mais
+par absurdité. On monte jusqu'au maximum d'une course ordinaire, puis on s'y
+tient. La tension vient des flammes, pas d'une vitesse que personne ne peut plus
+tenir.
+
+### Ce que le banc vérifie
+
+`npm run infini:test` fait courir le **vrai** `Track` sur six cycles (11 520 m),
+sur six graines :
+
+- le plan garde toujours de l'avance sur le coureur ;
+- une course ordinaire, elle, s'arrête bien à sa ligne d'arrivée ;
+- les biomes reviennent tous, et le 6ᵉ cycle rejoue depuis le premier décor ;
+- ⚠️ **les coutures ne concentrent pas les rangées chargées** (4,9 % contre
+  5,3 % ailleurs).
+
+> ⚠️ Ce dernier test **compare**, il ne compte pas. Une première version comptait
+> les rangées « bouchées » dans l'absolu et en trouvait 105 — y compris sur une
+> course ordinaire, pourtant juste par construction. La mesure était donc fausse,
+> pas la piste. Une mesure grossière reste utile si elle est grossière **partout
+> pareil** : on regarde si les coutures sortent du lot, ce qui est la seule chose
+> que le mode infini puisse avoir cassée.
 ## 🏆 Le classement — pourquoi le solo n'y entre pas
 
 Trois onglets, et une règle qui explique tout : **seules les courses en ligne

@@ -41,6 +41,8 @@ type ScreenName =
 
 export interface MenuCallbacks {
   onSolo(): void
+  /** ♾️ La course sans fin : pas de rivaux, pas de ligne d’arrivée. */
+  onInfini(): void
   onOnline(): void
   /** Le joueur a changé de guerrier */
   onFighter(f: Fighter): void
@@ -261,6 +263,7 @@ export class Menu {
 
     // — Écran « Jouer » : les quatre entrées en piste —
     document.getElementById('btnSolo')!.addEventListener('click', () => cb.onSolo())
+    document.getElementById('btnInfini')!.addEventListener('click', () => cb.onInfini())
     document.getElementById('btnQuickJouer')!.addEventListener('click', () => cb.onQuick())
     document.getElementById('btnCreateJouer')!.addEventListener('click', () => cb.onCreateSalon())
     // « Rejoindre » ouvre l'écran des salons : c'est lui qui porte le champ de
@@ -599,7 +602,16 @@ export class Menu {
     joueurs: { nom: string; temps: number | null; moi: boolean }[]
     canReplay: boolean
     canLobby: boolean
+    /**
+     * ♾️ Comment lire le chiffre. Une course se mesure en secondes, l'infini en
+     * MÈTRES — et là, le plus grand gagne. Le podium ne trie pas lui-même : il
+     * affiche l'ordre qu'on lui donne, si bien qu'inverser le classement se
+     * fait chez l'appelant et que cette fonction n'a qu'à savoir écrire.
+     */
+    format?: (v: number) => string
   }) {
+    const ecrire = (v: number | null) =>
+      v === null ? 'abandon' : (opts.format ?? ((x: number) => `${x.toFixed(2)} s`))(v)
     this.el.finTitre.innerHTML = opts.titre
 
     // Les trois marches, dans l'ordre du DOM (2 · 1 · 3) et non du classement.
@@ -614,7 +626,7 @@ export class Menu {
       if (!j) return
       marche.querySelector<HTMLElement>('.pod-nom')!.textContent = j.nom
       marche.querySelector<HTMLElement>('.pod-temps')!.textContent =
-        j.temps === null ? 'abandon' : `${j.temps.toFixed(2)} s`
+        ecrire(j.temps)
     })
 
     // Du 4ᵉ au dernier : la liste, qui existait déjà et n'avait pas à changer.
@@ -632,7 +644,7 @@ export class Menu {
         nom.textContent = j.nom
         const temps = document.createElement('span')
         temps.className = 'restime'
-        temps.textContent = j.temps === null ? 'abandon' : `${j.temps.toFixed(2)} s`
+        temps.textContent = ecrire(j.temps)
         ligne.append(rang, nom, temps)
         liste.appendChild(ligne)
       })
