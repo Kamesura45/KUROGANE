@@ -39,7 +39,7 @@
   obstacles encaissés et les flammes te rattrapent** — on marque en mètres
   ([voir le mode](#️-la-course-sans-fin))
 - 🏆 **Le classement**, en trois lectures : **Mondial** (le meilleur temps de
-  chaque joueur), **Local** (tes temps sur cet appareil) et **Récentes** (tes
+  chaque joueur), **Géo** (les meilleurs d'un pays, d'un département ou d'une ville qu'on choisit) et **Récentes** (tes
   dernières courses). Seules les courses **en ligne** entrent au mondial — ce
   sont les seules dont le serveur chronomètre lui-même
   ([voir pourquoi](#-le-classement--pourquoi-le-solo-ny-entre-pas))
@@ -608,6 +608,12 @@ après la reprise. Aucun saut.*
 Sur PC, **T** met en pause et l'en sort.
 
 
+⚠️ **Et l'aide le dit.** La touche **T** et les règles du mode sans fin —
+cinq obstacles, les jarres qui alourdissent, le thé qui lave, le kunai qui fait
+sauter le mur, la carte qui recommence — sont écrites dans l'écran **Aide**.
+C'est le seul écran qu'un joueur ouvre pour comprendre ; des règles qui ne
+vivent que dans le README ne servent qu'à nous.
+
 > ⚠️ **Le bouton n'a longtemps répondu à rien, et mes essais ne l'ont pas vu.**
 > `#hud` est en `pointer-events: none` — et il le faut, sinon ce calque avalerait
 > les swipes destinés à la piste. Mais la règle s'**hérite**, donc elle éteignait
@@ -1047,43 +1053,53 @@ puisque c'est le client qui les compte, exactement comme pour les chronos solo.
 ### 🏆 Le classement : trois catégories, trois lectures
 
 L'écran s'ouvre sur la **catégorie** — ⚔️ Course VS.E · ♾️ Course Infinity ·
-🚧 En cours de dev. — puis, dessous, les trois lectures habituelles.
+🚧 En cours de dev. — puis, dessous, les trois lectures.
 
 | Onglet | Ce qu'on y voit |
 |---|---|
-| 🌍 **Mondial** | Les meilleurs de tous |
-| 📱 **Local** | Les meilleurs gardés sur cet appareil |
-| 🕓 **Récentes** | **Tes** courses à toi, la plus fraîche en tête |
+| 🌍 **Mondial** | Les meilleurs de partout |
+| 🗺️ **Géo** | Les meilleurs **d'un endroit qu'on choisit** — pays, puis département / région / ville |
+| 🕓 **Récentes** | **Tes** courses, ton record en tête et en rouge |
 
-⚠️ **Il n'y a PAS de filtre par pays, et c'est un choix.** Deux menus déroulants
-l'ont occupé un moment — on y choisissait le pays, puis son département / sa
-région / sa ville. Ils ont été retirés : le classement se lit en entier, la
-recherche par pseudo suffit à s'y retrouver, et **le drapeau reste affiché à côté
-de chaque nom** — on voit d'où vient chacun sans avoir à trier.
+⚠️ **« Local » s'appelle « Géo », parce qu'il n'était pas local.** Le mot
+promettait « ce qui est sur cet appareil » ; ce qu'on y cherche, c'est *les
+meilleurs de tel endroit*. Un onglet dont le nom décrit le stockage plutôt que la
+question n'aide personne.
 
-Le pays et la région restent **enregistrés** avec chaque temps, et voyagent
-jusqu'au serveur. Rien n'est perdu : rétablir un filtre plus tard ne demanderait
-que de remettre les deux menus.
+⚠️ **Le filtre n'apparaît QUE sous Géo.** C'est tout le sens de cet onglet :
+« Mondial » montre les meilleurs de partout, « Géo » ceux d'un endroit. Le
+laisser sous les trois ferait trois fois la même chose, et l'on ne saurait plus à
+quoi sert lequel.
 
-🚧 **La troisième catégorie est vide, et c'est voulu.** Un joueur qui voit qu'un
-mode arrive attend ; celui à qui l'on n'a rien dit croit avoir fait le tour.
+⚠️ **Une ligne sans pays est écartée dès qu'on filtre.** Les temps enregistrés
+avant que le pays existe n'en ont pas ; les ranger sous « France » leur
+inventerait une origine.
+
+#### 🔴 Le record en tête de « Récentes »
+
+Ta meilleure course remonte en première ligne, marquée 🏆 et **en vermillon**.
+
+⚠️ **Une chronologie pure enterre le record dès qu'on rejoue** : après dix
+parties moyennes, la meilleure est hors de l'écran et l'on ne sait plus ce qu'on
+avait fait. Le reste garde son ordre, du plus frais au plus vieux.
+
+Le vermillon est **distinct de l'or** de `.premier` : ce ne sont pas les mêmes
+premières places. L'or dit « premier de tous », le rouge « ton meilleur à toi ».
 
 #### ⚠️ Deux défauts trouvés en construisant tout ça
 
 **Le pays n'était pas relu.** Il était bien *écrit* avec chaque temps local, mais
-`chargerScores` l'oubliait en reconstruisant les objets — si bien que le drapeau
-s'affichait juste après la course, puis **disparaissait au redémarrage**. Le
-défaut ne se voyait qu'en relançant le jeu, jamais en jouant.
+`chargerScores` l'oubliait en reconstruisant les objets — le drapeau s'affichait
+juste après la course, puis **disparaissait au redémarrage**. Invisible en
+jouant, visible seulement en relançant le jeu.
 
 **Le serveur ne connaissait pas le pays du tout.** Ni colonne, ni champ dans les
-lignes du classement : il n'avait jamais quitté l'appareil. D'où la migration
-`005`, deux colonnes, et l'origine qui voyage avec l'identité du joueur jusqu'au
-salon — dans une Map **privée**, pas dans l'état synchronisé : les autres joueurs
-n'ont rien à en faire.
+lignes : il n'avait jamais quitté l'appareil. D'où la migration `005` et
+l'origine qui voyage avec l'identité du joueur — dans une Map **privée**, pas
+dans l'état synchronisé : les autres joueurs n'ont rien à en faire.
 
-⚠️ **Le pays et la région sont DÉCLARATIFS.** Ils viennent du client, qui les lit
-d'un réglage que le joueur choisit lui-même sans compte. Rien ne les vérifie et
-rien ne le peut : le drapeau est une façon de se présenter, pas un recensement.
+⚠️ **Le pays et la région sont DÉCLARATIFS.** Rien ne les vérifie et rien ne le
+peut : le drapeau est une façon de se présenter, pas un recensement.
 ### 🔎 Chercher un pseudo
 
 Les trois onglets portent un champ de recherche, à la place du bouton

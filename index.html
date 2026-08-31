@@ -474,8 +474,41 @@
             <tr><td>Lancer le sort</td><td>Double-tap</td><td>E</td></tr>
             <tr><td>🔥 Sprint final</td><td>Martèle l'écran</td><td>Espace · clic</td></tr>
             <tr><td>🚀 Départ canon</td><td>Martèle pendant le 3-2-1</td><td>Espace · clic</td></tr>
+            <tr><td>⏸ Pause &amp; quitter</td><td>Bouton ⏸ en haut à droite</td><td><b>T</b></td></tr>
           </tbody>
         </table>
+        <p class="lead">
+          ⏸ <b>La pause arrête la course</b> — chrono compris — et propose de
+          reprendre ou de quitter. <b>Sauf en ligne</b> : là, les autres
+          continuent de courir, alors rien ne se fige. Le bouton n'y sert qu'à
+          partir, et il le dit.
+        </p>
+
+        <!-- ♾️ Le mode a ses propres règles : il faut les dire quelque part, et
+             cet écran est le seul que le joueur ouvre pour comprendre. -->
+        <h3>♾️ La course sans fin</h3>
+        <p class="lead">
+          Pas de ligne d'arrivée, pas de rivaux : on court jusqu'à ce que les
+          <b>flammes</b> vous rattrapent, et l'on marque en <b>mètres</b>.
+        </p>
+        <p class="lead">
+          <b>Cinq obstacles encaissés et c'est fini.</b> Les cinq pastilles en
+          haut de l'écran comptent ce qu'il te reste. Deux façons de croiser un
+          obstacle sans rien payer : l'🛡️ <b>armure</b> qui encaisse, et une
+          🧗 <b>escalade</b> — tu l'as franchi, pas subi.
+        </p>
+        <p class="lead">
+          🏺 <b>Les jarres alourdissent</b>, et ça reste : chacune retire un cran
+          de vitesse, définitivement. Le compteur en bas à droite dit combien tu
+          en as pris et ce que ça coûte. Le 🍵 <b>thé</b> lave tout d'un coup.
+        </p>
+        <p class="lead">
+          🎯 Le <b>kunai</b> y fait sauter le prochain <b>mur</b> droit devant toi
+          — celui-là seulement, et pas les barrières qui se sautent. 🗺️ Les décors
+          se suivent au hasard, et tous les 1 920 m la carte recommence : c'est là
+          que les 🟢 <b>pots verts</b> ramassés sont versés. Boucler la carte ne
+          rend aucune vie.
+        </p>
         <p class="lead">
           ⚔️ Le même geste sert à bouger et à frapper : s'il y a une <b>jarre</b>
           ou un <b>rival</b> dans cette direction, tu attaques ; sinon tu te
@@ -543,7 +576,7 @@
              cet appareil, et ce que tu viens de courir. -->
         <div class="seg" id="scoresOnglets">
           <button data-t="mondial">🌍 Mondial</button>
-          <button data-t="local">📱 Local</button>
+          <button data-t="local">🗺️ Géo</button>
           <button data-t="recentes">🕓 Récentes</button>
         </div>
         <!--
@@ -563,14 +596,17 @@
           />
         </div>
         <!--
-          ⚠️ IL N'Y A PAS DE FILTRE PAR PAYS ICI, et c'est un choix.
+          🗺️ Le filtre géographique — ET IL N'APPARAÎT QUE SOUS « GÉO ».
 
-          Deux menus déroulants l'ont occupé un moment : on y choisissait le pays,
-          puis son département / sa région / sa ville. Ils ont été retirés — le
-          classement se lit en entier, et la recherche par pseudo suffit à s'y
-          retrouver. Le drapeau reste affiché à côté de chaque nom : on voit d'où
-          vient chacun sans avoir à trier.
+          C'est tout le sens de cet onglet : « Mondial » montre les meilleurs de
+          partout, « Géo » les meilleurs d'un endroit qu'on choisit. Laisser les
+          menus sous les autres onglets ferait trois fois la même chose et l'on
+          ne saurait plus à quoi sert lequel.
         -->
+        <div class="row hidden" id="scoresFiltre">
+          <select id="scoresPays" class="grow"></select>
+          <select id="scoresRegion" class="grow"></select>
+        </div>
         <p class="lead" id="scoresLead"></p>
         <div id="scoresBody" class="scores"></div>
         <div class="row">
@@ -600,8 +636,10 @@
         </header>
         <div class="stack">
           <button id="btnQuickJouer">⚡ PARTIE RAPIDE</button>
-          <button id="btnSolo" class="secondary">🏋️ ENTRAÎNEMENT</button>
+          <!-- ♾️ Devant l'entraînement : c'est un MODE, pas un échauffement. Il
+               se joue seul comme lui, mais on y vient pour lui-même. -->
           <button id="btnInfini" class="secondary">♾️ COURSE SANS FIN</button>
+          <button id="btnSolo" class="secondary">🏋️ ENTRAÎNEMENT</button>
           <button id="btnCreateJouer" class="secondary">🏮 CRÉER UN SALON</button>
           <button id="btnRejoindre" class="ghost">🔑 REJOINDRE UN SALON</button>
         </div>

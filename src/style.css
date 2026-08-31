@@ -2634,3 +2634,21 @@ body {
   line-height: 1.5;
   margin-bottom: 4px;
 }
+
+/* ————— 🔴 Ton record, en tête de « Récentes » —————
+
+   ⚠️ Distinct de `.premier`, qui DORE la première ligne d'un classement. Ici il
+   n'y a personne à battre : c'est ta meilleure course parmi les tiennes. Le
+   vermillon la sépare de l'or des classements — deux rouges auraient dit la
+   même chose, alors que ce ne sont pas les mêmes premières places. */
+.score.record {
+  background: rgba(226, 75, 58, 0.16);
+  border-color: #e24b3a;
+}
+.score.record .scorerang,
+.score.record .scoretemps {
+  color: #ff8b6d;
+}
+.score.record .scorecorps b {
+  color: #ffb9a3;
+}
