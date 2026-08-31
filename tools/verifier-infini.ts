@@ -40,6 +40,7 @@
 import * as THREE from 'three'
 import { Track } from '../src/track.ts'
 import { BIOMES } from '../src/biomes.ts'
+import { TIRAGE, TIRAGE_INFINI, tirerParchemin } from '../src/parchemin.ts'
 
 const CYCLE = 1920
 const LOIN = CYCLE * 6 // six cycles : cinq coutures a traverser
@@ -162,5 +163,37 @@ console.log('\n————— ⚠️ Les coutures ne sont pas plus dures que le
   )
 }
 
+
+console.log('\n————— ♾️ Les rouleaux de la course sans fin —————\n')
+{
+  const VOULUS = ['armure', 'grue', 'the', 'kunai']
+  ok(
+    TIRAGE_INFINI.length === VOULUS.length && VOULUS.every((k) => TIRAGE_INFINI.includes(k as any)),
+    'la table contient exactement les quatre demandes',
+    TIRAGE_INFINI.join(', ')
+  )
+
+  // Les six autres visent un adversaire ou parent un sort : seuls, ils ne
+  // feraient rien. Un rouleau sur deux sans effet, ce n'est pas plus dur —
+  // c'est un ramassage qui ment.
+  const exclus = TIRAGE.filter((k) => !TIRAGE_INFINI.includes(k))
+  ok(exclus.length === TIRAGE.length - 4, 'les autres sont bien ecartes', exclus.join(', '))
+
+  // Dix mille tirages : si un sort ecarte pouvait encore sortir, il sortirait.
+  const sortis = new Set<string>()
+  for (let i = 0; i < 10_000; i++) sortis.add(tirerParchemin(Math.random, TIRAGE_INFINI))
+  ok(
+    [...sortis].every((k) => TIRAGE_INFINI.includes(k as any)),
+    'sur 10 000 tirages, rien d autre ne sort',
+    `${sortis.size} sortes vues`
+  )
+  ok(sortis.size === 4, 'et les quatre sortent bien', [...sortis].sort().join(', '))
+
+  // ⚠️ La table par defaut ne doit PAS avoir bouge : une course ordinaire
+  // continue de tirer dans les dix.
+  const ordinaires = new Set<string>()
+  for (let i = 0; i < 10_000; i++) ordinaires.add(tirerParchemin())
+  ok(ordinaires.size === TIRAGE.length, 'une course ordinaire tire toujours dans les dix', `${ordinaires.size} sortes`)
+}
 console.log(rates === 0 ? '\nTout est bon.\n' : `\n❌ ${rates} verification(s) en echec.\n`)
 process.exit(rates === 0 ? 0 : 1)

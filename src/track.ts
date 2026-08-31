@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { LANES, MUR_X, ECART_LIGNE, JUMP_SPEED } from './player'
-import { tirerParchemin, TIRAGE, type ParcheminKind } from './parchemin'
+import { tirerParchemin, TIRAGE, TIRAGE_INFINI, type ParcheminKind } from './parchemin'
 import { BIOMES, ambianceA, indexBiome, LONG_BARRIERE, MUR_HAUT } from './biomes'
 import type { Ambiance } from './biomes'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
@@ -1862,7 +1862,9 @@ export class Track {
       if (box.intersectsBox(playerBox)) {
         r.active = false
         r.mesh.visible = false
-        return tirerParchemin() // Math.random : mon tirage, rien qu'à moi
+        // Math.random : mon tirage, rien qu'à moi. ♾️ La course sans fin puise
+        // dans une table restreinte — `cycle` la désigne déjà (cf. TIRAGE_INFINI).
+        return tirerParchemin(Math.random, this.cycle > 0 ? TIRAGE_INFINI : TIRAGE)
       }
     }
     return null

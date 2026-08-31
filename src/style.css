@@ -2308,3 +2308,93 @@ body {
     animation: none;
   }
 }
+
+/* ————— ♾️ Le droit à l'erreur —————
+
+   En haut AU MILIEU : c'est le seul chiffre qui décide de la partie, et le
+   chrono occupe déjà le coin gauche.
+
+   ⚠️ Six pastilles, pas un « 2 / 6 ». On lit un nombre de points d'un coup
+   d'œil, sans quitter la piste des yeux ; un chiffre demande de le lire PUIS de
+   le comparer au maximum. Sur une piste qui défile à 25 m/s, cette demi-seconde
+   est un obstacle raté. Le mot sous les pastilles ne sert qu'à lever le doute
+   la première fois — après, on ne regarde plus que les pastilles. */
+#degats {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  pointer-events: none;
+  text-align: center;
+}
+#degats.hidden {
+  display: none;
+}
+#degatsPuces {
+  display: flex;
+  gap: 5px;
+}
+#degatsPuces i {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  /* Intacte : creuse et sobre. Elle ne doit pas attirer l'œil — c'est sa
+     DISPARITION qui porte l'information. */
+  background: rgba(255, 255, 255, 0.13);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+/* Encaissée : elle s'éteint en braise. Le feu la mange, littéralement. */
+#degatsPuces i.pris {
+  background: #e24b3a;
+  border-color: #ff9a5c;
+  box-shadow: 0 0 8px rgba(226, 75, 58, 0.75);
+}
+#degatsMot {
+  /*
+   * ⚠️ PETIT, ET BORNÉ EN LARGEUR.
+   *
+   * Le chrono occupe le coin gauche et les boutons le coin droit : au milieu,
+   * il ne reste qu'une bande étroite. En 420 px de large, ce mot passait sous
+   * les boutons. Il ne porte qu'un rappel — ce sont les PASTILLES qu'on lit en
+   * jouant — donc il cède la place plutôt que de se superposer.
+   */
+  font-size: 0.6rem;
+  max-width: 46vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.05em;
+  color: #cbd2e6;
+  /* Un fond discret : ce mot se lit par-dessus une piste claire comme sombre. */
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(13, 16, 28, 0.55);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+/* Il ne reste qu'un coup : le mot passe au vermillon et bat avec le brasier. */
+#degats.critique #degatsMot {
+  color: #ff6a4d;
+  font-weight: 700;
+}
+#degats.critique #degatsPuces i:not(.pris) {
+  border-color: #ff6a4d;
+  animation: degatsDernier 0.6s ease-in-out infinite alternate;
+}
+@keyframes degatsDernier {
+  from {
+    box-shadow: 0 0 0 rgba(255, 106, 77, 0);
+  }
+  to {
+    box-shadow: 0 0 10px rgba(255, 106, 77, 0.9);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #degats.critique #degatsPuces i:not(.pris) {
+    animation: none;
+  }
+}

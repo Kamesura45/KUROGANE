@@ -69,6 +69,22 @@ export const TIRAGE: ParcheminKind[] = [
 ]
 
 /**
+ * ————— ♾️ Ce que la course sans fin fait tomber —————
+ *
+ * Quatre rouleaux seulement. Les six autres visent un ADVERSAIRE ou parent un
+ * sort reçu — or on y court seul : ils tomberaient sur une cible qui n'existe
+ * pas. Un rouleau sur deux sans effet, ce n'est pas un mode plus difficile,
+ * c'est un ramassage qui ment.
+ *
+ * Les quatre gardés sont ceux qui agissent sur SOI, contre la piste :
+ *   · 🛡️ l'armure, qui encaisse sans que le coup compte ;
+ *   · 🕊️ le saut de la grue, pour rattraper un obstacle mal lu ;
+ *   · 🍵 le thé, qui nettoie les afflictions ;
+ *   · 🎯 le kunai, gardé sur demande.
+ */
+export const TIRAGE_INFINI: ParcheminKind[] = ['armure', 'grue', 'the', 'kunai']
+
+/**
  * Le tirage d'un parchemin, AU MOMENT DU RAMASSAGE — pas à la génération de la
  * piste. C'est ce qui évite que tout le monde décroche le même pouvoir sur la
  * même boîte : les rouleaux sont aux mêmes endroits pour tous (piste partagée),
@@ -77,8 +93,12 @@ export const TIRAGE: ParcheminKind[] = [
  * `rng` : Math.random pour un vrai joueur (chacun son tirage) ; le générateur
  * à graine d'un bot, pour qu'il reste rejouable tout en tirant AILLEURS.
  */
-export function tirerParchemin(rng: () => number = Math.random): ParcheminKind {
-  return TIRAGE[Math.floor(rng() * TIRAGE.length)]
+export function tirerParchemin(
+  rng: () => number = Math.random,
+  /** La table où puiser — restreinte en course sans fin (cf. TIRAGE_INFINI). */
+  table: ParcheminKind[] = TIRAGE
+): ParcheminKind {
+  return table[Math.floor(rng() * table.length)]
 }
 
 /** Les sorts qui partent chez quelqu'un d'autre — les seuls que le serveur relaie. */

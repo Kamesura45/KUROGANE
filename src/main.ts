@@ -325,6 +325,9 @@ const terreEl = document.getElementById('terre')!
 // ♾️ Le brasier du mode infini. Toute sa mise en scène vit dans la CSS ; le jeu
 // ne touche qu'à une variable, `--proche` (cf. #brasier dans style.css).
 const brasierEl = document.getElementById('brasier')!
+const degatsEl = document.getElementById('degats')!
+const degatsPucesEl = document.getElementById('degatsPuces')!
+const degatsMotEl = document.getElementById('degatsMot')!
 const progressEl = document.getElementById('progressfill')!
 const gapEl = document.getElementById('gap')!
 const aspiEl = document.getElementById('aspi')!
@@ -2430,9 +2433,36 @@ function backToMenu(banner?: string) {
 function majBrasier() {
   const p = modeInfini ? 0.1 + 0.9 * (degats / DEGATS_MAX) : 0
   brasierEl.style.setProperty('--proche', p.toFixed(3))
+  const critique = modeInfini && DEGATS_MAX - degats <= 1
   // Le dernier palier bat plus vite : on doit sentir que c'est maintenant,
   // sans avoir à lire un chiffre.
-  brasierEl.classList.toggle('critique', modeInfini && DEGATS_MAX - degats <= 1)
+  brasierEl.classList.toggle('critique', critique)
+
+  // ————— Le compte des coups, en haut au milieu —————
+  degatsEl.classList.toggle('hidden', !modeInfini)
+  degatsEl.classList.toggle('critique', critique)
+  if (!modeInfini) return
+
+  // Les pastilles sont bâties une fois puis seulement rallumées : les recréer à
+  // chaque coup relancerait leur transition depuis le début, et le fondu de
+  // celles déjà éteintes repartirait à zéro sous les yeux du joueur.
+  if (degatsPucesEl.childElementCount !== DEGATS_MAX) {
+    degatsPucesEl.replaceChildren(
+      ...Array.from({ length: DEGATS_MAX }, () => document.createElement('i'))
+    )
+  }
+  const puces = degatsPucesEl.children
+  for (let i = 0; i < puces.length; i++) puces[i].classList.toggle('pris', i < degats)
+
+  /*
+   * ⚠️ COURT. Le chrono tient le coin gauche, les boutons le coin droit : au
+   * milieu il ne reste qu'environ 145 px sur un téléphone étroit. « 6 avant les
+   * flammes » passait sous les boutons. Les PASTILLES disent déjà tout — celles
+   * qui restent et celles qu'on a perdues — ce mot n'est qu'un rappel chiffré.
+   */
+  const reste = DEGATS_MAX - degats
+  degatsMotEl.textContent =
+    reste === 0 ? 'RATTRAPÉ' : reste === 1 ? 'DERNIÈRE' : `reste ${reste}`
 }
 /**
  * ————— ♾️ Un coup encaissé, en mode infini —————
@@ -2454,9 +2484,9 @@ function encaisserCoup() {
     finInfini()
     return
   }
-  // On annonce ce qui RESTE, pas ce qui est perdu : c'est ce que le joueur a
-  // besoin de savoir pour décider s'il tente le passage serré.
-  toast(reste === 1 ? '🔥 Un seul faux pas et tu brûles !' : `🔥 Encore ${reste} avant les flammes`)
+  // Le message ne RÉPÈTE plus le compte : la jauge du haut le montre en
+  // permanence. Il marque l'instant du coup, ce qu'une jauge ne sait pas faire.
+  toast(reste === 1 ? '🔥 Dernière chance !' : '🔥 Les flammes gagnent du terrain')
 }
 
 /**
@@ -3384,10 +3414,18 @@ function tick(now?: number) {
       dernierChiffre = chiffre
     }
 
-    // ————— Le DÉPART CANON : marteler dans les 3 dernières secondes —————
-    // Pas plus tôt : sur le décompte d'un salon, marteler dès le début serait
-    // épuisant et sans intérêt. La jauge n'apparaît que dans la ligne droite.
-    const canon = countdown <= 3.2
+    /*
+     * ————— Le DÉPART CANON : marteler dans les 3 dernières secondes —————
+     * Pas plus tôt : sur le décompte d'un salon, marteler dès le début serait
+     * épuisant et sans intérêt. La jauge n'apparaît que dans la ligne droite.
+     *
+     * ♾️ PAS EN COURSE SANS FIN. Le départ canon départage deux coureurs sur
+     * quelques dixièmes — or ici on court seul, contre les flammes. Gagner 0,3 s
+     * sur personne ne rapporte rien, et demander de marteler l'écran avant
+     * CHAQUE partie d'un mode où l'on recommence beaucoup n'est plus un choix
+     * tactique : c'est une corvée à l'entrée.
+     */
+    const canon = countdown <= 3.2 && !modeInfini
     sprintEl.classList.toggle('hidden', !canon)
     const pnow = performance.now() / 1000
     sprintTaps = sprintTaps.filter((t) => pnow - t < SPRINT_WINDOW)
@@ -3407,10 +3445,17 @@ function tick(now?: number) {
     if (ready) {
       countEl.classList.remove('show')
       state = 'course'
-      // La jauge convertit le martèlement en vitesse initiale : à fond, on
-      // part directement à la vitesse de croisière (≈ 0,3 s de gagnées) —
-      // toujours moins qu'un trébuchement : ça départage, ça ne décide pas.
-      speed = 12 + 10 * sprintCharge
+      /*
+       * La jauge convertit le martèlement en vitesse initiale : à fond, on part
+       * directement à la vitesse de croisière (≈ 0,3 s de gagnées) — toujours
+       * moins qu'un trébuchement : ça départage, ça ne décide pas.
+       *
+       * ♾️ Sans départ canon, on part À FOND. Laisser 12 punirait le joueur
+       * pour un mécanisme qu'on lui a RETIRÉ, et il passerait ses premières
+       * secondes à rattraper une lenteur qu'il ne pouvait pas éviter. Il n'y a
+       * d'ailleurs personne à départager : c'est le meilleur départ, pour tous.
+       */
+      speed = modeInfini ? 22 : 12 + 10 * sprintCharge
       player.auRepos = false // 🧍→🏃 fin de l'attente, la foulée reprend
       if (sprintCharge > 0.75) toast('🚀 Départ canon !')
       if (online)

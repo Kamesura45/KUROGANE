@@ -597,6 +597,42 @@ fini » deviendrait « six obstacles rapprochés ». Une règle qu'on ne peut pl
 énoncer en une phrase ne se retient pas, et le joueur ne saurait plus combien il
 lui reste de droit à l'erreur.
 
+
+### Ce que le mode retire, et pourquoi
+
+**Pas de départ canon.** Le martèlement du 3-2-1 départage deux coureurs sur
+quelques dixièmes — or ici on court seul, contre les flammes. Gagner 0,3 s sur
+personne ne rapporte rien, et l'exiger avant **chaque** partie d'un mode où l'on
+recommence beaucoup n'est plus un choix tactique : c'est une corvée à l'entrée.
+
+⚠️ **On part donc à pleine vitesse** (22, la croisière). Laisser la vitesse de
+départ à vide punirait le joueur pour un mécanisme qu'on lui a *retiré*, et il
+passerait ses premières secondes à rattraper une lenteur qu'il ne pouvait pas
+éviter.
+
+**Quatre rouleaux sur dix.** La piste ne fait plus tomber que 🛡️ l'armure,
+🕊️ le saut de la grue, 🍵 le thé et 🎯 le kunai. Les six autres visent un
+**adversaire** ou parent un sort reçu — or on court seul : ils tomberaient sur
+une cible qui n'existe pas. Un rouleau sur deux sans effet, ce n'est pas un mode
+plus difficile, c'est un ramassage qui ment.
+
+> ⚠️ Le 🎯 kunai est gardé sur demande, mais il vise lui aussi un adversaire :
+> sans rival devant, il part dans le vide (« …mais tu mènes déjà ! ») et libère
+> son emplacement. Il est donc, en l'état, un ramassage sans effet.
+
+### Le droit à l'erreur, en haut au milieu
+
+Six pastilles : rouges pour les coups pris, creuses pour ceux qui restent. Sous
+elles, un mot court (`reste 4`, puis `DERNIÈRE`).
+
+⚠️ **Des pastilles, pas un « 2 / 6 ».** On lit un nombre de points d'un coup
+d'œil, sans quitter la piste des yeux ; un chiffre demande de le lire *puis* de
+le comparer au maximum. Sur une piste qui défile à 25 m/s, cette demi-seconde
+est un obstacle raté.
+
+Et le mot est **court** parce que la place l'est : le chrono tient le coin
+gauche, les boutons le coin droit, il ne reste qu'environ 145 px au milieu sur
+un téléphone étroit. « 6 avant les flammes » passait sous les boutons.
 ### Les flammes sont un effet d'ÉCRAN, pas un décor
 
 ⚠️ **La caméra est derrière le coureur et regarde devant : un mur de feu dans
