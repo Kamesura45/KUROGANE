@@ -534,6 +534,10 @@
         <div class="seg seg-cat" id="scoresCategories">
           <button data-c="course">⚔️ Course VS.E</button>
           <button data-c="infini">♾️ Course Infinity</button>
+          <!-- 🚧 La place du prochain mode. Annoncée plutôt que cachée : un
+               joueur qui voit qu'il en vient un autre attend ; celui à qui l'on
+               n'a rien dit croit avoir fait le tour. -->
+          <button data-c="dev">🚧 En cours de dev.</button>
         </div>
         <!-- Trois lectures du même sujet : les meilleurs de tous, les tiens sur
              cet appareil, et ce que tu viens de courir. -->
@@ -557,6 +561,19 @@
             autocomplete="off"
             spellcheck="false"
           />
+        </div>
+        <!--
+          🌍 Où l'on veut regarder. Le pays d'abord, puis sa subdivision — le
+          second menu n'a de sens qu'une fois le premier choisi, et il se remplit
+          d'après lui (départements, régions ou villes selon le pays).
+
+          ⚠️ Ce n'est PAS le réglage de l'écran Compte : là-bas on dit d'où l'on
+          est, ici on dit où l'on regarde. Confondre les deux obligerait à changer
+          son propre pays pour jeter un œil au classement japonais.
+        -->
+        <div class="row" id="scoresFiltre">
+          <select id="scoresPays" class="grow"></select>
+          <select id="scoresRegion" class="grow"></select>
         </div>
         <p class="lead" id="scoresLead"></p>
         <div id="scoresBody" class="scores"></div>

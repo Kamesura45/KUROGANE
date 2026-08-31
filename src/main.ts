@@ -2695,6 +2695,7 @@ function finInfini() {
     fighter: menu.settings.fighter,
     date: Date.now(),
     pays: menu.settings.pays, // 🌍 le drapeau du jour, figé avec la distance
+    region: menu.settings.region,
   })
   const bat = metres > recordAvant
   jouerBruit(bat ? 'victoire' : 'defaite')
@@ -2940,6 +2941,7 @@ function crossFinishLine() {
       // 🌍 Figé avec le temps : changer de pays plus tard ne réécrit pas
       // l'histoire des courses déjà couponnées.
       pays: menu.settings.pays,
+      region: menu.settings.region, // 🏞️ figée avec le temps, comme le pays
     })
     const restants = [...rivals.values()].filter((r) => !r.finished).length
     menu.showStatus(
@@ -2977,6 +2979,7 @@ function crossFinishLine() {
     rivaux: bots.filter((b) => b.actif).length,
     date: Date.now(),
     pays: menu.settings.pays, // 🌍 le drapeau du jour, figé avec le temps
+    region: menu.settings.region,
   })
   const rangLine = rang > 0 ? `<br>🏆 ${rang}ᵉ meilleur temps` : ''
 
@@ -3173,6 +3176,9 @@ const identity = () => ({
   // skin : sans ses couleurs, les autres ne verraient qu'un corps generique.
   skin: menu.settings.fighter === PERSO_ID ? skinEnTexte(menu.settings.custom) : '',
   token: monJeton(),
+  // 🌍 D’où l’on se déclare : le classement mondial pourra s’y filtrer.
+  pays: menu.settings.pays,
+  region: menu.settings.region,
 })
 
 const menu = new Menu({

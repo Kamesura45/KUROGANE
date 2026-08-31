@@ -30,6 +30,15 @@ export interface Score {
    * sauvegarde — d'où l'optionnel.
    */
   pays?: string
+  /**
+   * 🏞️ La subdivision portée ce jour-là (département, région ou ville selon le
+   * pays), `''` si aucune.
+   *
+   * ⚠️ Figée avec le temps, comme le pays. Et ABSENTE des scores enregistrés
+   * avant son existence : un filtre par département ne peut donc pas les
+   * montrer, et c'est normal — on ne va pas leur inventer une origine.
+   */
+  region?: string
 }
 
 /** On n'en garde que dix : au-delà, plus personne ne lit. */
@@ -66,6 +75,14 @@ export function chargerScores(longueur: number): Score[] {
       mode: o.mode === 'ligne' ? 'ligne' : 'solo',
       rivaux: Number.isFinite(Number(o.rivaux)) ? Math.max(0, Math.floor(Number(o.rivaux))) : 0,
       date: Number.isFinite(Number(o.date)) ? Number(o.date) : 0,
+      /*
+       * ⚠️ CES DEUX-LÀ N'ÉTAIENT PAS RELUS. Le pays était bien ÉCRIT avec chaque
+       * temps, mais cette reconstruction l'oubliait — si bien que le drapeau
+       * s'affichait juste après la course, puis disparaissait au redémarrage.
+       * Le défaut ne se voyait qu'en relançant le jeu, jamais en jouant.
+       */
+      pays: typeof o.pays === 'string' ? o.pays : undefined,
+      region: typeof o.region === 'string' ? o.region : undefined,
     })
   }
   // On retrie à la lecture plutôt que de faire confiance à l'ordre stocké.
@@ -117,6 +134,15 @@ export interface ScoreInfini {
   date: number
   /** 🌍 Le pays porté CE JOUR-LÀ (code ISO, `''` si aucun) */
   pays?: string
+  /**
+   * 🏞️ La subdivision portée ce jour-là (département, région ou ville selon le
+   * pays), `''` si aucune.
+   *
+   * ⚠️ Figée avec le temps, comme le pays. Et ABSENTE des scores enregistrés
+   * avant son existence : un filtre par département ne peut donc pas les
+   * montrer, et c'est normal — on ne va pas leur inventer une origine.
+   */
+  region?: string
 }
 
 const CLE_INFINI = 'kurogane-infini-scores'
@@ -152,6 +178,7 @@ export function chargerInfini(): ScoreInfini[] {
       fighter: typeof o.fighter === 'string' ? o.fighter : 'yasuke',
       date: Number.isFinite(Number(o.date)) ? Number(o.date) : 0,
       pays: typeof o.pays === 'string' ? o.pays : undefined,
+      region: typeof o.region === 'string' ? o.region : undefined,
     })
   }
   /*

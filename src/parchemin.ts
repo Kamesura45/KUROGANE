@@ -80,9 +80,10 @@ export const TIRAGE: ParcheminKind[] = [
  *   · 🛡️ l'armure, qui encaisse sans que le coup compte ;
  *   · 🕊️ le saut de la grue, pour rattraper un obstacle mal lu ;
  *   · 🍵 le thé, qui nettoie les afflictions ;
- *   · 🎯 le kunai, gardé sur demande.
+ *   · 🎯 le kunai, qui fait sauter le mur devant soi ;
+ *   · 🌀 le vent du Nord, qui pousse.
  */
-export const TIRAGE_INFINI: ParcheminKind[] = ['armure', 'grue', 'the', 'kunai']
+export const TIRAGE_INFINI: ParcheminKind[] = ['armure', 'grue', 'the', 'kunai', 'vent']
 
 /**
  * Le tirage d'un parchemin, AU MOMENT DU RAMASSAGE — pas à la génération de la

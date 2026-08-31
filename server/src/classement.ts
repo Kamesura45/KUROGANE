@@ -18,6 +18,10 @@ export interface Score {
   fighter: string
   partants: number
   rang: number
+  /** 🌍 Code ISO à 2 lettres, déclaratif (cf. migration 005). '' si aucun. */
+  pays?: string
+  /** 🏞️ Département, région ou ville — déclaratif lui aussi. */
+  region?: string
   cree_le: string
   /** Vrai si cette ligne est celle du joueur qui consulte. */
   moi?: boolean
@@ -43,6 +47,10 @@ export async function enregistrer(s: {
   fighter: string
   partants: number
   rang: number
+  /** 🌍 Code ISO à 2 lettres, déclaratif (cf. migration 005). '' si aucun. */
+  pays?: string
+  /** 🏞️ Département, région ou ville — déclaratif lui aussi. */
+  region?: string
 }): Promise<void> {
   if (!pool) return
   // Un temps aberrant (0, négatif, NaN, ou plus long qu'une heure) n'a rien à
@@ -55,9 +63,25 @@ export async function enregistrer(s: {
   }
   try {
     await pool.query(
-      `insert into scores (joueur, pseudo, temps_ms, longueur, fighter, partants, rang)
-       values ($1, $2, $3, $4, $5, $6, $7)`,
-      [s.joueur, s.pseudo.slice(0, 12), ms, s.longueur, s.fighter, s.partants, s.rang]
+      `insert into scores (joueur, pseudo, temps_ms, longueur, fighter, partants, rang, pays, region)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        s.joueur,
+        s.pseudo.slice(0, 12),
+        ms,
+        s.longueur,
+        s.fighter,
+        s.partants,
+        s.rang,
+        /*
+         * ⚠️ BORNÉS ET RAMENÉS À `null`. Ils viennent du CLIENT, qui peut
+         * envoyer n'importe quoi : un code de trois cents caractères, ou une
+         * chaîne vide. Vide → `null`, pour que « pas d'origine » se dise d'une
+         * seule façon en base et qu'un filtre n'ait pas deux cas à traiter.
+         */
+        s.pays?.slice(0, 2) || null,
+        s.region?.slice(0, 60) || null,
+      ]
     )
   } catch (e) {
     console.error('classement :', e)
@@ -76,7 +100,7 @@ export async function mondial(longueur: number, moi?: string): Promise<Score[]> 
   const { rows } = await pool.query<Ligne>(
     `select * from (
        select distinct on (joueur)
-              joueur, pseudo, temps_ms, fighter, partants, rang, cree_le
+              joueur, pseudo, temps_ms, fighter, partants, rang, cree_le, pays, region
          from scores
         where longueur = $1
         order by joueur, temps_ms asc
@@ -92,7 +116,7 @@ export async function mondial(longueur: number, moi?: string): Promise<Score[]> 
 export async function recentes(joueur: string, longueur: number): Promise<Score[]> {
   if (!pool) return []
   const { rows } = await pool.query<Ligne>(
-    `select pseudo, temps_ms, fighter, partants, rang, cree_le
+    `select pseudo, temps_ms, fighter, partants, rang, cree_le, pays, region
        from scores
       where joueur = $1 and longueur = $2
       order by cree_le desc

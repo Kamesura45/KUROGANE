@@ -402,6 +402,10 @@ export interface LigneClassement {
   fighter: string
   partants: number
   rang: number
+  /** 🌍 D'où se déclare le coureur — déclaratif, cf. migration 005. */
+  pays?: string
+  /** 🏞️ Son département / région / ville, déclaratif lui aussi. */
+  region?: string
   cree_le: string
   moi?: boolean
 }

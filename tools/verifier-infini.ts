@@ -167,10 +167,10 @@ console.log('\n————— ⚠️ Les coutures ne sont pas plus dures que le
 
 console.log('\n————— ♾️ Les rouleaux de la course sans fin —————\n')
 {
-  const VOULUS = ['armure', 'grue', 'the', 'kunai']
+  const VOULUS = ['armure', 'grue', 'the', 'kunai', 'vent']
   ok(
     TIRAGE_INFINI.length === VOULUS.length && VOULUS.every((k) => TIRAGE_INFINI.includes(k as any)),
-    'la table contient exactement les quatre demandes',
+    'la table contient exactement les sorts demandes',
     TIRAGE_INFINI.join(', ')
   )
 
@@ -178,7 +178,7 @@ console.log('\n————— ♾️ Les rouleaux de la course sans fin ——�
   // feraient rien. Un rouleau sur deux sans effet, ce n'est pas plus dur —
   // c'est un ramassage qui ment.
   const exclus = TIRAGE.filter((k) => !TIRAGE_INFINI.includes(k))
-  ok(exclus.length === TIRAGE.length - 4, 'les autres sont bien ecartes', exclus.join(', '))
+  ok(exclus.length === TIRAGE.length - VOULUS.length, 'les autres sont bien ecartes', exclus.join(', '))
 
   // Dix mille tirages : si un sort ecarte pouvait encore sortir, il sortirait.
   const sortis = new Set<string>()
@@ -188,7 +188,7 @@ console.log('\n————— ♾️ Les rouleaux de la course sans fin ——�
     'sur 10 000 tirages, rien d autre ne sort',
     `${sortis.size} sortes vues`
   )
-  ok(sortis.size === 4, 'et les quatre sortent bien', [...sortis].sort().join(', '))
+  ok(sortis.size === VOULUS.length, 'et tous sortent bien', [...sortis].sort().join(', '))
 
   // ⚠️ La table par defaut ne doit PAS avoir bouge : une course ordinaire
   // continue de tirer dans les dix.
@@ -292,7 +292,7 @@ console.log('\n————— 🏺 La jarre DOREE aussi puise dans la table res
    * ailleurs, dans buildJarrePlan. Elle rendait donc poison, miroir, fumigene et
    * chaines en course sans fin : precisement les quatre qu'on avait ecartes.
    */
-  const INTERDITS = ['senbon', 'miroir', 'fumigene', 'kusarigama', 'vent', 'onmyoji']
+  const INTERDITS = ['senbon', 'miroir', 'fumigene', 'kusarigama', 'onmyoji']
   const GRAINES = [1, 7, 99, 1234, 4242, 55555, 8675309, 31337]
 
   const sortsDorees = (table?: any) => {
@@ -310,7 +310,7 @@ console.log('\n————— 🏺 La jarre DOREE aussi puise dans la table res
 
   ok(
     [...infini].every((k) => TIRAGE_INFINI.includes(k as any)),
-    'en infini, la doree ne rend QUE les quatre gardes',
+    'en infini, la doree ne rend QUE les sorts gardes',
     [...infini].sort().join(', ')
   )
   ok(

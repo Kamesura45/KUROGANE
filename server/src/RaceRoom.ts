@@ -200,6 +200,8 @@ export class RaceRoom extends Room<{ state: RaceState }> {
    * PRIVÉE, jamais synchronisée : le compte d'un joueur ne regarde que lui.
    */
   private comptes = new Map<string, string>()
+  /** 🌍 L’origine déclarée par chaque joueur — privée, comme les comptes. */
+  private origines = new Map<string, { pays: string; region: string }>()
 
   onCreate(options: any) {
     this.state.seed = Math.floor(Math.random() * 2 ** 31)
@@ -426,6 +428,18 @@ export class RaceRoom extends Room<{ state: RaceState }> {
      */
     const joueur = await compteDe(options?.token)
     if (joueur) this.comptes.set(client.sessionId, joueur)
+    /*
+     * 🌍 L'origine déclarée, gardée PRIVÉE elle aussi.
+     *
+     * Elle ne va pas dans l'état synchronisé : les autres joueurs n'ont rien à
+     * en faire, et l'y mettre ferait voyager deux chaînes de plus vingt fois par
+     * seconde pour une information qui ne sert QU'À la ligne du classement, une
+     * seule fois, à l'arrivée.
+     */
+    this.origines.set(client.sessionId, {
+      pays: typeof options?.pays === 'string' ? options.pays.slice(0, 2) : '',
+      region: typeof options?.region === 'string' ? options.region.slice(0, 60) : '',
+    })
     // Grille de départ : on répartit sur les 3 lignes (10 joueurs → chevauchement)
     p.startLane = this.state.players.size % 3
     p.lane = p.startLane
@@ -514,6 +528,7 @@ export class RaceRoom extends Room<{ state: RaceState }> {
           fighter: p.fighter,
           partants: this.state.players.size,
           rang: p.rank,
+          ...this.origines.get(sessionId),
         })
       } catch (e) {
         // Une panne de base ne doit pas faire tomber le salon : la course est

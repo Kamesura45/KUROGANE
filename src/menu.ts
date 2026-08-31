@@ -17,7 +17,13 @@ import { cleanName, loadSettings, saveSettings, type Quality, type Settings } fr
 import { montant } from './icones'
 import type { LobbyView, SalonInfo } from './net'
 import { COURSE_LENGTH } from './track'
-import { chargerScores, meilleuresInfini, formaterTemps, MAX_SCORES } from './scores'
+import {
+  chargerScores,
+  chargerInfini,
+  meilleuresInfini,
+  formaterTemps,
+  MAX_SCORES,
+} from './scores'
 import { PAYS, drapeau, regionsDe, niveauDe } from './pays'
 import { lireClassement } from './compte'
 
@@ -32,7 +38,7 @@ type OngletScore = 'mondial' | 'local' | 'recentes'
  * trier dans deux sens à la fois — d'où deux catégories, choisies avant tout le
  * reste.
  */
-type CategorieScore = 'course' | 'infini'
+type CategorieScore = 'course' | 'infini' | 'dev'
 
 type ScreenName =
   | 'title'
@@ -177,6 +183,10 @@ export class Menu {
   private ongletScore: OngletScore = 'mondial'
   /** La famille de classement affichée. On démarre sur les courses : c'est le mode historique. */
   private categorieScore: CategorieScore = 'course'
+  /** 🌍 Le pays qu'on REGARDE (`''` = tous). Rien à voir avec le sien. */
+  private filtrePays = ''
+  /** 🏞️ La subdivision qu'on regarde dans ce pays (`''` = tout le pays). */
+  private filtreRegion = ''
   /** Les couleurs achetées (0xrrggbb), ajoutées aux palettes du vestiaire. */
   private couleursAchetees: number[] = []
   private anim = new Anim()
@@ -218,6 +228,9 @@ export class Menu {
     start: document.getElementById('btnStart')!,
     // ————— Résultats —————
     scoresRech: document.getElementById('scoresRech') as HTMLInputElement,
+    scoresPays: document.getElementById('scoresPays') as HTMLSelectElement,
+    scoresRegion: document.getElementById('scoresRegion') as HTMLSelectElement,
+    scoresFiltre: document.getElementById('scoresFiltre')!,
     selPays: document.getElementById('selPays') as HTMLSelectElement,
     selRegion: document.getElementById('selRegion') as HTMLSelectElement,
     champRegion: document.getElementById('champRegion')!,
@@ -311,6 +324,31 @@ export class Menu {
         this.buildScores()
       })
     }
+    /*
+     * 🌍 Le filtre du classement : où l'on veut REGARDER.
+     *
+     * ⚠️ Sans rapport avec le pays de l'écran Compte, qui dit d'où l'on EST.
+     * Les confondre obligerait à se déclarer japonais pour jeter un œil au
+     * classement japonais.
+     *
+     * Bâti une seule fois : deux cents options recréées à chaque ouverture
+     * feraient ramer l'écran pour rien.
+     */
+    this.el.scoresPays.appendChild(new Option('🌍 Tous les pays', ''))
+    for (const p of PAYS) {
+      this.el.scoresPays.appendChild(new Option(`${drapeau(p.code)}  ${p.nom}`, p.code))
+    }
+    this.el.scoresPays.addEventListener('change', () => {
+      this.filtrePays = this.el.scoresPays.value
+      this.filtreRegion = '' // la subdivision tombe avec son pays
+      this.majFiltreRegion()
+      this.buildScores()
+    })
+    this.el.scoresRegion.addEventListener('change', () => {
+      this.filtreRegion = this.el.scoresRegion.value
+      this.buildScores()
+    })
+
     for (const b of document.querySelectorAll<HTMLElement>('#scoresCategories button')) {
       b.addEventListener('click', () => {
         this.categorieScore = (b.dataset.c ?? 'course') as CategorieScore
@@ -1224,18 +1262,40 @@ export class Menu {
       b.classList.toggle('on', b.dataset.c === this.categorieScore)
     }
     const infini = this.categorieScore === 'infini'
-    /*
-     * ⚠️ Les trois onglets DISPARAISSENT en Infinity, ils ne se grisent pas.
-     *
-     * « Mondial » et « Récentes » sont servis par le serveur, qui ne connaît que
-     * les chronos ; il n'existe pas de mondial des distances. Laisser les
-     * boutons en place promettrait trois lectures dont deux n'existent pas.
-     */
-    document.getElementById('scoresOnglets')?.classList.toggle('hidden', infini)
-    const titre = document.querySelector<HTMLElement>('#scr-scores h2')
-    if (titre) titre.textContent = infini ? 'Plus longues courses' : 'Meilleurs temps'
+    const dev = this.categorieScore === 'dev'
 
+    // 🚧 Le mode à venir n'a ni onglets, ni recherche, ni filtre : il n'a rien
+    // à filtrer. On ne montre pas des commandes qui ne commandent rien.
+    for (const id of ['scoresOnglets', 'scoresFiltre']) {
+      document.getElementById(id)?.classList.toggle('hidden', dev)
+    }
+    this.el.scoresRech.parentElement?.classList.toggle('hidden', dev)
+
+    const titre = document.querySelector<HTMLElement>('#scr-scores h2')
+    if (titre) {
+      titre.textContent = dev
+        ? 'Bientôt'
+        : infini
+          ? 'Plus longues courses'
+          : 'Meilleurs temps'
+    }
+
+    if (dev) {
+      hote.replaceChildren()
+      lead.textContent =
+        "🚧 Un troisième mode est en chantier. Sa place est déjà là — on préfère l'annoncer que de te laisser croire que tu as fait le tour."
+      return
+    }
+
+    this.majFiltreRegion()
     if (infini) {
+      // ⚠️ Les trois onglets sont là AUSSI en Infinity, comme demandé. Mais
+      // « Mondial » n'existe pas encore pour ce mode : le serveur ne stocke que
+      // des chronos. `buildScoresInfini` le dit franchement plutôt que d'afficher
+      // une liste vide qu'on prendrait pour une panne.
+      for (const b of document.querySelectorAll<HTMLElement>('#scoresOnglets button')) {
+        b.classList.toggle('on', b.dataset.t === this.ongletScore)
+      }
       this.buildScoresInfini(hote, lead)
       return
     }
@@ -1284,6 +1344,47 @@ export class Menu {
   }
 
   /**
+   * 🏞️ Remplit le second menu du filtre d'après le pays regardé.
+   *
+   * Il DISPARAÎT quand aucun pays n'est choisi : proposer des départements sans
+   * savoir de quel pays n'aurait aucun sens, et un menu vide se lit comme un bug.
+   */
+  private majFiltreRegion() {
+    const liste = regionsDe(this.filtrePays)
+    this.el.scoresRegion.classList.toggle('hidden', liste.length === 0)
+    this.el.scoresRegion.replaceChildren()
+    if (liste.length === 0) return
+    const MOTS = {
+      departement: 'Tous les départements',
+      region: 'Toutes les régions',
+      ville: 'Toutes les villes',
+      aucun: 'Partout',
+    } as const
+    this.el.scoresRegion.appendChild(new Option(MOTS[niveauDe(this.filtrePays)], ''))
+    for (const r of liste) this.el.scoresRegion.appendChild(new Option(r, r))
+    this.el.scoresRegion.value = this.filtreRegion
+  }
+
+  /**
+   * Le filtre géographique s'applique-t-il à cette ligne ?
+   *
+   * ⚠️ UNE LIGNE SANS PAYS EST ÉCARTÉE dès qu'on filtre. Les temps enregistrés
+   * avant que le pays existe n'en ont pas : les montrer sous « France » serait
+   * leur inventer une origine, et le classement mentirait.
+   */
+  /** Le nom précédé de son drapeau — tel quel si le coureur n'en a pas. */
+  private avecDrapeau(nom: string, pays?: string): string {
+    const d = drapeau(pays ?? '')
+    return d ? `${d} ${nom}` : nom
+  }
+
+  private dansLeFiltre(s: { pays?: string; region?: string }): boolean {
+    if (this.filtrePays && s.pays !== this.filtrePays) return false
+    if (this.filtreRegion && s.region !== this.filtreRegion) return false
+    return true
+  }
+
+  /**
    * ————— ♾️ Les plus longues courses sans fin —————
    *
    * Gardées sur l'appareil, comme les chronos locaux. Il n'y a pas de mondial
@@ -1292,7 +1393,21 @@ export class Menu {
    * contre les distances trafiquées, puisque c'est le CLIENT qui les compte.
    */
   private buildScoresInfini(hote: HTMLElement, lead: HTMLElement) {
-    const tous = meilleuresInfini()
+    // ⚠️ « Mondial » n'existe pas pour ce mode : le serveur ne stocke que des
+    // chronos. On le DIT, plutôt que d'afficher un vide qu'on prendrait pour
+    // une panne de réseau.
+    if (this.ongletScore === 'mondial') {
+      hote.replaceChildren()
+      lead.textContent =
+        "🌍 Pas encore de classement mondial pour la course sans fin — le serveur ne garde que les chronos. Tes distances sont dans « Local » et « Récentes »."
+      return
+    }
+
+    // 🕓 « Récentes » = TES courses, dans l'ordre du journal ; « Local » = les
+    // meilleures. Deux questions différentes sur les mêmes données.
+    const tous = (this.ongletScore === 'recentes' ? chargerInfini() : meilleuresInfini()).filter(
+      (s) => this.dansLeFiltre(s)
+    )
     const q = this.requeteScore
     // ⚠️ Le rang d'origine est conservé, comme partout ailleurs : filtrer puis
     // renuméroter donnerait la médaille d'or au 5ᵉ dès qu'il cherche son nom.
@@ -1333,7 +1448,7 @@ export class Menu {
 
   /** 📱 L'appareil : les temps solo comme en ligne, gardés ici et nulle part ailleurs. */
   private buildScoresLocal(hote: HTMLElement, lead: HTMLElement) {
-    const tous = chargerScores(COURSE_LENGTH)
+    const tous = chargerScores(COURSE_LENGTH).filter((s) => this.dansLeFiltre(s))
     const q = this.requeteScore
     /*
      * ⚠️ ON GARDE LE RANG D'ORIGINE. Filtrer puis numéroter la liste réduite
@@ -1422,7 +1537,9 @@ export class Menu {
     const q = this.requeteScore
     const vues = lignes
       .map((l, i) => ({ l, i }))
-      .filter(({ l }) => this.correspond(l.pseudo || 'Guerrier anonyme', q))
+      // 🌍 Le filtre géographique s'applique AUSSI ici : « les meilleurs du
+      // Japon » se lit dans le mondial, pas ailleurs.
+      .filter(({ l }) => this.correspond(l.pseudo || 'Guerrier anonyme', q) && this.dansLeFiltre(l))
 
     if (vues.length === 0) {
       this.videRecherche(lead, this.el.scoresRech.value.trim())
@@ -1445,8 +1562,12 @@ export class Menu {
           // classement mais une chronologie. On y montre la place à l'arrivée.
           rang: onglet === 'mondial' ? this.medaille(i) : `${l.rang}ᵉ`,
           jp: f.jp,
-          nom: l.pseudo || 'Guerrier anonyme',
-          detail: `${f.name} · ${place} · ${quand}`,
+          // 🌍 Le drapeau précède le nom, comme en local. Vide si le coureur ne
+          // s'est déclaré de nulle part — pas de carré vide à la place.
+          nom: this.avecDrapeau(l.pseudo || 'Guerrier anonyme', l.pays),
+          // Et sa subdivision suit son guerrier : c'est elle qu'on cherche quand
+          // on regarde « les meilleurs du Finistère ».
+          detail: `${f.name}${l.region ? ` · ${l.region}` : ''} · ${place} · ${quand}`,
           temps: formaterTemps(l.temps_ms / 1000),
           premier: onglet === 'mondial' && i === 0,
           moi: l.moi,

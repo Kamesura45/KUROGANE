@@ -111,6 +111,13 @@ export interface Identity {
   skin?: string
   /** Le jeton de session : dit au serveur quel compte crediter. */
   token?: string | null
+  /**
+   * 🌍 D'où le joueur se déclare. Voyage avec l'identité plutôt que par une
+   * route à part : c'est une facon de se presenter, au meme titre que le pseudo
+   * et le guerrier, et ca evite un aller-retour de plus au moment de l'arrivee.
+   */
+  pays?: string
+  region?: string
 }
 
 export const WS_URL: string =
