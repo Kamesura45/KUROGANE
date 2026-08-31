@@ -328,6 +328,9 @@ const brasierEl = document.getElementById('brasier')!
 const degatsEl = document.getElementById('degats')!
 const degatsPucesEl = document.getElementById('degatsPuces')!
 const degatsMotEl = document.getElementById('degatsMot')!
+const jarresEl = document.getElementById('jarres')!
+const jarresNEl = document.getElementById('jarresN')!
+const jarresPctEl = document.getElementById('jarresPct')!
 const progressEl = document.getElementById('progressfill')!
 const gapEl = document.getElementById('gap')!
 const aspiEl = document.getElementById('aspi')!
@@ -2010,6 +2013,7 @@ function lancerParchemin() {
      */
     const pesait = lourdeur
     lourdeur = 0
+    majJarres() // le compteur retombe a zero avec le poids
     theFin = time + THE_DUREE // 🍵 les cercles montent
     sonDeSoin()
     // On ne se vante que s'il y avait quelque chose à laver : annoncer une
@@ -2442,6 +2446,7 @@ function backToMenu(banner?: string) {
   modeInfini = false
   degats = 0
   lourdeur = 0 // 🏺 on repart léger
+  majJarres()
   majBrasier()
   /*
    * ⏳ UNE COURSE LANCÉE MAIS PAS ENCORE REJOINTE S'ANNULE ICI.
@@ -2502,6 +2507,23 @@ function backToMenu(banner?: string) {
  * encaissé ne verrait AUCUN feu et ne saurait pas qu'il est poursuivi. La règle
  * doit s'apprendre en jouant, pas dans un écran d'aide.
  */
+/**
+ * 🏺 Le compte des jarres percutées, sous le chiffre principal.
+ *
+ * Il ne s'affiche qu'en course sans fin : ailleurs, une jarre ne laisse aucune
+ * trace après le choc, et un compteur figé à zéro poserait une question sans
+ * réponse.
+ */
+function majJarres() {
+  jarresEl.classList.toggle('hidden', !modeInfini)
+  if (!modeInfini) return
+  jarresNEl.textContent = String(lourdeur)
+  // Le pourcentage n'apparaît que s'il y a quelque chose à perdre : « −0 % »
+  // occuperait la place pour ne rien dire.
+  const perte = Math.round((1 - facteurLourdeur()) * 100)
+  jarresPctEl.textContent = perte > 0 ? `−${perte} %` : ''
+}
+
 function majBrasier() {
   const p = modeInfini ? 0.1 + 0.9 * (degats / DEGATS_MAX) : 0
   brasierEl.style.setProperty('--proche', p.toFixed(3))
@@ -2580,28 +2602,48 @@ function finInfini() {
    * Le rang n'est annoncé que s'il existe : dire « 11ᵉ » quand la table n'en
    * garde que dix serait un classement fantôme.
    */
-  const { scores, rang } = ajouterInfini({
+  const { recordAvant, precedentes } = ajouterInfini({
     metres,
     nom: menu.settings.name || 'Guerrier anonyme',
     fighter: menu.settings.fighter,
     date: Date.now(),
     pays: menu.settings.pays, // 🌍 le drapeau du jour, figé avec la distance
   })
-  const record = scores[0]?.metres ?? metres
-  const bat = rang === 1
+  const bat = metres > recordAvant
   jouerBruit(bat ? 'victoire' : 'defaite')
 
-  const rangLine = rang > 1 ? `<br><small>${rang}ᵉ meilleure course</small>` : ''
+  /*
+   * ————— ♾️ Un relevé, pas un podium —————
+   *
+   * Un podium à trois marches suppose trois coureurs ; ici on court seul, et
+   * deux marches vides se liraient comme un abandon. On montre donc les seuls
+   * chiffres qui aient un sens en solitaire : ce qu'on vient de faire, le
+   * record, et les courses d'avant — de quoi voir si l'on progresse.
+   *
+   * ⚠️ Le record affiché est celui d'AVANT quand on vient de le battre : « tu
+   * as fait 1240, ton record est 1240 » n'apprendrait rien. On montre ce qui a
+   * été dépassé, ce qui est toute la nouvelle.
+   */
+  const resume = [
+    { label: 'Cette course', valeur: `${metres} m`, fort: true },
+    {
+      label: bat ? 'Ancien record' : 'Ton record',
+      valeur: `${bat ? recordAvant : Math.max(recordAvant, metres)} m`,
+    },
+    ...precedentes.map((p, i) => ({
+      label: i === 0 ? 'Course précédente' : 'Celle d\'avant',
+      valeur: `${p.metres} m`,
+    })),
+  ]
+
   menu.showFin({
     titre: bat
-      ? `🔥 Rattrapé — mais c'est ton RECORD&nbsp;!<br><small>${metres} m</small>`
-      : `🔥 Les flammes t'ont rattrapé<br><small>Record&nbsp;: ${record} m</small>${rangLine}`,
-    joueurs: [
-      { nom: menu.settings.name || 'Guerrier anonyme', temps: metres, moi: true },
-    ],
+      ? `🔥 Rattrapé — mais c'est ton RECORD&nbsp;!`
+      : `🔥 Les flammes t'ont rattrapé`,
+    joueurs: [],
     canReplay: true,
     canLobby: false,
-    format: (m) => `${Math.round(m)} m`,
+    resume,
   })
 }
 
@@ -2649,6 +2691,7 @@ function startRace(seed: number) {
   // ♾️ Le droit à l'erreur repart entier à chaque partie, et le feu recule.
   degats = 0
   lourdeur = 0 // 🏺 on repart léger
+  majJarres()
   majBrasier()
   grueFin = 0
   miroirFin = 0
@@ -4238,6 +4281,7 @@ function tick(now?: number) {
          */
         if (modeInfini) {
           lourdeur++
+          majJarres()
           const perte = Math.round((1 - facteurLourdeur()) * 100)
           toast(`🏺 Alourdi — ${perte} % de vitesse en moins (🍵 pour laver)`)
         } else toast('🏺 Jarre percutée !')

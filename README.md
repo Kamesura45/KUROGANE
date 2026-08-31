@@ -641,6 +641,40 @@ partie soit finie sans l'être.
 la faire compter doublerait sa punition et rendrait la règle des six impossible
 à énoncer simplement.
 
+
+### Un relevé de fin, pas un podium
+
+⚠️ **Un podium à trois marches suppose trois coureurs.** En course sans fin il
+n'y en a qu'un : deux marches restaient vides, et un podium creux se lit comme un
+abandon — ou pire, comme des adversaires qu'on aurait manqués.
+
+On montre donc les seuls chiffres qui aient un sens en solitaire :
+
+| Ligne | Ce qu'elle dit |
+|---|---|
+| **Cette course** | Ce qu'on vient de faire — en évidence, c'est elle qu'on cherche des yeux |
+| **Ton record** | Le meilleur de tous les temps. Quand on vient de le battre, il devient « Ancien record » et montre ce qui a été **dépassé** — « tu as fait 1240, ton record est 1240 » n'apprendrait rien |
+| **Course précédente** · **Celle d'avant** | Les deux d'avant, pour voir si l'on progresse |
+
+⚠️ **Il a fallu passer le stockage en JOURNAL chronologique.** Le tableau était
+trié par distance et coupé aux dix meilleures : « les deux courses d'avant » se
+mettaient alors à montrer des courses vieilles de plusieurs jours dès qu'on
+enchaînait quelques parties moyennes, et une mauvaise course disparaissait
+aussitôt de l'histoire. `chargerInfini` rend maintenant le journal (30 courses,
+la plus récente en tête) et `meilleuresInfini` trie quand il s'agit de classer.
+Deux questions différentes, deux lectures.
+
+### 🏺 Le compteur de jarres
+
+Sous la distance, petit et permanent, façon pièces de Mario Kart : `🏺 3 −21 %`.
+
+⚠️ **Il porte le pourcentage, pas seulement le compte.** Un compteur seul dirait
+« 3 » sans dire trois quoi ; ce qui manque, c'est de la vitesse.
+
+⚠️ **Et il est ancré hors de la rangée du HUD.** `#hud` est un flex en ligne :
+laissé dedans, le compteur se rangeait à *droite* du chrono, en plein dans la
+bande où vivent les pastilles de dégâts — mesuré à l'écran, il mordait dessus.
+Il est donc positionné sous le chrono, sur la même marge gauche.
 ### 🎯 Le kunai fait sauter les murs
 
 Sans rival devant, le kunai partait dans le vide. Il vise donc la **piste** : il

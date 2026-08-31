@@ -17,7 +17,7 @@ import { cleanName, loadSettings, saveSettings, type Quality, type Settings } fr
 import { montant } from './icones'
 import type { LobbyView, SalonInfo } from './net'
 import { COURSE_LENGTH } from './track'
-import { chargerScores, chargerInfini, formaterTemps, MAX_SCORES } from './scores'
+import { chargerScores, meilleuresInfini, formaterTemps, MAX_SCORES } from './scores'
 import { PAYS, drapeau, regionsDe, aDesRegions } from './pays'
 import { lireClassement } from './compte'
 
@@ -631,10 +631,33 @@ export class Menu {
      * fait chez l'appelant et que cette fonction n'a qu'à savoir écrire.
      */
     format?: (v: number) => string
+    /**
+     * ♾️ Un RELEVÉ à la place du podium.
+     *
+     * ⚠️ Un podium à trois marches suppose trois coureurs. En course sans fin il
+     * n'y en a qu'un : deux marches restaient vides, et un podium creux se lit
+     * comme un abandon — ou pire, comme des adversaires qu'on aurait manqués.
+     *
+     * Quand ce relevé est fourni, le podium disparaît et l'on montre ce qui a
+     * du sens quand on court seul : cette course, son record, et les
+     * précédentes — de quoi voir si l'on progresse.
+     */
+    resume?: { label: string; valeur: string; fort?: boolean }[]
   }) {
     const ecrire = (v: number | null) =>
       v === null ? 'abandon' : (opts.format ?? ((x: number) => `${x.toFixed(2)} s`))(v)
     this.el.finTitre.innerHTML = opts.titre
+
+    // ♾️ Le relevé remplace le podium ET la liste : on rend la main tout de
+    // suite, sans construire des marches qu'on masquerait juste après.
+    this.el.podium.classList.toggle('hidden', !!opts.resume)
+    if (opts.resume) {
+      this.el.resultsBody.replaceChildren(this.blocResume(opts.resume))
+      this.el.replay.classList.toggle('hidden', !opts.canReplay)
+      this.el.btnLobby.classList.toggle('hidden', !opts.canLobby)
+      this.show('results')
+      return
+    }
 
     // Les trois marches, dans l'ordre du DOM (2 · 1 · 3) et non du classement.
     const rangs = [1, 0, 2]
@@ -1147,6 +1170,26 @@ export class Menu {
     return ligne
   }
 
+  /**
+   * ♾️ Le relevé de fin : une ligne par chiffre, libellé à gauche, valeur à
+   * droite. Volontairement plat — il n'y a rien à classer ici, juste à comparer.
+   */
+  private blocResume(lignes: { label: string; valeur: string; fort?: boolean }[]) {
+    const bloc = document.createElement('div')
+    bloc.className = 'resume'
+    for (const l of lignes) {
+      const ligne = document.createElement('div')
+      ligne.className = `resumeligne${l.fort ? ' fort' : ''}`
+      const nom = document.createElement('span')
+      nom.textContent = l.label
+      const val = document.createElement('b')
+      val.textContent = l.valeur
+      ligne.append(nom, val)
+      bloc.appendChild(ligne)
+    }
+    return bloc
+  }
+
   /** Le podium se lit d'un coup d'œil ; au-delà, le chiffre suffit. */
   private medaille(i: number) {
     return ['🥇', '🥈', '🥉'][i] ?? String(i + 1)
@@ -1229,7 +1272,7 @@ export class Menu {
    * contre les distances trafiquées, puisque c'est le CLIENT qui les compte.
    */
   private buildScoresInfini(hote: HTMLElement, lead: HTMLElement) {
-    const tous = chargerInfini()
+    const tous = meilleuresInfini()
     const q = this.requeteScore
     // ⚠️ Le rang d'origine est conservé, comme partout ailleurs : filtrer puis
     // renuméroter donnerait la médaille d'or au 5ᵉ dès qu'il cherche son nom.

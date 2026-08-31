@@ -78,6 +78,10 @@
     <!-- Interface par-dessus le jeu (chrono, sort équipé, progression) -->
     <div id="hud">
       <div id="score">0.0 s</div>
+      <!-- 🏺 Le compte des jarres percutées, façon pièces de Mario Kart : sous
+           le chiffre principal, petit, toujours là. Le pourcentage dit ce que
+           ça COÛTE — un compteur seul ne se relierait à rien. -->
+      <div id="jarres" class="hidden">🏺 <b id="jarresN">0</b><small id="jarresPct"></small></div>
       <div id="gap" class="hidden"></div>
       <!-- Le sillage d'un rival : sans ce témoin, on accélère sans comprendre -->
       <div id="aspi" class="hidden">🌀 ASPIRATION</div>

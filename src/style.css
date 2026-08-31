@@ -2452,3 +2452,82 @@ body {
   border-color: #ff7a5c;
   color: #fff;
 }
+
+/* ————— 🏺 Le compte des jarres, façon pièces de Mario Kart —————
+
+   Sous le chiffre principal, petit et permanent. Il ne clignote pas et ne
+   bouge pas : c'est un état qu'on consulte du coin de l'œil, pas une alerte.
+
+   ⚠️ Il porte AUSSI le pourcentage perdu. Un compteur seul dirait « 3 » sans
+   dire trois quoi ; c'est la vitesse qui manque, pas les jarres qui comptent. */
+#jarres {
+  /*
+   * ⚠️ HORS DE LA RANGÉE, ancré SOUS le chrono.
+   *
+   * `#hud` est un flex en ligne : laissé dedans, le compteur se rangeait à
+   * DROITE du chrono, en plein dans la bande où vivent les pastilles de dégâts
+   * (centrées en haut) — mesuré à l'écran, il mordait dessus.
+   *
+   * `#hud` est déjà `position: fixed`, donc il sert de repère : on cale le
+   * compteur sur la même marge gauche que le chrono, une ligne plus bas.
+   */
+  position: absolute;
+  left: 18px;
+  top: calc(max(14px, env(safe-area-inset-top)) + 30px);
+  font-size: 0.86rem;
+  color: #f0e8d8;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+#jarres.hidden {
+  display: none;
+}
+#jarres b {
+  font-weight: 800;
+}
+#jarres small {
+  margin-left: 5px;
+  font-size: 0.78em;
+  color: #ff9a5c;
+  font-weight: 700;
+}
+
+/* ————— ♾️ Le relevé de fin de course sans fin —————
+
+   Une ligne par chiffre : libellé à gauche, valeur à droite. Volontairement
+   plat — il n'y a rien à classer quand on court seul, seulement à comparer.
+   Un podium ferait croire à des adversaires. */
+.resume {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.resumeligne {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(21, 26, 44, 0.55);
+  border: 1px solid #2b3350;
+  color: #9aa4c0;
+  font-size: 0.9rem;
+}
+.resumeligne b {
+  font-size: 1.05rem;
+  color: #f0e8d8;
+  font-variant-numeric: tabular-nums;
+}
+/* La course qu'on vient de faire : c'est elle qu'on cherche des yeux. */
+.resumeligne.fort {
+  background: rgba(226, 75, 58, 0.16);
+  border-color: #e24b3a;
+  color: #f0c8bf;
+}
+.resumeligne.fort b {
+  font-size: 1.35rem;
+  color: #ffb08a;
+}
