@@ -195,5 +195,58 @@ console.log('\n————— ♾️ Les rouleaux de la course sans fin ——�
   for (let i = 0; i < 10_000; i++) ordinaires.add(tirerParchemin())
   ok(ordinaires.size === TIRAGE.length, 'une course ordinaire tire toujours dans les dix', `${ordinaires.size} sortes`)
 }
+console.log('\n————— 🎯 Le kunai ne fait sauter QUE les murs —————\n')
+{
+  const track = new Track(new THREE.Scene())
+  track.reset(CYCLE, 4242, false, true)
+
+  let murs = 0
+  let autres = 0
+  let vides = 0
+
+  /*
+   * ⚠️ ON IDENTIFIE PAR LE PLAN, PAS PAR LA GEOMETRIE.
+   *
+   * Une premiere version reconnaissait le mur a sa hauteur (2,40 m) et n'en
+   * trouvait AUCUN sur 341 destructions. La mesure etait fausse, pas le code :
+   * la hauteur d'un obstacle vient de TAILLE_OBSTACLE au moment du test de
+   * collision, elle n'est pas portee par le maillage, dont le `y` vaut tout
+   * autre chose.
+   *
+   * On confronte donc la position rendue au PLAN, seule source de verite sur ce
+   * qu'est un obstacle : `z = -(d_obstacle - distance)` donne sa distance.
+   * ⚠️ ET L'ON RELEVE LE PLAN A LA FIN, PAS AU DEBUT. Le plan s'ALLONGE a
+   * chaque troncon cousu : le capturer avant de courir n'aurait contenu que le
+   * premier segment, et les murs des suivants auraient tous ete comptes comme
+   * « autre chose ». C'est exactement ce qui s'est passe — 291 faux positifs.
+   */
+  const detruites: number[] = []
+
+  // On avance par petits pas et l'on tire des que possible : sur six cycles, on
+  // croise assez de murs pour que le compte veuille dire quelque chose.
+  for (let d = 0; d <= LOIN; d += 12) {
+    track.update(12 / 22, 22, d)
+    const ou = track.detruireMurDevant()
+    if (!ou) {
+      vides++
+      continue
+    }
+    detruites.push(d - ou.z) // z est negatif devant : d - z = distance de l'obstacle
+  }
+
+  const mursPrevus = track
+    .obstaclesPrevus()
+    .filter((o) => o.kind === 'mur')
+    .map((o) => o.d)
+  for (const dObstacle of detruites) {
+    if (mursPrevus.some((d) => Math.abs(d - dObstacle) < 1)) murs++
+    else autres++
+  }
+
+  ok(murs > 30, 'des murs sont bien detruits', `${murs} sur ${LOIN} m`)
+  ok(autres === 0, 'et RIEN d autre ne l est', `${autres} destructions hors plan des murs`)
+  ok(vides > 0, 'sans mur en vue, il ne rend rien (le rouleau est alors rendu)', `${vides} tirs a vide`)
+}
+
 console.log(rates === 0 ? '\nTout est bon.\n' : `\n❌ ${rates} verification(s) en echec.\n`)
 process.exit(rates === 0 ? 0 : 1)

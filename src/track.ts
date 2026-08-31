@@ -1915,6 +1915,37 @@ export class Track {
   }
 
   /**
+   * ————— 🎯 Le kunai fait sauter le mur qui vient —————
+   *
+   * Détruit le mur ESCALADABLE le plus proche devant, et rend sa position pour
+   * qu'on y pose l'explosion. `null` s'il n'y en a aucun à portée.
+   *
+   * ⚠️ Les murs SEULEMENT. Ni barrière, ni barre haute, ni plateforme : celles-là
+   * se sautent ou se glissent, elles ne coûtent rien à qui les lit à temps. Le
+   * mur est le seul obstacle qu'on ne peut PAS franchir proprement — on
+   * l'escalade, et l'escalade se paie en vitesse. Un kunai qui ferait sauter
+   * n'importe quoi rendrait le rouleau meilleur au hasard des tirages ; limité
+   * au mur, il répond toujours à la même question : « celui-là, je ne veux pas
+   * le grimper ».
+   *
+   * On vise le PLUS PROCHE devant (z négatif, le plus grand). Détruire un mur
+   * qu'on ne voit pas encore ne se lirait pas comme un effet.
+   */
+  detruireMurDevant(portee = 70): THREE.Vector3 | null {
+    let cible: Obstacle | null = null
+    for (const o of this.obstacles) {
+      if (!o.active || o.kind !== 'mur') continue
+      const z = o.mesh.position.z
+      if (z > 0 || z < -portee) continue // derrière nous, ou hors de portée
+      if (!cible || z > cible.mesh.position.z) cible = o
+    }
+    if (!cible) return null
+    cible.active = false
+    cible.mesh.visible = false
+    return cible.mesh.position.clone()
+  }
+
+  /**
    * Le portique rouge touche-t-il le coureur ?
    *
    * Sa forme est CREUSE : deux piliers et deux traverses, avec une grande

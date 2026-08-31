@@ -620,6 +620,44 @@ plus difficile, c'est un ramassage qui ment.
 > sans rival devant, il part dans le vide (« …mais tu mènes déjà ! ») et libère
 > son emplacement. Il est donc, en l'état, un ramassage sans effet.
 
+
+### 🏺 Les jarres alourdissent, le thé lave
+
+Percuter une poterie ne coûte plus seulement l'instant du choc : **ça alourdit,
+et ça reste**. Chaque jarre encaissée retire 7 % de vitesse de croisière,
+définitivement — jusqu'au 🍵 **thé**, qui remet à neuf.
+
+⚠️ **C'est ce qui redonne un rôle au thé.** Il ne lavait que les afflictions
+(poison, chaînes, fumigène), toutes envoyées par un *adversaire* — donc
+inexistantes ici. Un rouleau qui ne peut jamais rien soigner est un rouleau
+mort ; celui-ci répond maintenant à un mal qu'on peut vraiment attraper.
+
+⚠️ **Et il y a un plancher : 40 % de perte au maximum.** Sans lui, une poignée
+de jarres ramènerait la course à l'arrêt et il n'y aurait plus rien à jouer —
+juste à attendre les flammes. Assez pour que ça pèse, jamais assez pour que la
+partie soit finie sans l'être.
+
+**Une jarre ne compte PAS dans les six coups.** Elle se contourne sans rien lire ;
+la faire compter doublerait sa punition et rendrait la règle des six impossible
+à énoncer simplement.
+
+### 🎯 Le kunai fait sauter les murs
+
+Sans rival devant, le kunai partait dans le vide. Il vise donc la **piste** : il
+détruit le prochain **mur**, et rien d'autre.
+
+⚠️ **Le mur seulement.** Barrières et barres hautes se sautent ou se glissent :
+elles ne coûtent rien à qui les lit à temps. Le mur est le seul obstacle qu'on ne
+peut pas franchir proprement — on l'escalade, et l'escalade se paie en vitesse.
+Un kunai qui ferait sauter n'importe quoi vaudrait beaucoup ou rien selon le
+hasard de ce qui se présente ; limité au mur, il répond toujours à la même
+question : « celui-là, je ne veux pas le grimper ».
+
+Sans mur en vue, **le rouleau est rendu** : le gâcher sur un vide punirait d'avoir
+appuyé une seconde trop tôt.
+
+*Le banc le vérifie sur le vrai `Track` : 341 murs détruits sur 11 520 m, et zéro
+destruction hors du plan des murs.*
 ### Le droit à l'erreur, en haut au milieu
 
 Six pastilles : rouges pour les coups pris, creuses pour ceux qui restent. Sous
@@ -740,6 +778,26 @@ Le mondial fait `distinct on (joueur)`. Sans ça, un joueur très régulier
 occuperait les vingt lignes avec ses vingt meilleures courses, et le tableau ne
 dirait plus rien de la communauté.
 
+
+### ⚔️ / ♾️ Deux catégories, parce qu'elles ne se comparent pas
+
+L'écran des scores s'ouvre sur un choix : **Course VS.E** ou **Course Infinity**.
+
+⚠️ **Ce n'est pas un rangement, c'est une nécessité.** Une course se mesure en
+**secondes** et le plus petit gagne ; l'infini se mesure en **mètres** et c'est le
+plus grand. Les mêler dans un même tableau ne demanderait pas une colonne de
+plus : il faudrait trier dans **deux sens à la fois**. Deux tables, deux tris,
+aucune ambiguïté — et le titre de l'écran suit (« Meilleurs temps » / « Plus
+longues courses »).
+
+En Infinity, les trois onglets (Mondial · Local · Récentes) **disparaissent** au
+lieu de se griser : « Mondial » et « Récentes » sont servis par le serveur, qui
+ne connaît que les chronos. Les laisser en place promettrait trois lectures dont
+deux n'existent pas.
+
+Il n'y a donc pas de mondial des distances : le serveur devrait apprendre un
+second mode de calcul, **et** se défendre contre les distances trafiquées —
+puisque c'est le client qui les compte, exactement comme pour les chronos solo.
 ### 🔎 Chercher un pseudo
 
 Les trois onglets portent un champ de recherche, à la place du bouton

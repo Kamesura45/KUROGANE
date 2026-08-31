@@ -1944,6 +1944,41 @@ body {
   flex-wrap: wrap;
   gap: 8px;
 }
+/* ⚠️ TOUS LES BOUTONS DE FIN À LA MÊME TAILLE.
+   « Quitter » se retrouvait large ou étroit selon la longueur des autres —
+   « Rejouer » et « Retour au lobby » n'ont pas le même nombre de lettres, et
+   la ligne les répartissait au prorata. Un bouton dont la taille dépend du
+   texte du voisin se lit comme une hiérarchie qu'on n'a pas voulue.
+   `flex: 1 1 0` les rend égaux : c'est la PLACE qui se partage, plus le mot. */
+#overlay .fin-row > button {
+  flex: 1 1 0;
+  min-width: 0;
+  /*
+   * ⚠️ UNE BORDURE POUR TOUS, MÊME INVISIBLE — sinon ils ne font PAS la même
+   * largeur, `flex: 1` ou pas.
+   *
+   * `flex-basis: 0` dimensionne la boîte de CONTENU : bordures et marges
+   * viennent s'ajouter par-dessus le partage. « Quitter » porte 2 px de bordure
+   * de chaque côté, « Rejouer » aucune — mesuré à l'écran : 4 px d'écart, et
+   * l'un des deux paraissait plus large sans qu'on l'ait voulu.
+   *
+   * Une bordure transparente ne se voit pas : le fond se peint DESSOUS
+   * (`background-clip` vaut `border-box` par défaut). Elle ne sert qu'à donner
+   * à tous la même boîte.
+   */
+  border-width: 2px;
+  border-style: solid;
+}
+#overlay .fin-row > button.primary {
+  border-color: transparent;
+  /* La marge haute de `.primary` décalait ce seul bouton d'un cheveu. */
+  margin-top: 0;
+}
+/* Un bouton caché ne doit pas garder sa part : sinon « Quitter » resterait
+   coincé sur un tiers de la ligne alors qu'il est seul. */
+.fin-row > button.hidden {
+  display: none;
+}
 #overlay button.lobby {
   background: #3a5ba8;
   border-color: #4a6fc4;
@@ -2397,4 +2432,23 @@ body {
   #degats.critique #degatsPuces i:not(.pris) {
     animation: none;
   }
+}
+
+/* ⚠️ La catégorie se choisit AVANT l'onglet, et doit se lire comme un niveau
+   au-dessus : plus haute, plus contrastée. Deux barres segmentées identiques
+   l'une sous l'autre donneraient six boutons de même poids, et l'on ne saurait
+   plus lequel commande l'autre. */
+.seg-cat {
+  margin-bottom: 6px;
+}
+.seg-cat button {
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+.seg-cat button.on {
+  background: #e24b3a;
+  border-color: #ff7a5c;
+  color: #fff;
 }

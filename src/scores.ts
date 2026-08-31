@@ -95,6 +95,79 @@ export function ajouterScore(
   return { scores: gardes, rang: rang <= MAX_SCORES ? rang : 0 }
 }
 
+/**
+ * ————— ♾️ Les distances de la course sans fin —————
+ *
+ * ⚠️ UN TABLEAU À PART, ET C'EST OBLIGATOIRE. Une course se mesure en secondes
+ * et le PLUS PETIT gagne ; l'infini se mesure en mètres et c'est le PLUS GRAND.
+ * Les mêler dans une seule table ne demanderait pas seulement une colonne de
+ * plus : il faudrait trier dans deux sens à la fois. Deux tables, deux tris,
+ * aucune ambiguïté.
+ *
+ * Pas de longueur dans la clé, contrairement aux chronos : une course sans fin
+ * n'en a pas.
+ */
+export interface ScoreInfini {
+  /** La distance atteinte, en mètres */
+  metres: number
+  nom: string
+  /** L'identifiant du guerrier (cf. roster.ts) */
+  fighter: string
+  /** Date en ms epoch */
+  date: number
+  /** 🌍 Le pays porté CE JOUR-LÀ (code ISO, `''` si aucun) */
+  pays?: string
+}
+
+const CLE_INFINI = 'kurogane-infini-scores'
+
+/** Relit les distances. Tout est revalidé, comme pour les chronos. */
+export function chargerInfini(): ScoreInfini[] {
+  let brut: unknown
+  try {
+    brut = JSON.parse(localStorage.getItem(CLE_INFINI) ?? '[]')
+  } catch {
+    return []
+  }
+  if (!Array.isArray(brut)) return []
+
+  const scores: ScoreInfini[] = []
+  for (const s of brut) {
+    if (!s || typeof s !== 'object') continue
+    const o = s as Record<string, unknown>
+    const metres = Number(o.metres)
+    if (!Number.isFinite(metres) || metres < 0) continue
+    scores.push({
+      metres: Math.floor(metres),
+      nom: typeof o.nom === 'string' ? o.nom.slice(0, 12) : 'Guerrier anonyme',
+      fighter: typeof o.fighter === 'string' ? o.fighter : 'yasuke',
+      date: Number.isFinite(Number(o.date)) ? Number(o.date) : 0,
+      pays: typeof o.pays === 'string' ? o.pays : undefined,
+    })
+  }
+  // ⚠️ DÉCROISSANT : ici, le plus loin gagne.
+  scores.sort((a, b) => b.metres - a.metres)
+  return scores.slice(0, MAX_SCORES)
+}
+
+/**
+ * Ajoute une distance et rend le tableau à jour, plus le RANG (1 = meilleur,
+ * 0 = pas entré dans les dix).
+ */
+export function ajouterInfini(s: ScoreInfini): { scores: ScoreInfini[]; rang: number } {
+  const scores = chargerInfini()
+  scores.push(s)
+  scores.sort((a, b) => b.metres - a.metres)
+  const rang = scores.indexOf(s) + 1
+  const gardes = scores.slice(0, MAX_SCORES)
+  try {
+    localStorage.setItem(CLE_INFINI, JSON.stringify(gardes))
+  } catch {
+    // Mode privé, quota plein : on ne garde rien, la course reste jouable.
+  }
+  return { scores: gardes, rang: rang <= MAX_SCORES ? rang : 0 }
+}
+
 /*
  * ⚠️ `effacerScores` a été RETIRÉ avec son bouton.
  *

@@ -10,7 +10,7 @@ import {
   TAILLE_OBSTACLE,
   type Tresor,
 } from './track'
-import { ajouterScore } from './scores'
+import { ajouterScore, ajouterInfini } from './scores'
 import { Input } from './input'
 import { Net, type RemotePlayer, type LobbyView } from './net'
 import { Bot, PROFILS, BOTS_MAX, construireRangees } from './bot'
@@ -433,6 +433,27 @@ let modeInfini = false
 let degats = 0
 const DEGATS_MAX = 6
 
+/*
+ * ————— 🏺 La lourdeur des jarres —————
+ *
+ * En course sans fin, percuter une poterie ne coûte plus seulement l'instant du
+ * choc : ça ALOURDIT, et ça reste. Chaque jarre encaissée retire un cran de
+ * vitesse de croisière, définitivement — jusqu'au 🍵 thé, qui lave tout.
+ *
+ * ⚠️ C'est ce qui redonne un rôle au thé. Il ne lavait que les afflictions
+ * (poison, chaînes, fumigène), toutes envoyées par un ADVERSAIRE — donc
+ * inexistantes ici. Un rouleau qui ne peut jamais rien soigner est un rouleau
+ * mort ; celui-ci répond maintenant à un mal qu'on peut vraiment attraper.
+ *
+ * ⚠️ ET IL Y A UN PLANCHER. Sans lui, une poignée de jarres ramènerait la
+ * course à l'arrêt et il n'y aurait plus rien à jouer — juste à attendre les
+ * flammes. On perd jusqu'à 40 % de croisière, pas davantage : assez pour que ça
+ * pèse, jamais assez pour que la partie soit finie sans l'être.
+ */
+let lourdeur = 0
+const LOURDEUR_PAR_JARRE = 0.07
+const LOURDEUR_PLANCHER = 0.6
+
 /**
  * L'avancement dans la course, de 0 à 1 — ce qui fait monter la croisière.
  *
@@ -446,6 +467,15 @@ const DEGATS_MAX = 6
 function avancement() {
   const t = distance / COURSE_LENGTH
   return modeInfini ? Math.min(1, t) : t
+}
+
+/**
+ * 🏺 Ce qui reste de la vitesse de croisière, une fois les jarres encaissées.
+ * 1 quand on est net ; jamais moins que le plancher (cf. LOURDEUR_PLANCHER).
+ */
+function facteurLourdeur() {
+  if (!modeInfini || lourdeur === 0) return 1
+  return Math.max(LOURDEUR_PLANCHER, 1 - LOURDEUR_PAR_JARRE * lourdeur)
 }
 
 /**
@@ -1971,8 +2001,20 @@ function lancerParchemin() {
     libererChaines(player.mesh) // ⛓️ les chaînes tombent
     dissiperBrume(player.mesh) // ☠️ la brume se lève
     terreEl.classList.remove('on') // 🎯 la terre du kunai s'en va avec le reste
+    /*
+     * ♾️🏺 …et la LOURDEUR des jarres part avec le reste.
+     *
+     * C'est ce qui rend le thé utile en course sans fin : les afflictions qu'il
+     * lavait (poison, chaînes, fumigène) viennent toutes d'un adversaire, et il
+     * n'y en a pas. Sans ce mal-là, il ne soignerait jamais rien.
+     */
+    const pesait = lourdeur
+    lourdeur = 0
     theFin = time + THE_DUREE // 🍵 les cercles montent
     sonDeSoin()
+    // On ne se vante que s'il y avait quelque chose à laver : annoncer une
+    // guérison quand on courait déjà net ferait douter de ce que fait le thé.
+    if (modeInfini && pesait > 0) toast('🍵 Le poids des jarres s\'en va — pleine vitesse')
   }
   // ————— 🔮 Le portail : il part, il ne vise pas —————
   else if (kind === 'onmyoji') {
@@ -2009,6 +2051,35 @@ function lancerParchemin() {
       ;(m.material as THREE.MeshBasicMaterial).color.setHex(couleur)
     }
     for (const a of portailArcs) (a.material as THREE.LineBasicMaterial).color.setHex(couleur)
+  }
+  /*
+   * ————— ♾️🎯 En course sans fin, le kunai vise la PISTE —————
+   *
+   * Il n'y a personne devant : le lancer sur un adversaire le rendrait muet
+   * (« …mais tu mènes déjà ! ») et le rouleau ne servirait à rien. Il fait donc
+   * sauter le prochain MUR — le seul obstacle qu'on ne peut pas franchir
+   * proprement, puisqu'on l'escalade et que l'escalade se paie en vitesse.
+   *
+   * ⚠️ Le mur seulement. Barrières et barres hautes se sautent ou se glissent :
+   * un kunai qui ferait sauter n'importe quoi vaudrait beaucoup ou rien selon le
+   * hasard de ce qui se présente. Limité au mur, il répond toujours à la même
+   * question — « celui-là, je ne veux pas le grimper ».
+   *
+   * Sans mur en vue, on REND le rouleau : le gâcher sur un vide serait une
+   * punition pour avoir appuyé une seconde trop tôt.
+   */
+  else if (modeInfini && kind === 'kunai') {
+    const ou = track.detruireMurDevant()
+    if (!ou) {
+      slots.unshift(kind)
+      drawSlots()
+      toast('🎯 …aucun mur en vue')
+      return
+    }
+    player.geste('lancer')
+    boom(ou) // 💥 la lame éclate sur la pierre
+    jouerBruit('coup')
+    toast('🎯 Le mur vole en éclats !')
   }
   // ————— Offensif : ça part chez quelqu'un —————
   else if (p.cible === 'adversaire') {
@@ -2370,6 +2441,7 @@ function backToMenu(banner?: string) {
   // d'une règle qu'on n'a pas choisie.
   modeInfini = false
   degats = 0
+  lourdeur = 0 // 🏺 on repart léger
   majBrasier()
   /*
    * ⏳ UNE COURSE LANCÉE MAIS PAS ENCORE REJOINTE S'ANNULE ICI.
@@ -2501,27 +2573,29 @@ function finInfini() {
   state = 'fini'
   const metres = Math.floor(distance)
 
-  const CLE = 'kurogane-infini-record'
-  let record = 0
-  try {
-    record = Number(localStorage.getItem(CLE) ?? 0) || 0
-  } catch {
-    record = 0
-  }
-  const bat = metres > record
-  if (bat) {
-    try {
-      localStorage.setItem(CLE, String(metres))
-    } catch {
-      // Mode privé, quota plein : la course reste jouable, le record s'oublie.
-    }
-  }
+  /*
+   * ♾️ La distance entre au tableau des courses sans fin — le SIEN, pas celui
+   * des chronos : on y trie du plus grand au plus petit (cf. scores.ts).
+   *
+   * Le rang n'est annoncé que s'il existe : dire « 11ᵉ » quand la table n'en
+   * garde que dix serait un classement fantôme.
+   */
+  const { scores, rang } = ajouterInfini({
+    metres,
+    nom: menu.settings.name || 'Guerrier anonyme',
+    fighter: menu.settings.fighter,
+    date: Date.now(),
+    pays: menu.settings.pays, // 🌍 le drapeau du jour, figé avec la distance
+  })
+  const record = scores[0]?.metres ?? metres
+  const bat = rang === 1
   jouerBruit(bat ? 'victoire' : 'defaite')
 
+  const rangLine = rang > 1 ? `<br><small>${rang}ᵉ meilleure course</small>` : ''
   menu.showFin({
     titre: bat
       ? `🔥 Rattrapé — mais c'est ton RECORD&nbsp;!<br><small>${metres} m</small>`
-      : `🔥 Les flammes t'ont rattrapé<br><small>Record&nbsp;: ${Math.max(record, metres)} m</small>`,
+      : `🔥 Les flammes t'ont rattrapé<br><small>Record&nbsp;: ${record} m</small>${rangLine}`,
     joueurs: [
       { nom: menu.settings.name || 'Guerrier anonyme', temps: metres, moi: true },
     ],
@@ -2574,6 +2648,7 @@ function startRace(seed: number) {
   armure = 0
   // ♾️ Le droit à l'erreur repart entier à chaque partie, et le feu recule.
   degats = 0
+  lourdeur = 0 // 🏺 on repart léger
   majBrasier()
   grueFin = 0
   miroirFin = 0
@@ -3568,6 +3643,8 @@ function tick(now?: number) {
 
     // La vitesse de croisière augmente au fil de la course…
     let cruise = 22 + 8 * avancement()
+    // 🏺 …les jarres encaissées la rabotent, et ça ne s'en va qu'au thé…
+    cruise *= facteurLourdeur()
     // …la course propre et le sillage la portent dans le corps de course…
     cruise *= 1 + LIGNE_BOOST * ligneCharge + ASPI_BOOST * aspiCharge
     // …le martèlement la pousse encore un peu dans les derniers mètres…
@@ -4150,7 +4227,20 @@ function tick(now?: number) {
         chaine = 0 // le choc casse l'enchaînement en cours
         jouerBruit('jarre') // la poterie éclate quand même
         jouerBruit('chute')
-        toast('🏺 Jarre percutée !')
+        /*
+         * ♾️ La lourdeur s'installe, et elle RESTE. Le choc lui-même se dissipe
+         * en une seconde ; ce qu'on emporte, c'est le poids — jusqu'au thé.
+         *
+         * ⚠️ Ça ne compte PAS dans les six coups. Une jarre n'est pas un
+         * obstacle : elle se contourne sans rien lire, et la faire compter
+         * doublerait sa punition tout en rendant la règle des six impossible à
+         * énoncer simplement.
+         */
+        if (modeInfini) {
+          lourdeur++
+          const perte = Math.round((1 - facteurLourdeur()) * 100)
+          toast(`🏺 Alourdi — ${perte} % de vitesse en moins (🍵 pour laver)`)
+        } else toast('🏺 Jarre percutée !')
         if (online) net.sendAction({ t: 'stumble', keep: JARRE_FREIN })
       }
     }

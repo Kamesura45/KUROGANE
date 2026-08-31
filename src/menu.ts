@@ -17,12 +17,22 @@ import { cleanName, loadSettings, saveSettings, type Quality, type Settings } fr
 import { montant } from './icones'
 import type { LobbyView, SalonInfo } from './net'
 import { COURSE_LENGTH } from './track'
-import { chargerScores, formaterTemps, MAX_SCORES } from './scores'
+import { chargerScores, chargerInfini, formaterTemps, MAX_SCORES } from './scores'
 import { PAYS, drapeau, regionsDe, aDesRegions } from './pays'
 import { lireClassement } from './compte'
 
 /** Les trois lectures du classement, cf. buildScores. */
 type OngletScore = 'mondial' | 'local' | 'recentes'
+
+/**
+ * Les deux familles de classement, qui ne se comparent PAS entre elles.
+ *
+ * ⚠️ `course` se lit en secondes et le plus petit gagne ; `infini` se lit en
+ * mètres et c'est le plus grand. Les mettre dans un même tableau demanderait de
+ * trier dans deux sens à la fois — d'où deux catégories, choisies avant tout le
+ * reste.
+ */
+type CategorieScore = 'course' | 'infini'
 
 type ScreenName =
   | 'title'
@@ -165,6 +175,8 @@ export class Menu {
    * donne une raison de rejouer. « Local » ne montre que ce qu'on sait déjà.
    */
   private ongletScore: OngletScore = 'mondial'
+  /** La famille de classement affichée. On démarre sur les courses : c'est le mode historique. */
+  private categorieScore: CategorieScore = 'course'
   /** Les couleurs achetées (0xrrggbb), ajoutées aux palettes du vestiaire. */
   private couleursAchetees: number[] = []
   private anim = new Anim()
@@ -296,6 +308,16 @@ export class Menu {
     for (const b of document.querySelectorAll<HTMLElement>('#scoresOnglets button')) {
       b.addEventListener('click', () => {
         this.ongletScore = (b.dataset.t ?? 'mondial') as OngletScore
+        this.buildScores()
+      })
+    }
+    for (const b of document.querySelectorAll<HTMLElement>('#scoresCategories button')) {
+      b.addEventListener('click', () => {
+        this.categorieScore = (b.dataset.c ?? 'course') as CategorieScore
+        // La recherche ne suit PAS d'une catégorie à l'autre : on cherchait un
+        // pseudo dans les chronos, le garder pour les distances afficherait un
+        // « aucun résultat » qu'on n'a pas demandé.
+        this.el.scoresRech.value = ''
         this.buildScores()
       })
     }
@@ -1135,6 +1157,26 @@ export class Menu {
     const lead = document.getElementById('scoresLead')
     if (!hote || !lead) return
 
+    for (const b of document.querySelectorAll<HTMLElement>('#scoresCategories button')) {
+      b.classList.toggle('on', b.dataset.c === this.categorieScore)
+    }
+    const infini = this.categorieScore === 'infini'
+    /*
+     * ⚠️ Les trois onglets DISPARAISSENT en Infinity, ils ne se grisent pas.
+     *
+     * « Mondial » et « Récentes » sont servis par le serveur, qui ne connaît que
+     * les chronos ; il n'existe pas de mondial des distances. Laisser les
+     * boutons en place promettrait trois lectures dont deux n'existent pas.
+     */
+    document.getElementById('scoresOnglets')?.classList.toggle('hidden', infini)
+    const titre = document.querySelector<HTMLElement>('#scr-scores h2')
+    if (titre) titre.textContent = infini ? 'Plus longues courses' : 'Meilleurs temps'
+
+    if (infini) {
+      this.buildScoresInfini(hote, lead)
+      return
+    }
+
     // L'onglet actif se marque tout de suite, avant même que le serveur réponde :
     // sur un réseau lent, un onglet qui ne réagit pas au doigt donne l'impression
     // d'un bouton mort, et on le tape trois fois.
@@ -1176,6 +1218,54 @@ export class Menu {
   /** Le mot qu'on affiche quand le filtre ne laisse rien passer. */
   private videRecherche(lead: HTMLElement, q: string) {
     lead.textContent = `Aucun guerrier ne répond à « ${q} » dans ce classement.`
+  }
+
+  /**
+   * ————— ♾️ Les plus longues courses sans fin —————
+   *
+   * Gardées sur l'appareil, comme les chronos locaux. Il n'y a pas de mondial
+   * ici : le serveur ne stocke que des temps, et un classement de distances
+   * demanderait qu'il apprenne un second mode de calcul — ainsi qu'une défense
+   * contre les distances trafiquées, puisque c'est le CLIENT qui les compte.
+   */
+  private buildScoresInfini(hote: HTMLElement, lead: HTMLElement) {
+    const tous = chargerInfini()
+    const q = this.requeteScore
+    // ⚠️ Le rang d'origine est conservé, comme partout ailleurs : filtrer puis
+    // renuméroter donnerait la médaille d'or au 5ᵉ dès qu'il cherche son nom.
+    const scores = tous
+      .map((s, rang) => ({ s, rang }))
+      .filter(({ s }) => this.correspond(s.nom, q))
+
+    hote.replaceChildren()
+    if (tous.length === 0) {
+      lead.textContent =
+        'Aucune course sans fin pour l\'instant. Cours jusqu\'aux flammes une fois et ta distance s\'inscrira ici.'
+      return
+    }
+    if (scores.length === 0) {
+      this.videRecherche(lead, this.el.scoresRech.value.trim())
+      return
+    }
+    lead.textContent = q
+      ? `${scores.length} course${scores.length > 1 ? 's' : ''} sur ${tous.length} correspond${scores.length > 1 ? 'ent' : ''} à « ${this.el.scoresRech.value.trim()} ».`
+      : `Tes ${MAX_SCORES} plus longues courses sans fin, gardées sur cet appareil.`
+
+    scores.forEach(({ s, rang }) => {
+      const f = fighterById(s.fighter)
+      const quand = s.date ? ` · ${new Date(s.date).toLocaleDateString('fr-FR')}` : ''
+      const dr = drapeau(s.pays ?? '')
+      hote.append(
+        this.ligneScore({
+          rang: this.medaille(rang),
+          jp: f.jp,
+          nom: dr ? `${dr} ${s.nom}` : s.nom,
+          detail: `${f.name} · ♾️ sans fin${quand}`,
+          temps: `${s.metres} m`,
+          premier: rang === 0,
+        })
+      )
+    })
   }
 
   /** 📱 L'appareil : les temps solo comme en ligne, gardés ici et nulle part ailleurs. */

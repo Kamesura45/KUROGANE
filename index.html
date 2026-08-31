@@ -500,6 +500,17 @@
           <button class="back" data-back aria-label="Retour">‹</button>
           <h2>Meilleurs temps</h2>
         </header>
+        <!--
+          ⚠️ DEUX CATÉGORIES AVANT TOUT LE RESTE.
+          Une course VS.E se mesure en SECONDES et le plus petit gagne ; la
+          course sans fin se mesure en MÈTRES et c'est le plus grand. Les deux
+          dans un même tableau ne se compareraient pas — il faudrait trier dans
+          deux sens à la fois. On sépare donc en haut, une bonne fois.
+        -->
+        <div class="seg seg-cat" id="scoresCategories">
+          <button data-c="course">⚔️ Course VS.E</button>
+          <button data-c="infini">♾️ Course Infinity</button>
+        </div>
         <!-- Trois lectures du même sujet : les meilleurs de tous, les tiens sur
              cet appareil, et ce que tu viens de courir. -->
         <div class="seg" id="scoresOnglets">
