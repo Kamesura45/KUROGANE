@@ -664,6 +664,35 @@ aussitôt de l'histoire. `chargerInfini` rend maintenant le journal (30 courses,
 la plus récente en tête) et `meilleuresInfini` trie quand il s'agit de classer.
 Deux questions différentes, deux lectures.
 
+#### ⚠️ Le podium doit REVENIR — c'est l'invariant à ne pas casser
+
+Le relevé ne remplace le podium **que** dans la course sans fin. Les trois autres
+écrans de fin — entraînement, course en ligne, banc d'essai — n'en savent rien et
+gardent leurs trois marches.
+
+Tout tient dans une ligne :
+
+```ts
+this.el.podium.classList.toggle('hidden', !!opts.resume)
+```
+
+⚠️ **Le piège n'est pas « le podium disparaît en infini », c'est « il ne revient
+pas après ».** Masquer sans jamais remontrer laisserait l'entraînement suivant
+avec un écran de fin vide — et le défaut ne se verrait qu'en enchaînant les deux
+modes dans cet ordre, ce que personne ne fait en testant une seule chose.
+
+`toggle` avec un second argument **retire** la classe quand `resume` est absent :
+le podium se rétablit donc de lui-même. Si un jour on remplace cette ligne par un
+`add('hidden')` conditionnel, il faudra un `remove` en face.
+
+**Pour le vérifier sans courir 1 920 m**, la console de développement offre
+`__sorts.fin(n)` — il monte un podium de `n` coureurs à la demande :
+
+```js
+document.getElementById('podium').classList.add('hidden') // on simule l'après-infini
+__sorts.fin(4)                                            // le podium doit revenir
+```
+
 ### 🏺 Le compteur de jarres
 
 Sous la distance, petit et permanent, façon pièces de Mario Kart : `🏺 3 −21 %`.

@@ -648,8 +648,19 @@ export class Menu {
       v === null ? 'abandon' : (opts.format ?? ((x: number) => `${x.toFixed(2)} s`))(v)
     this.el.finTitre.innerHTML = opts.titre
 
-    // ♾️ Le relevé remplace le podium ET la liste : on rend la main tout de
-    // suite, sans construire des marches qu'on masquerait juste après.
+    /*
+     * ♾️ Le relevé remplace le podium ET la liste : on rend la main tout de
+     * suite, sans construire des marches qu'on masquerait juste après.
+     *
+     * ⚠️ `toggle` À DEUX ARGUMENTS, ET C'EST VOLONTAIRE : il RETIRE la classe
+     * quand `resume` est absent. Le vrai piège n'est pas « le podium disparaît
+     * en course sans fin » — c'est « il ne revient pas après ». Un simple
+     * `add('hidden')` laisserait l'entraînement suivant avec un écran de fin
+     * vide, et le défaut ne se verrait qu'en enchaînant les deux modes dans cet
+     * ordre : personne ne fait ça en testant une seule chose.
+     *
+     * Si l'on remplace un jour cette ligne, il faut un `remove` en face.
+     */
     this.el.podium.classList.toggle('hidden', !!opts.resume)
     if (opts.resume) {
       this.el.resultsBody.replaceChildren(this.blocResume(opts.resume))
