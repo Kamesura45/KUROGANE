@@ -717,10 +717,21 @@ se posait pas. Ici on verse à chaque tronçon, et une carte bouclée un peu vit
 passe sous le délai — la récolte est donc **remise de côté** pour le tour
 suivant au lieu d'être jetée.
 
-**Ce qu'il faut savoir sur la rareté** : un tronçon porte 0, 1 ou 2 pots, tirés
-au sort — 3 % deux, 17 % un, **80 % aucun**. Le réglage vient des courses, où un
-tronçon = une course entière. Il faut donc **survivre à une carte complète** pour
-encaisser quoi que ce soit.
+⚠️ **LA RARETÉ EXTRÊME EST VOULUE — ne la « corrige » pas.**
+
+Un tronçon porte 0, 1 ou 2 pots, tirés au sort : 3 % deux, 17 % un, **80 %
+aucun**. Et il faut **survivre à une carte complète** (1 920 m) pour encaisser.
+Les deux conditions se multiplient.
+
+Mesuré : des parties d'essai finissaient entre **175 et 1 238 m**, donc toutes
+sous la barre des 1 920 m. En clair, **presque aucune course ne verse quoi que ce
+soit** — c'est un exploit, pas un revenu.
+
+Ça ressemble à un défaut d'équilibrage, et ç'aurait pu en être un : le réglage
+vient des courses, où un tronçon = une course entière. La question a été posée,
+et la réponse est de le **laisser rare**. C'est écrit ici pour que le prochain à
+passer ne prenne pas cette rareté pour un oubli et ne monte pas le taux « pour
+réparer ».
 
 ### 🏺 Les jarres alourdissent, le thé lave
 

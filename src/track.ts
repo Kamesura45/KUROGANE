@@ -133,6 +133,13 @@ export const POTS_VERTS_MAX = 2
  *   sinon                → aucun       (80 %)
  * Quatre courses sur cinq n'en voient donc aucun — c'est ce qui rend le vert
  * remarquable quand il apparaît.
+ *
+ * ⚠️ ET C'EST ENCORE PLUS RARE EN COURSE SANS FIN, VOLONTAIREMENT. Là-bas, un
+ * tronçon n'est pas une course : il faut lui SURVIVRE en entier pour encaisser,
+ * et la plupart des parties s'arrêtent bien avant les 1 920 m. Les deux
+ * conditions se multiplient, si bien que le pot vert y est un exploit et non un
+ * revenu. La question a été posée, la réponse est de le laisser ainsi — ce n'est
+ * pas un oubli d'équilibrage, ne monte pas ces chiffres « pour réparer ».
  */
 export const CHANCE_DEUX_POTS = 0.03
 export const CHANCE_UN_POT = 0.2
