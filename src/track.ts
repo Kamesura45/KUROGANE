@@ -1930,11 +1930,20 @@ export class Track {
    *
    * On vise le PLUS PROCHE devant (z négatif, le plus grand). Détruire un mur
    * qu'on ne voit pas encore ne se lirait pas comme un effet.
+   *
+   * ⚠️ ET IL VA TOUT DROIT. `x` est la ligne du lanceur : seuls les murs de SA
+   * voie sautent. Une lame qui part en biais chercher le mur d'à côté ne se
+   * lirait pas — on la voit filer devant soi — et elle rendrait le rouleau
+   * meilleur qu'il n'y paraît : il faudrait deviner ce qu'il va choisir.
+   * Tout droit, on sait exactement ce qu'on détruit avant d'appuyer.
    */
-  detruireMurDevant(portee = 70): THREE.Vector3 | null {
+  detruireMurDevant(x: number, portee = 70): THREE.Vector3 | null {
     let cible: Obstacle | null = null
     for (const o of this.obstacles) {
       if (!o.active || o.kind !== 'mur') continue
+      // Sa ligne, et rien d'autre. Les voies sont écartées de 2 m : 1 m de
+      // tolérance reconnaît la sienne sans jamais mordre sur la voisine.
+      if (Math.abs(o.mesh.position.x - x) > 1) continue
       const z = o.mesh.position.z
       if (z > 0 || z < -portee) continue // derrière nous, ou hors de portée
       if (!cible || z > cible.mesh.position.z) cible = o

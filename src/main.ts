@@ -443,10 +443,10 @@ let enPause = false
  * ————— ♾️ LE MODE INFINI —————
  *
  * Pas de ligne d'arrivée : on court jusqu'à ce que les flammes vous rattrapent.
- * Ce qui les rapproche n'est pas le temps, c'est la MALADRESSE — six obstacles
+ * Ce qui les rapproche n'est pas le temps, c'est la MALADRESSE — cinq obstacles
  * encaissés et c'est fini.
  *
- * ⚠️ SIX COUPS, PAS SIX RENCONTRES. Ne comptent que les vrais trébuchements :
+ * ⚠️ CINQ COUPS, PAS CINQ RENCONTRES. Ne comptent que les vrais trébuchements :
  *   · l'armure qui encaisse ne compte pas — c'est tout son intérêt ;
  *   · une escalade ne compte pas — on a franchi l'obstacle, pas subi.
  * Les deux sont déjà des branches distinctes au moment de la collision, si
@@ -456,7 +456,7 @@ let enPause = false
 let modeInfini = false
 /** Combien de coups encaissés, de 0 à DEGATS_MAX. Ne redescend jamais. */
 let degats = 0
-const DEGATS_MAX = 6
+const DEGATS_MAX = 5
 
 /*
  * ————— 🏺 La lourdeur des jarres —————
@@ -478,6 +478,19 @@ const DEGATS_MAX = 6
 let lourdeur = 0
 const LOURDEUR_PAR_JARRE = 0.07
 const LOURDEUR_PLANCHER = 0.6
+
+/**
+ * ♾️ Le dernier tronçon franchi — la « carte » qu'on vient de boucler.
+ *
+ * Sert à repérer le moment où l'on recommence : c'est là qu'on encaisse les
+ * pots verts, comme une course en ligne verse les siens à l'arrivée.
+ *
+ * ⚠️ BOUCLER UNE CARTE NE REND AUCUNE VIE. On garde le même droit à l'erreur du
+ * début à la fin : sinon la partie ne finirait jamais pour qui tient un tour, et
+ * « cinq obstacles » ne voudrait plus rien dire — ce serait « cinq par carte »,
+ * une règle qu'on ne peut plus énoncer d'une phrase.
+ */
+let dernierTroncon = 0
 
 /**
  * L'avancement dans la course, de 0 à 1 — ce qui fait monter la croisière.
@@ -2095,11 +2108,11 @@ function lancerParchemin() {
    * punition pour avoir appuyé une seconde trop tôt.
    */
   else if (modeInfini && kind === 'kunai') {
-    const ou = track.detruireMurDevant()
+    const ou = track.detruireMurDevant(player.mesh.position.x)
     if (!ou) {
       slots.unshift(kind)
       drawSlots()
-      toast('🎯 …aucun mur en vue')
+      toast('🎯 …aucun mur droit devant')
       return
     }
     player.geste('lancer')
@@ -2273,7 +2286,23 @@ function encaisserPots() {
   // Remis à zéro TOUT DE SUITE : un double appel ne doit pas payer deux fois
   recolte.mon = 0
   recolte.hisui = 0
-  void verserPots(total).then(() => majAffichageBourse())
+  void verserPots(total).then(({ verse }) => {
+    if (verse) {
+      majAffichageBourse()
+      return
+    }
+    /*
+     * ⚠️ REFUSÉ : on REMET la récolte de côté au lieu de la jeter.
+     *
+     * Le serveur n'accepte qu'un versement par minute. En course ordinaire on
+     * ne verse qu'à l'arrivée, le cas ne se posait pas ; en course SANS FIN on
+     * verse à chaque tronçon, et une carte bouclée un peu vite passe sous le
+     * délai. Sans ce retour en arrière, le joueur perdrait les pots d'un tour
+     * entier pour avoir couru trop bien.
+     */
+    recolte.mon += total.mon
+    recolte.hisui += total.hisui
+  })
 }
 
 /**
@@ -2471,6 +2500,7 @@ function backToMenu(banner?: string) {
   btnPauseEl.classList.add('hidden')
   degats = 0
   lourdeur = 0 // 🏺 on repart léger
+  dernierTroncon = 0 // ♾️ la carte repart du premier tour
   majJarres()
   majBrasier()
   /*
@@ -2525,7 +2555,7 @@ function backToMenu(banner?: string) {
  * ♾️ Rapproche (ou éteint) le brasier, d'après les dégâts encaissés.
  *
  * Une seule variable CSS porte tout : la hauteur des flammes, leur emprise sur
- * les bords, leur éclat. Écrire les six paliers en dur des deux côtés aurait
+ * les bords, leur éclat. Écrire les cinq paliers en dur des deux côtés aurait
  * demandé de les tenir d'accord à jamais.
  *
  * Le plancher à 0,1 n'est pas décoratif : sans lui, un joueur qui n'a rien
@@ -2616,7 +2646,7 @@ function majBrasier() {
  *
  * Le compteur ne redescend pas. C'était tentant — récompenser une longue série
  * propre en éloignant un peu les flammes — mais cela changerait la règle
- * annoncée : « six obstacles et c'est fini » deviendrait « six obstacles
+ * annoncée : « cinq obstacles et c'est fini » deviendrait « cinq obstacles
  * rapprochés ». Une règle qu'on ne peut pas énoncer en une phrase ne se retient
  * pas, et le joueur ne saurait plus combien il lui reste de droit à l'erreur.
  */
@@ -2719,7 +2749,14 @@ function startRace(seed: number) {
   recolte.hisui = 0
   // 🏋️ Les pots verts n'existent qu'EN LIGNE : ils donnent de la monnaie, et
   // l'entraînement se relance seul, à volonté. Voir buildJarrePlan.
-  track.reset(COURSE_LENGTH, seed, online, modeInfini)
+  /*
+   * 🟢 Les pots verts existent EN LIGNE et en COURSE SANS FIN.
+   *
+   * Ils étaient réservés au multi parce que l'entraînement se relance à
+   * volonté : on y aurait moissonné en boucle. La course sans fin, elle, se paie
+   * en distance — pour toucher le tronçon suivant il faut vraiment y survivre.
+   */
+  track.reset(COURSE_LENGTH, seed, online || modeInfini, modeInfini)
   time = 0
   distance = 0
   speed = 0
@@ -2741,6 +2778,7 @@ function startRace(seed: number) {
   // ♾️ Le droit à l'erreur repart entier à chaque partie, et le feu recule.
   degats = 0
   lourdeur = 0 // 🏺 on repart léger
+  dernierTroncon = 0 // ♾️ la carte repart du premier tour
   majJarres()
   majBrasier()
   grueFin = 0
@@ -4360,9 +4398,9 @@ function tick(now?: number) {
          * ♾️ La lourdeur s'installe, et elle RESTE. Le choc lui-même se dissipe
          * en une seconde ; ce qu'on emporte, c'est le poids — jusqu'au thé.
          *
-         * ⚠️ Ça ne compte PAS dans les six coups. Une jarre n'est pas un
+         * ⚠️ Ça ne compte PAS dans les cinq coups. Une jarre n'est pas un
          * obstacle : elle se contourne sans rien lire, et la faire compter
-         * doublerait sa punition tout en rendant la règle des six impossible à
+         * doublerait sa punition tout en rendant la règle des cinq impossible à
          * énoncer simplement.
          */
         if (modeInfini) {
@@ -4503,6 +4541,26 @@ function tick(now?: number) {
     // ♾️ Une course sans fin n'a pas de ligne d'arrivée à franchir : ce sont
     // les flammes qui décident, et elles passent par encaisserCoup().
     if (!modeInfini && distance >= COURSE_LENGTH) crossFinishLine()
+
+    /*
+     * ————— ♾️🟢 On a bouclé la carte : les pots sont versés —————
+     *
+     * Ce que l'arrivée fait pour une course en ligne, la fin de tronçon le fait
+     * ici. C'est le seul moment naturel : il n'y a pas d'arrivée, mais il y a un
+     * tour de carte, et il se mérite.
+     *
+     * ⚠️ Les vies NE REPARTENT PAS. Recommencer la carte ne rend pas le droit à
+     * l'erreur : autrement, qui tient un tour ne perdrait jamais, et « cinq
+     * obstacles » deviendrait « cinq par carte ».
+     */
+    if (modeInfini) {
+      const troncon = Math.floor(distance / COURSE_LENGTH)
+      if (troncon > dernierTroncon) {
+        dernierTroncon = troncon
+        encaisserPots()
+        toast(`🗺️ Carte bouclée — tour ${troncon + 1}`)
+      }
+    }
   } else {
     // Au menu / en attente : le décor défile doucement.
     //

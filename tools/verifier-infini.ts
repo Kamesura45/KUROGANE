@@ -38,8 +38,9 @@
 }
 
 import * as THREE from 'three'
-import { Track } from '../src/track.ts'
+import { Track, buildJarrePlan } from '../src/track.ts'
 import { BIOMES } from '../src/biomes.ts'
+import { LANES } from '../src/player.ts'
 import { TIRAGE, TIRAGE_INFINI, tirerParchemin } from '../src/parchemin.ts'
 
 const CYCLE = 1920
@@ -221,18 +222,26 @@ console.log('\n————— 🎯 Le kunai ne fait sauter QUE les murs ——�
    * « autre chose ». C'est exactement ce qui s'est passe — 291 faux positifs.
    */
   const detruites: number[] = []
+  let horsVoie = 0
 
-  // On avance par petits pas et l'on tire des que possible : sur six cycles, on
-  // croise assez de murs pour que le compte veuille dire quelque chose.
+  /*
+   * ⚠️ ET L'ON TIRE DEPUIS UNE VOIE PRECISE. Le kunai va TOUT DROIT : il ne doit
+   * jamais faire sauter le mur de la ligne d'a cote. On alterne les trois voies
+   * et l'on verifie que ce qui tombe est bien sur celle d'ou l'on tire.
+   */
+  let i = 0
   for (let d = 0; d <= LOIN; d += 12) {
     track.update(12 / 22, 22, d)
-    const ou = track.detruireMurDevant()
+    const x = LANES[i++ % LANES.length]
+    const ou = track.detruireMurDevant(x)
     if (!ou) {
       vides++
       continue
     }
+    if (Math.abs(ou.x - x) > 1) horsVoie++
     detruites.push(d - ou.z) // z est negatif devant : d - z = distance de l'obstacle
   }
+  ok(horsVoie === 0, 'il ne sort JAMAIS de sa voie', `${horsVoie} tirs en biais`)
 
   const mursPrevus = track
     .obstaclesPrevus()
@@ -246,6 +255,33 @@ console.log('\n————— 🎯 Le kunai ne fait sauter QUE les murs ——�
   ok(murs > 30, 'des murs sont bien detruits', `${murs} sur ${LOIN} m`)
   ok(autres === 0, 'et RIEN d autre ne l est', `${autres} destructions hors plan des murs`)
   ok(vides > 0, 'sans mur en vue, il ne rend rien (le rouleau est alors rendu)', `${vides} tirs a vide`)
+}
+
+console.log('\n————— 🟢 Les pots verts tombent aussi en course sans fin —————\n')
+{
+  /*
+   * On interroge le GENERATEUR directement : c'est lui que `track.reset` pilote
+   * par son drapeau `avecPots`, desormais `online || modeInfini`. Passer par une
+   * collision demanderait de placer une boite de joueur au millimetre sur une
+   * jarre, ce qui testerait surtout notre capacite a viser.
+   */
+  /*
+   * ⚠️ ET SUR PLUSIEURS GRAINES. Le nombre de pots est TIRE AU SORT : 0, 1 ou 2
+   * par troncon. Une premiere version n'essayait qu'une graine, tombait sur un
+   * troncon a zero pot, et concluait que le drapeau ne servait a rien. Le test
+   * etait faux, pas le code.
+   */
+  const GRAINES = [1, 7, 99, 1234, 4242, 55555, 8675309, 31337]
+  const compte = (avecPots: boolean) =>
+    GRAINES.reduce(
+      (n, g) => n + buildJarrePlan(CYCLE, g, [], avecPots).filter((j) => j.kind === 'verte').length,
+      0
+    )
+  const avec = compte(true)
+  const sans = compte(false)
+
+  ok(avec > 0, 'avec le drapeau, des pots verts sont semes', `${avec} sur ${GRAINES.length} troncons`)
+  ok(sans === 0, 'sans le drapeau, aucun — l entrainement reste sec', `${sans}`)
 }
 
 console.log(rates === 0 ? '\nTout est bon.\n' : `\n❌ ${rates} verification(s) en echec.\n`)

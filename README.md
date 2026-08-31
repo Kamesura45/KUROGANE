@@ -35,7 +35,7 @@
 - 💬 **Chat de salon** en attendant le départ
 - 🏋️ Mode **entraînement solo** contre **1 à 4 rivaux** (voir
   [le roster](#-les-rivaux-dentraînement)), avec record personnel sauvegardé
-- ♾️ Mode **course sans fin** : pas de ligne d'arrivée, pas de rivaux. **Six
+- ♾️ Mode **course sans fin** : pas de ligne d'arrivée, pas de rivaux. **Cinq
   obstacles encaissés et les flammes te rattrapent** — on marque en mètres
   ([voir le mode](#️-la-course-sans-fin))
 - 🏆 **Le classement**, en trois lectures : **Mondial** (le meilleur temps de
@@ -628,10 +628,10 @@ les flammes vous rattrapent, et l'on marque en **mètres**.
 
 ### La règle tient en une phrase
 
-**Six obstacles encaissés, et c'est fini.** Chacun rapproche le feu d'un
-sixième ; au sixième, il vous prend.
+**Cinq obstacles encaissés, et c'est fini.** Chacun rapproche le feu d'un
+cinquième ; au cinquième, il vous prend.
 
-⚠️ **Six COUPS, pas six rencontres.** Deux façons de croiser un obstacle sans
+⚠️ **Cinq COUPS, pas cinq rencontres.** Deux façons de croiser un obstacle sans
 rien payer :
 
 | Ce qui arrive | Compté ? | Pourquoi |
@@ -646,8 +646,8 @@ L'armure et l'escalade sont des branches sœurs, en amont ; elles ne peuvent pas
 compter par construction, sans qu'on ait à les traiter à part.
 
 **Le compteur ne redescend jamais.** C'était tentant — récompenser une longue
-série propre en éloignant un peu les flammes — mais « six obstacles et c'est
-fini » deviendrait « six obstacles rapprochés ». Une règle qu'on ne peut plus
+série propre en éloignant un peu les flammes — mais « cinq obstacles et c'est
+fini » deviendrait « cinq obstacles rapprochés ». Une règle qu'on ne peut plus
 énoncer en une phrase ne se retient pas, et le joueur ne saurait plus combien il
 lui reste de droit à l'erreur.
 
@@ -675,6 +675,28 @@ plus difficile, c'est un ramassage qui ment.
 > son emplacement. Il est donc, en l'état, un ramassage sans effet.
 
 
+
+### 🟢🗺️ Les pots verts, versés à chaque carte bouclée
+
+Ce que l'arrivée fait pour une course en ligne, la **fin de tronçon** le fait
+ici : tous les 1 920 m, la carte recommence et la récolte est versée.
+
+⚠️ **Boucler la carte NE REND AUCUNE VIE.** On garde le même droit à l'erreur du
+premier mètre au dernier. Autrement, qui tient un tour ne perdrait jamais, et
+« cinq obstacles » deviendrait « cinq par carte » — une règle qu'on ne peut plus
+énoncer d'une phrase.
+
+⚠️ **Un versement refusé n'est plus perdu.** Le serveur n'accepte qu'un
+versement par minute ; en course ordinaire on ne verse qu'à l'arrivée, le cas ne
+se posait pas. Ici on verse à chaque tronçon, et une carte bouclée un peu vite
+passe sous le délai — la récolte est donc **remise de côté** pour le tour
+suivant au lieu d'être jetée.
+
+**Ce qu'il faut savoir sur la rareté** : un tronçon porte 0, 1 ou 2 pots, tirés
+au sort — 3 % deux, 17 % un, **80 % aucun**. Le réglage vient des courses, où un
+tronçon = une course entière. Il faut donc **survivre à une carte complète** pour
+encaisser quoi que ce soit.
+
 ### 🏺 Les jarres alourdissent, le thé lave
 
 Percuter une poterie ne coûte plus seulement l'instant du choc : **ça alourdit,
@@ -691,8 +713,8 @@ de jarres ramènerait la course à l'arrêt et il n'y aurait plus rien à jouer 
 juste à attendre les flammes. Assez pour que ça pèse, jamais assez pour que la
 partie soit finie sans l'être.
 
-**Une jarre ne compte PAS dans les six coups.** Elle se contourne sans rien lire ;
-la faire compter doublerait sa punition et rendrait la règle des six impossible
+**Une jarre ne compte PAS dans les cinq coups.** Elle se contourne sans rien lire ;
+la faire compter doublerait sa punition et rendrait la règle des cinq impossible
 à énoncer simplement.
 
 
@@ -767,6 +789,12 @@ généreuse pour le remonter au-dessus de la zone où le pouce se pose sur mobil
 Sans rival devant, le kunai partait dans le vide. Il vise donc la **piste** : il
 détruit le prochain **mur**, et rien d'autre.
 
+⚠️ **Et il va TOUT DROIT.** Seuls les murs de **ta voie** sautent. Une lame qui
+partirait en biais chercher le mur d'à côté ne se lirait pas — on la voit filer
+devant soi — et elle rendrait le rouleau meilleur qu'il n'y paraît : il faudrait
+deviner ce qu'il va choisir. Tout droit, on sait exactement ce qu'on détruit
+avant d'appuyer. *(Vérifié : 0 tir en biais sur 338 destructions.)*
+
 ⚠️ **Le mur seulement.** Barrières et barres hautes se sautent ou se glissent :
 elles ne coûtent rien à qui les lit à temps. Le mur est le seul obstacle qu'on ne
 peut pas franchir proprement — on l'escalade, et l'escalade se paie en vitesse.
@@ -781,10 +809,10 @@ appuyé une seconde trop tôt.
 destruction hors du plan des murs.*
 ### Le droit à l'erreur, en haut au milieu
 
-Six pastilles : rouges pour les coups pris, creuses pour ceux qui restent. Sous
+Cinq pastilles : rouges pour les coups pris, creuses pour ceux qui restent. Sous
 elles, un mot court (`reste 4`, puis `DERNIÈRE`).
 
-⚠️ **Des pastilles, pas un « 2 / 6 ».** On lit un nombre de points d'un coup
+⚠️ **Des pastilles, pas un « 2 / 5 ».** On lit un nombre de points d'un coup
 d'œil, sans quitter la piste des yeux ; un chiffre demande de le lire *puis* de
 le comparer au maximum. Sur une piste qui défile à 25 m/s, cette demi-seconde
 est un obstacle raté.
@@ -801,7 +829,7 @@ par les bords — là où l'œil le perçoit sans quitter la piste des yeux.
 Tout est piloté par **une seule variable CSS**, `--proche` (0 → 1) : le jeu n'y
 touche qu'au moment d'un coup, et la mise en scène (hauteur des flammes, emprise
 sur les bords, éclat, vacillement) vit entièrement dans `style.css`. Écrire les
-six paliers en dur des deux côtés aurait demandé de les tenir d'accord à jamais.
+cinq paliers en dur des deux côtés aurait demandé de les tenir d'accord à jamais.
 
 Deux détails qui font la différence :
 
