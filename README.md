@@ -1044,30 +1044,31 @@ Il n'y a donc pas de mondial des distances : le serveur devrait apprendre un
 second mode de calcul, **et** se défendre contre les distances trafiquées —
 puisque c'est le client qui les compte, exactement comme pour les chronos solo.
 
-### 🏆 Le classement : trois catégories, trois lectures, et un filtre
+### 🏆 Le classement : trois catégories, trois lectures
 
 L'écran s'ouvre sur la **catégorie** — ⚔️ Course VS.E · ♾️ Course Infinity ·
-🚧 En cours de dev. — puis, dessous, les trois lectures habituelles et un filtre
-géographique.
+🚧 En cours de dev. — puis, dessous, les trois lectures habituelles.
 
 | Onglet | Ce qu'on y voit |
 |---|---|
-| 🌍 **Mondial** | Les meilleurs, filtrables par pays puis par département / région / ville |
-| 📱 **Local** | Les meilleurs gardés sur cet appareil, filtrables pareil |
+| 🌍 **Mondial** | Les meilleurs de tous |
+| 📱 **Local** | Les meilleurs gardés sur cet appareil |
 | 🕓 **Récentes** | **Tes** courses à toi, la plus fraîche en tête |
 
-⚠️ **Le filtre dit où l'on REGARDE, pas d'où l'on EST.** Le pays de l'écran
-Compte est un autre réglage : les confondre obligerait à se déclarer japonais
-pour jeter un œil au classement japonais.
+⚠️ **Il n'y a PAS de filtre par pays, et c'est un choix.** Deux menus déroulants
+l'ont occupé un moment — on y choisissait le pays, puis son département / sa
+région / sa ville. Ils ont été retirés : le classement se lit en entier, la
+recherche par pseudo suffit à s'y retrouver, et **le drapeau reste affiché à côté
+de chaque nom** — on voit d'où vient chacun sans avoir à trier.
 
-⚠️ **Une ligne sans pays est écartée dès qu'on filtre.** Les temps enregistrés
-avant que le pays existe n'en ont pas ; les ranger sous « France » leur
-inventerait une origine, et le classement mentirait.
+Le pays et la région restent **enregistrés** avec chaque temps, et voyagent
+jusqu'au serveur. Rien n'est perdu : rétablir un filtre plus tard ne demanderait
+que de remettre les deux menus.
 
 🚧 **La troisième catégorie est vide, et c'est voulu.** Un joueur qui voit qu'un
 mode arrive attend ; celui à qui l'on n'a rien dit croit avoir fait le tour.
 
-#### ⚠️ Deux défauts trouvés en construisant ce filtre
+#### ⚠️ Deux défauts trouvés en construisant tout ça
 
 **Le pays n'était pas relu.** Il était bien *écrit* avec chaque temps local, mais
 `chargerScores` l'oubliait en reconstruisant les objets — si bien que le drapeau
@@ -1075,13 +1076,14 @@ s'affichait juste après la course, puis **disparaissait au redémarrage**. Le
 défaut ne se voyait qu'en relançant le jeu, jamais en jouant.
 
 **Le serveur ne connaissait pas le pays du tout.** Ni colonne, ni champ dans les
-lignes du classement : il n'avait jamais quitté l'appareil. Filtrer le mondial
-demandait donc une migration (`005`), deux colonnes, et de faire voyager
-l'origine avec l'identité du joueur jusqu'au salon.
+lignes du classement : il n'avait jamais quitté l'appareil. D'où la migration
+`005`, deux colonnes, et l'origine qui voyage avec l'identité du joueur jusqu'au
+salon — dans une Map **privée**, pas dans l'état synchronisé : les autres joueurs
+n'ont rien à en faire.
 
 ⚠️ **Le pays et la région sont DÉCLARATIFS.** Ils viennent du client, qui les lit
 d'un réglage que le joueur choisit lui-même sans compte. Rien ne les vérifie et
-rien ne le peut : le classement par pays est un jeu, pas un recensement.
+rien ne le peut : le drapeau est une façon de se présenter, pas un recensement.
 ### 🔎 Chercher un pseudo
 
 Les trois onglets portent un champ de recherche, à la place du bouton

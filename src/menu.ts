@@ -183,10 +183,6 @@ export class Menu {
   private ongletScore: OngletScore = 'mondial'
   /** La famille de classement affichée. On démarre sur les courses : c'est le mode historique. */
   private categorieScore: CategorieScore = 'course'
-  /** 🌍 Le pays qu'on REGARDE (`''` = tous). Rien à voir avec le sien. */
-  private filtrePays = ''
-  /** 🏞️ La subdivision qu'on regarde dans ce pays (`''` = tout le pays). */
-  private filtreRegion = ''
   /** Les couleurs achetées (0xrrggbb), ajoutées aux palettes du vestiaire. */
   private couleursAchetees: number[] = []
   private anim = new Anim()
@@ -228,9 +224,6 @@ export class Menu {
     start: document.getElementById('btnStart')!,
     // ————— Résultats —————
     scoresRech: document.getElementById('scoresRech') as HTMLInputElement,
-    scoresPays: document.getElementById('scoresPays') as HTMLSelectElement,
-    scoresRegion: document.getElementById('scoresRegion') as HTMLSelectElement,
-    scoresFiltre: document.getElementById('scoresFiltre')!,
     selPays: document.getElementById('selPays') as HTMLSelectElement,
     selRegion: document.getElementById('selRegion') as HTMLSelectElement,
     champRegion: document.getElementById('champRegion')!,
@@ -324,30 +317,6 @@ export class Menu {
         this.buildScores()
       })
     }
-    /*
-     * 🌍 Le filtre du classement : où l'on veut REGARDER.
-     *
-     * ⚠️ Sans rapport avec le pays de l'écran Compte, qui dit d'où l'on EST.
-     * Les confondre obligerait à se déclarer japonais pour jeter un œil au
-     * classement japonais.
-     *
-     * Bâti une seule fois : deux cents options recréées à chaque ouverture
-     * feraient ramer l'écran pour rien.
-     */
-    this.el.scoresPays.appendChild(new Option('🌍 Tous les pays', ''))
-    for (const p of PAYS) {
-      this.el.scoresPays.appendChild(new Option(`${drapeau(p.code)}  ${p.nom}`, p.code))
-    }
-    this.el.scoresPays.addEventListener('change', () => {
-      this.filtrePays = this.el.scoresPays.value
-      this.filtreRegion = '' // la subdivision tombe avec son pays
-      this.majFiltreRegion()
-      this.buildScores()
-    })
-    this.el.scoresRegion.addEventListener('change', () => {
-      this.filtreRegion = this.el.scoresRegion.value
-      this.buildScores()
-    })
 
     for (const b of document.querySelectorAll<HTMLElement>('#scoresCategories button')) {
       b.addEventListener('click', () => {
@@ -1266,7 +1235,7 @@ export class Menu {
 
     // 🚧 Le mode à venir n'a ni onglets, ni recherche, ni filtre : il n'a rien
     // à filtrer. On ne montre pas des commandes qui ne commandent rien.
-    for (const id of ['scoresOnglets', 'scoresFiltre']) {
+    for (const id of ['scoresOnglets']) {
       document.getElementById(id)?.classList.toggle('hidden', dev)
     }
     this.el.scoresRech.parentElement?.classList.toggle('hidden', dev)
@@ -1287,7 +1256,6 @@ export class Menu {
       return
     }
 
-    this.majFiltreRegion()
     if (infini) {
       // ⚠️ Les trois onglets sont là AUSSI en Infinity, comme demandé. Mais
       // « Mondial » n'existe pas encore pour ce mode : le serveur ne stocke que
@@ -1343,45 +1311,10 @@ export class Menu {
     lead.textContent = `Aucun guerrier ne répond à « ${q} » dans ce classement.`
   }
 
-  /**
-   * 🏞️ Remplit le second menu du filtre d'après le pays regardé.
-   *
-   * Il DISPARAÎT quand aucun pays n'est choisi : proposer des départements sans
-   * savoir de quel pays n'aurait aucun sens, et un menu vide se lit comme un bug.
-   */
-  private majFiltreRegion() {
-    const liste = regionsDe(this.filtrePays)
-    this.el.scoresRegion.classList.toggle('hidden', liste.length === 0)
-    this.el.scoresRegion.replaceChildren()
-    if (liste.length === 0) return
-    const MOTS = {
-      departement: 'Tous les départements',
-      region: 'Toutes les régions',
-      ville: 'Toutes les villes',
-      aucun: 'Partout',
-    } as const
-    this.el.scoresRegion.appendChild(new Option(MOTS[niveauDe(this.filtrePays)], ''))
-    for (const r of liste) this.el.scoresRegion.appendChild(new Option(r, r))
-    this.el.scoresRegion.value = this.filtreRegion
-  }
-
-  /**
-   * Le filtre géographique s'applique-t-il à cette ligne ?
-   *
-   * ⚠️ UNE LIGNE SANS PAYS EST ÉCARTÉE dès qu'on filtre. Les temps enregistrés
-   * avant que le pays existe n'en ont pas : les montrer sous « France » serait
-   * leur inventer une origine, et le classement mentirait.
-   */
   /** Le nom précédé de son drapeau — tel quel si le coureur n'en a pas. */
   private avecDrapeau(nom: string, pays?: string): string {
     const d = drapeau(pays ?? '')
     return d ? `${d} ${nom}` : nom
-  }
-
-  private dansLeFiltre(s: { pays?: string; region?: string }): boolean {
-    if (this.filtrePays && s.pays !== this.filtrePays) return false
-    if (this.filtreRegion && s.region !== this.filtreRegion) return false
-    return true
   }
 
   /**
@@ -1405,9 +1338,7 @@ export class Menu {
 
     // 🕓 « Récentes » = TES courses, dans l'ordre du journal ; « Local » = les
     // meilleures. Deux questions différentes sur les mêmes données.
-    const tous = (this.ongletScore === 'recentes' ? chargerInfini() : meilleuresInfini()).filter(
-      (s) => this.dansLeFiltre(s)
-    )
+    const tous = this.ongletScore === 'recentes' ? chargerInfini() : meilleuresInfini()
     const q = this.requeteScore
     // ⚠️ Le rang d'origine est conservé, comme partout ailleurs : filtrer puis
     // renuméroter donnerait la médaille d'or au 5ᵉ dès qu'il cherche son nom.
@@ -1448,7 +1379,7 @@ export class Menu {
 
   /** 📱 L'appareil : les temps solo comme en ligne, gardés ici et nulle part ailleurs. */
   private buildScoresLocal(hote: HTMLElement, lead: HTMLElement) {
-    const tous = chargerScores(COURSE_LENGTH).filter((s) => this.dansLeFiltre(s))
+    const tous = chargerScores(COURSE_LENGTH)
     const q = this.requeteScore
     /*
      * ⚠️ ON GARDE LE RANG D'ORIGINE. Filtrer puis numéroter la liste réduite
@@ -1539,7 +1470,7 @@ export class Menu {
       .map((l, i) => ({ l, i }))
       // 🌍 Le filtre géographique s'applique AUSSI ici : « les meilleurs du
       // Japon » se lit dans le mondial, pas ailleurs.
-      .filter(({ l }) => this.correspond(l.pseudo || 'Guerrier anonyme', q) && this.dansLeFiltre(l))
+      .filter((x) => this.correspond(x.l.pseudo || 'Guerrier anonyme', q))
 
     if (vues.length === 0) {
       this.videRecherche(lead, this.el.scoresRech.value.trim())
