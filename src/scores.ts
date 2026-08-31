@@ -95,6 +95,119 @@ export function ajouterScore(
   return { scores: gardes, rang: rang <= MAX_SCORES ? rang : 0 }
 }
 
+/**
+ * ————— ♾️ Les distances de la course sans fin —————
+ *
+ * ⚠️ UN TABLEAU À PART, ET C'EST OBLIGATOIRE. Une course se mesure en secondes
+ * et le PLUS PETIT gagne ; l'infini se mesure en mètres et c'est le PLUS GRAND.
+ * Les mêler dans une seule table ne demanderait pas seulement une colonne de
+ * plus : il faudrait trier dans deux sens à la fois. Deux tables, deux tris,
+ * aucune ambiguïté.
+ *
+ * Pas de longueur dans la clé, contrairement aux chronos : une course sans fin
+ * n'en a pas.
+ */
+export interface ScoreInfini {
+  /** La distance atteinte, en mètres */
+  metres: number
+  nom: string
+  /** L'identifiant du guerrier (cf. roster.ts) */
+  fighter: string
+  /** Date en ms epoch */
+  date: number
+  /** 🌍 Le pays porté CE JOUR-LÀ (code ISO, `''` si aucun) */
+  pays?: string
+}
+
+const CLE_INFINI = 'kurogane-infini-scores'
+
+/**
+ * Combien de courses le JOURNAL retient.
+ *
+ * Plus que les dix du classement : l'écran de fin a besoin des dernières
+ * courses, y compris les mauvaises, et une mauvaise course sort du classement
+ * sans sortir de l'histoire.
+ */
+const MAX_JOURNAL = 30
+
+/** Relit les distances. Tout est revalidé, comme pour les chronos. */
+export function chargerInfini(): ScoreInfini[] {
+  let brut: unknown
+  try {
+    brut = JSON.parse(localStorage.getItem(CLE_INFINI) ?? '[]')
+  } catch {
+    return []
+  }
+  if (!Array.isArray(brut)) return []
+
+  const scores: ScoreInfini[] = []
+  for (const s of brut) {
+    if (!s || typeof s !== 'object') continue
+    const o = s as Record<string, unknown>
+    const metres = Number(o.metres)
+    if (!Number.isFinite(metres) || metres < 0) continue
+    scores.push({
+      metres: Math.floor(metres),
+      nom: typeof o.nom === 'string' ? o.nom.slice(0, 12) : 'Guerrier anonyme',
+      fighter: typeof o.fighter === 'string' ? o.fighter : 'yasuke',
+      date: Number.isFinite(Number(o.date)) ? Number(o.date) : 0,
+      pays: typeof o.pays === 'string' ? o.pays : undefined,
+    })
+  }
+  /*
+   * ⚠️ ON GARDE L'ORDRE CHRONOLOGIQUE, la plus récente en tête.
+   *
+   * Le tableau était trié par distance et coupé aux dix meilleures — et l'écran
+   * de fin, qui montre « les deux courses d'avant », se retrouvait alors à
+   * montrer des courses vieilles de plusieurs jours dès qu'on enchaînait
+   * quelques parties moyennes. Pire : une mauvaise course disparaissait aussitôt
+   * du journal, donc de « l'avant ».
+   *
+   * On garde donc le JOURNAL, et c'est `meilleuresInfini` qui trie quand il
+   * s'agit de classer. Deux questions différentes, deux lectures.
+   */
+  scores.sort((a, b) => b.date - a.date)
+  return scores.slice(0, MAX_JOURNAL)
+}
+
+/**
+ * Le classement : les plus longues d'abord.
+ *
+ * ⚠️ Décroissant, contrairement aux chronos — ici, le plus loin gagne.
+ */
+export function meilleuresInfini(): ScoreInfini[] {
+  return [...chargerInfini()].sort((a, b) => b.metres - a.metres).slice(0, MAX_SCORES)
+}
+
+/**
+ * Ajoute une distance. Rend le journal à jour, le RANG au classement
+ * (1 = meilleure de tous les temps, 0 = pas dans les dix), et ce qu'il fallait
+ * pour l'écran de fin : le record d'AVANT et les deux courses précédentes.
+ */
+export function ajouterInfini(s: ScoreInfini): {
+  journal: ScoreInfini[]
+  rang: number
+  /** Le meilleur AVANT cette course — ce qu'il y avait à battre. */
+  recordAvant: number
+  /** Les deux courses juste avant celle-ci, de la plus récente à la plus vieille. */
+  precedentes: ScoreInfini[]
+} {
+  const avant = chargerInfini()
+  const recordAvant = avant.reduce((m, x) => Math.max(m, x.metres), 0)
+  const precedentes = avant.slice(0, 2)
+
+  const journal = [s, ...avant].slice(0, MAX_JOURNAL)
+  try {
+    localStorage.setItem(CLE_INFINI, JSON.stringify(journal))
+  } catch {
+    // Mode privé, quota plein : on ne garde rien, la course reste jouable.
+  }
+
+  const classe = [...journal].sort((a, b) => b.metres - a.metres)
+  const rang = classe.indexOf(s) + 1
+  return { journal, rang: rang <= MAX_SCORES ? rang : 0, recordAvant, precedentes }
+}
+
 /*
  * ⚠️ `effacerScores` a été RETIRÉ avec son bouton.
  *

@@ -1012,7 +1012,15 @@ body {
 }
 
 /* ——— Les boutons ——— */
-#overlay button {
+/*
+ * ⚠️ Le VOILE DE PAUSE partage ces styles, alors qu'il vit hors de `#overlay`.
+ *
+ * Sans lui dans ce sélecteur, ses deux boutons s'affichaient NUS — rectangles
+ * blancs du navigateur au milieu d'un jeu sombre. Vu à l'écran. Les styles de
+ * bouton ne sont pas une affaire d'écran de menu, mais d'interface entière.
+ */
+#overlay button,
+.pausebox button {
   font-family: inherit;
   font-size: 1.05rem;
   font-weight: 700;
@@ -1025,14 +1033,17 @@ body {
   cursor: pointer;
   box-shadow: 0 6px 22px rgba(226, 75, 58, 0.35);
 }
-#overlay button:active {
+#overlay button:active,
+.pausebox button:active {
   transform: scale(0.97);
 }
-#overlay button:focus-visible {
+#overlay button:focus-visible,
+.pausebox button:focus-visible {
   outline: 2px solid #d6ac5a;
   outline-offset: 3px;
 }
-#overlay button.secondary {
+#overlay button.secondary,
+.pausebox button.secondary {
   background: transparent;
   border: 2px solid #3d4560;
   box-shadow: none;
@@ -1944,6 +1955,41 @@ body {
   flex-wrap: wrap;
   gap: 8px;
 }
+/* ⚠️ TOUS LES BOUTONS DE FIN À LA MÊME TAILLE.
+   « Quitter » se retrouvait large ou étroit selon la longueur des autres —
+   « Rejouer » et « Retour au lobby » n'ont pas le même nombre de lettres, et
+   la ligne les répartissait au prorata. Un bouton dont la taille dépend du
+   texte du voisin se lit comme une hiérarchie qu'on n'a pas voulue.
+   `flex: 1 1 0` les rend égaux : c'est la PLACE qui se partage, plus le mot. */
+#overlay .fin-row > button {
+  flex: 1 1 0;
+  min-width: 0;
+  /*
+   * ⚠️ UNE BORDURE POUR TOUS, MÊME INVISIBLE — sinon ils ne font PAS la même
+   * largeur, `flex: 1` ou pas.
+   *
+   * `flex-basis: 0` dimensionne la boîte de CONTENU : bordures et marges
+   * viennent s'ajouter par-dessus le partage. « Quitter » porte 2 px de bordure
+   * de chaque côté, « Rejouer » aucune — mesuré à l'écran : 4 px d'écart, et
+   * l'un des deux paraissait plus large sans qu'on l'ait voulu.
+   *
+   * Une bordure transparente ne se voit pas : le fond se peint DESSOUS
+   * (`background-clip` vaut `border-box` par défaut). Elle ne sert qu'à donner
+   * à tous la même boîte.
+   */
+  border-width: 2px;
+  border-style: solid;
+}
+#overlay .fin-row > button.primary {
+  border-color: transparent;
+  /* La marge haute de `.primary` décalait ce seul bouton d'un cheveu. */
+  margin-top: 0;
+}
+/* Un bouton caché ne doit pas garder sa part : sinon « Quitter » resterait
+   coincé sur un tiers de la ligne alors qu'il est seul. */
+.fin-row > button.hidden {
+  display: none;
+}
 #overlay button.lobby {
   background: #3a5ba8;
   border-color: #4a6fc4;
@@ -2227,4 +2273,350 @@ body {
   font-size: 0.85rem;
   text-align: left;
   line-height: 1.4;
+}
+
+/* ————— ♾️ Le brasier qui poursuit, en mode infini —————
+
+   Un effet d'ÉCRAN, pas un décor : la caméra regarde devant, un mur de feu
+   dans le dos du coureur ne se verrait jamais. Le feu envahit donc l'image par
+   le bas et par les bords, là où l'œil le perçoit sans quitter la piste des
+   yeux.
+
+   ⚠️ TOUT EST PILOTÉ PAR UNE SEULE VARIABLE, `--proche` (0 → 1). Le jeu ne
+   touche qu'à elle ; la mise en scène vit ici. Sans ça, il faudrait écrire six
+   états en dur des deux côtés et les tenir d'accord.
+
+   `--proche` vaut 0 hors du mode infini : l'élément est alors totalement
+   transparent et ne coûte rien. */
+#brasier {
+  --proche: 0;
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /*
+   * ⚠️ PAS DE `z-index` ICI, comme #terre et #flash juste au-dessus.
+   *
+   * Un `z-index: 3` faisait passer le brasier PAR-DESSUS le menu : à la mort,
+   * l'écran de fin s'affichait noyé d'orange et le bouton « rejouer » devenait
+   * illisible. `#overlay` se peint en `auto`, donc selon l'ordre du DOM — il
+   * suffit que le brasier soit déclaré avant lui dans index.html, ce qui est le
+   * cas. Le feu reste alors visible EN FOND derrière le menu translucide, ce
+   * qui est exactement l'effet voulu.
+   */
+  opacity: var(--proche);
+  /* La lueur monte du bas ; sa hauteur suit `--proche`, si bien que le feu
+     paraît GAGNER du terrain plutôt que simplement s'éclaircir. */
+  background:
+    radial-gradient(
+      ellipse 140% calc(18% + var(--proche) * 42%) at 50% 104%,
+      rgba(255, 214, 120, 0.95) 0 12%,
+      rgba(255, 122, 34, 0.85) 30%,
+      rgba(190, 44, 12, 0.55) 55%,
+      transparent 80%
+    ),
+    radial-gradient(
+      ellipse calc(10% + var(--proche) * 16%) 90% at -2% 70%,
+      rgba(255, 120, 40, 0.7) 0 40%,
+      transparent 75%
+    ),
+    radial-gradient(
+      ellipse calc(10% + var(--proche) * 16%) 90% at 102% 70%,
+      rgba(255, 120, 40, 0.7) 0 40%,
+      transparent 75%
+    );
+  /* Le vacillement : jamais tout à fait immobile, jamais régulier non plus. */
+  animation: brasierVacille 0.9s ease-in-out infinite alternate;
+}
+@keyframes brasierVacille {
+  from {
+    filter: brightness(0.92) saturate(1);
+    transform: scaleY(0.985);
+  }
+  to {
+    filter: brightness(1.12) saturate(1.15);
+    transform: scaleY(1.02);
+  }
+}
+
+/* Le dernier palier : il ne reste qu'un coup à encaisser. Le rythme double et
+   la teinte vire au blanc-jaune — on doit SENTIR que c'est maintenant, sans
+   avoir à lire un chiffre. */
+#brasier.critique {
+  animation-duration: 0.32s;
+}
+
+/* ⚠️ Certains joueurs ne supportent pas les clignotements rapides, et un feu
+   qui bat à 3 Hz en plein écran en est un. On garde la couleur — c'est elle
+   qui porte l'information — et l'on retire le battement. */
+@media (prefers-reduced-motion: reduce) {
+  #brasier,
+  #brasier.critique {
+    animation: none;
+  }
+}
+
+/* ————— ♾️ Le droit à l'erreur —————
+
+   En haut AU MILIEU : c'est le seul chiffre qui décide de la partie, et le
+   chrono occupe déjà le coin gauche.
+
+   ⚠️ Six pastilles, pas un « 2 / 6 ». On lit un nombre de points d'un coup
+   d'œil, sans quitter la piste des yeux ; un chiffre demande de le lire PUIS de
+   le comparer au maximum. Sur une piste qui défile à 25 m/s, cette demi-seconde
+   est un obstacle raté. Le mot sous les pastilles ne sert qu'à lever le doute
+   la première fois — après, on ne regarde plus que les pastilles. */
+#degats {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  pointer-events: none;
+  text-align: center;
+}
+#degats.hidden {
+  display: none;
+}
+#degatsPuces {
+  display: flex;
+  gap: 5px;
+}
+#degatsPuces i {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  /* Intacte : creuse et sobre. Elle ne doit pas attirer l'œil — c'est sa
+     DISPARITION qui porte l'information. */
+  background: rgba(255, 255, 255, 0.13);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+/* Encaissée : elle s'éteint en braise. Le feu la mange, littéralement. */
+#degatsPuces i.pris {
+  background: #e24b3a;
+  border-color: #ff9a5c;
+  box-shadow: 0 0 8px rgba(226, 75, 58, 0.75);
+}
+#degatsMot {
+  /*
+   * ⚠️ PETIT, ET BORNÉ EN LARGEUR.
+   *
+   * Le chrono occupe le coin gauche et les boutons le coin droit : au milieu,
+   * il ne reste qu'une bande étroite. En 420 px de large, ce mot passait sous
+   * les boutons. Il ne porte qu'un rappel — ce sont les PASTILLES qu'on lit en
+   * jouant — donc il cède la place plutôt que de se superposer.
+   */
+  font-size: 0.6rem;
+  max-width: 46vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.05em;
+  color: #cbd2e6;
+  /* Un fond discret : ce mot se lit par-dessus une piste claire comme sombre. */
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(13, 16, 28, 0.55);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+/* Il ne reste qu'un coup : le mot passe au vermillon et bat avec le brasier. */
+#degats.critique #degatsMot {
+  color: #ff6a4d;
+  font-weight: 700;
+}
+#degats.critique #degatsPuces i:not(.pris) {
+  border-color: #ff6a4d;
+  animation: degatsDernier 0.6s ease-in-out infinite alternate;
+}
+@keyframes degatsDernier {
+  from {
+    box-shadow: 0 0 0 rgba(255, 106, 77, 0);
+  }
+  to {
+    box-shadow: 0 0 10px rgba(255, 106, 77, 0.9);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #degats.critique #degatsPuces i:not(.pris) {
+    animation: none;
+  }
+}
+
+/* ⚠️ La catégorie se choisit AVANT l'onglet, et doit se lire comme un niveau
+   au-dessus : plus haute, plus contrastée. Deux barres segmentées identiques
+   l'une sous l'autre donneraient six boutons de même poids, et l'on ne saurait
+   plus lequel commande l'autre. */
+.seg-cat {
+  margin-bottom: 6px;
+}
+.seg-cat button {
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+.seg-cat button.on {
+  background: #e24b3a;
+  border-color: #ff7a5c;
+  color: #fff;
+}
+
+/* ————— 🏺 Le compte des jarres, façon pièces de Mario Kart —————
+
+   Sous le chiffre principal, petit et permanent. Il ne clignote pas et ne
+   bouge pas : c'est un état qu'on consulte du coin de l'œil, pas une alerte.
+
+   ⚠️ Il porte AUSSI le pourcentage perdu. Un compteur seul dirait « 3 » sans
+   dire trois quoi ; c'est la vitesse qui manque, pas les jarres qui comptent. */
+#jarres {
+  /*
+   * ⚠️ EN BAS À DROITE, et hors de la rangée du HUD.
+   *
+   * `#hud` est un flex en ligne : laissé dedans, le compteur se rangeait à
+   * droite du chrono, en plein dans la bande des pastilles de dégâts. Il est
+   * donc `fixed`, dans le seul coin encore libre — le haut porte le chrono, les
+   * pastilles et la pause ; la gauche, la colonne de progression.
+   *
+   * ⚠️ Il se lit AVEC le pouce dessus, sur mobile : d'où la marge basse
+   * généreuse, qui le remonte au-dessus de la zone où la main se pose.
+   */
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: calc(max(18px, env(safe-area-inset-bottom)) + 8px);
+  font-size: 0.86rem;
+  color: #f0e8d8;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+#jarres.hidden {
+  display: none;
+}
+#jarres b {
+  font-weight: 800;
+}
+#jarres small {
+  margin-left: 5px;
+  font-size: 0.78em;
+  color: #ff9a5c;
+  font-weight: 700;
+}
+
+/* ————— ♾️ Le relevé de fin de course sans fin —————
+
+   Une ligne par chiffre : libellé à gauche, valeur à droite. Volontairement
+   plat — il n'y a rien à classer quand on court seul, seulement à comparer.
+   Un podium ferait croire à des adversaires. */
+.resume {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.resumeligne {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(21, 26, 44, 0.55);
+  border: 1px solid #2b3350;
+  color: #9aa4c0;
+  font-size: 0.9rem;
+}
+.resumeligne b {
+  font-size: 1.05rem;
+  color: #f0e8d8;
+  font-variant-numeric: tabular-nums;
+}
+/* La course qu'on vient de faire : c'est elle qu'on cherche des yeux. */
+.resumeligne.fort {
+  background: rgba(226, 75, 58, 0.16);
+  border-color: #e24b3a;
+  color: #f0c8bf;
+}
+.resumeligne.fort b {
+  font-size: 1.35rem;
+  color: #ffb08a;
+}
+
+/* ————— ⏸ Le bouton de pause et son voile ————— */
+
+/* Le coin droit, en colonne : le bouton, puis les rouleaux. */
+#hudDroite {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* ⚠️ PLUS PETIT À L'ŒIL, PAS SOUS LE DOIGT.
+
+   Il prenait 44 px, ce qui reste le minimum tenable pour un pouce : en dessous,
+   on rate le bouton et le geste devient un SWIPE — c'est-à-dire qu'on saute au
+   lieu de mettre en pause, en pleine course.
+
+   On réduit donc le carré visible à 34 px, et l'on rend la place perdue par une
+   zone tactile invisible qui déborde de 6 px tout autour (`::after`). Le bouton
+   paraît discret, mais il se touche toujours aussi bien — 46 px de cible. */
+.hudbtn {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid #2b3350;
+  background: rgba(13, 16, 28, 0.62);
+  color: #f0e8d8;
+  font-size: 0.82rem;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+/* La cible, invisible, plus large que le dessin. */
+.hudbtn::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
+.hudbtn:active {
+  background: rgba(226, 75, 58, 0.35);
+  border-color: #e24b3a;
+}
+
+#pause {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  /* ⚠️ OPAQUE, ET C'EST VOULU. Un voile transparent laisserait lire les
+     obstacles qui approchent pendant qu'on réfléchit : un repos gratuit. */
+  background: rgba(13, 16, 28, 0.92);
+  backdrop-filter: blur(6px);
+}
+#pause.hidden {
+  display: none;
+}
+.pausebox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(320px, 100%);
+  text-align: center;
+}
+.pausebox > b {
+  font-size: 1.3rem;
+  letter-spacing: 0.06em;
+}
+.pausebox > small {
+  color: #9aa4c0;
+  line-height: 1.5;
+  margin-bottom: 4px;
 }

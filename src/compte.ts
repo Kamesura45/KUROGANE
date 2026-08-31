@@ -437,15 +437,27 @@ export async function lireClassement(
 export async function verserPots(recolte: {
   mon: number
   hisui: number
-}): Promise<Profil | null> {
-  if (!jeton || (recolte.mon <= 0 && recolte.hisui <= 0)) return null
+}): Promise<{ profil: Profil | null; verse: boolean }> {
+  if (!jeton || (recolte.mon <= 0 && recolte.hisui <= 0)) {
+    return { profil: null, verse: false }
+  }
   try {
     const r = await appel('/api/pot', recolte)
     profil = r.profil
+    return { profil, verse: true }
   } catch {
-    // Serveur muet ou plafond atteint : la course reste jouée, le gain est perdu
+    /*
+     * Serveur muet, sans compte, ou versement trop rapproché (le serveur n'en
+     * accepte qu'un par minute).
+     *
+     * ⚠️ ON DIT MAINTENANT QUE ÇA A ÉCHOUÉ, au lieu de faire comme si de rien
+     * n'était. En course ordinaire, un versement raté ne coûtait qu'une récolte
+     * de fin de partie ; en course SANS FIN on verse à chaque tronçon, et une
+     * carte bouclée un peu vite tombe sous le délai. L'appelant peut alors
+     * REMETTRE la récolte de côté pour le tronçon suivant, au lieu de la jeter.
+     */
+    return { profil, verse: false }
   }
-  return profil
 }
 
 /** Ouvre la boutique : le catalogue ET le solde, d'un seul appel. */

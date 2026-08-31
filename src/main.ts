@@ -10,7 +10,7 @@ import {
   TAILLE_OBSTACLE,
   type Tresor,
 } from './track'
-import { ajouterScore } from './scores'
+import { ajouterScore, ajouterInfini } from './scores'
 import { Input } from './input'
 import { Net, type RemotePlayer, type LobbyView } from './net'
 import { Bot, PROFILS, BOTS_MAX, construireRangees } from './bot'
@@ -322,6 +322,21 @@ const flashEl = document.getElementById('flash')!
 const fumeeEl = document.getElementById('fumee')!
 /** 🎯 La terre du kunai : des éclaboussures sur les BORDS de l'écran, jusqu'au 🍵 thé */
 const terreEl = document.getElementById('terre')!
+// ♾️ Le brasier du mode infini. Toute sa mise en scène vit dans la CSS ; le jeu
+// ne touche qu'à une variable, `--proche` (cf. #brasier dans style.css).
+const brasierEl = document.getElementById('brasier')!
+const degatsEl = document.getElementById('degats')!
+const degatsPucesEl = document.getElementById('degatsPuces')!
+const degatsMotEl = document.getElementById('degatsMot')!
+const jarresEl = document.getElementById('jarres')!
+const jarresNEl = document.getElementById('jarresN')!
+const jarresPctEl = document.getElementById('jarresPct')!
+const pauseEl = document.getElementById('pause')!
+const pauseTitreEl = document.getElementById('pauseTitre')!
+const pauseMotEl = document.getElementById('pauseMot')!
+const btnPauseEl = document.getElementById('btnPause')!
+const btnReprendreEl = document.getElementById('btnReprendre')!
+const btnQuitterPartieEl = document.getElementById('btnQuitterPartie')!
 const progressEl = document.getElementById('progressfill')!
 const gapEl = document.getElementById('gap')!
 const aspiEl = document.getElementById('aspi')!
@@ -407,6 +422,112 @@ let departImminent: number | null = null
  * ce drapeau y reste donc à `false` pour toujours.
  */
 let gele = false
+
+/*
+ * ————— ⏸ La pause —————
+ *
+ * ⚠️ ELLE N'EXISTE PAS EN LIGNE, et ce n'est pas un oubli : les autres
+ * continuent de courir. Figer sa propre piste pendant que la course avance
+ * donnerait un écran menteur — on reprendrait cinq secondes plus tard en ayant
+ * traversé cinq secondes d'obstacles sans les voir. Le bouton reste, mais il
+ * n'y propose que de QUITTER.
+ *
+ * Hors ligne, on met `dt` à zéro plutôt que de traiter chaque cas : chrono,
+ * distance, sorts, flammes, tout est écrit en `x += v * dt` et s'arrête donc de
+ * lui-même. Un drapeau lu à un seul endroit ne peut pas être oublié dans un
+ * coin du code.
+ */
+let enPause = false
+
+/*
+ * ————— ♾️ LE MODE INFINI —————
+ *
+ * Pas de ligne d'arrivée : on court jusqu'à ce que les flammes vous rattrapent.
+ * Ce qui les rapproche n'est pas le temps, c'est la MALADRESSE — cinq obstacles
+ * encaissés et c'est fini.
+ *
+ * ⚠️ CINQ COUPS, PAS CINQ RENCONTRES. Ne comptent que les vrais trébuchements :
+ *   · l'armure qui encaisse ne compte pas — c'est tout son intérêt ;
+ *   · une escalade ne compte pas — on a franchi l'obstacle, pas subi.
+ * Les deux sont déjà des branches distinctes au moment de la collision, si
+ * bien que la règle s'écrit là où le joueur perd VRAIMENT sa vitesse, et nulle
+ * part ailleurs.
+ */
+let modeInfini = false
+/** Combien de coups encaissés, de 0 à DEGATS_MAX. Ne redescend jamais. */
+let degats = 0
+const DEGATS_MAX = 5
+
+/*
+ * ————— 🏺 La lourdeur des jarres —————
+ *
+ * En course sans fin, percuter une poterie ne coûte plus seulement l'instant du
+ * choc : ça ALOURDIT, et ça reste. Chaque jarre encaissée retire un cran de
+ * vitesse de croisière, définitivement — jusqu'au 🍵 thé, qui lave tout.
+ *
+ * ⚠️ C'est ce qui redonne un rôle au thé. Il ne lavait que les afflictions
+ * (poison, chaînes, fumigène), toutes envoyées par un ADVERSAIRE — donc
+ * inexistantes ici. Un rouleau qui ne peut jamais rien soigner est un rouleau
+ * mort ; celui-ci répond maintenant à un mal qu'on peut vraiment attraper.
+ *
+ * ⚠️ ET IL Y A UN PLANCHER. Sans lui, une poignée de jarres ramènerait la
+ * course à l'arrêt et il n'y aurait plus rien à jouer — juste à attendre les
+ * flammes. On perd jusqu'à 40 % de croisière, pas davantage : assez pour que ça
+ * pèse, jamais assez pour que la partie soit finie sans l'être.
+ */
+let lourdeur = 0
+const LOURDEUR_PAR_JARRE = 0.07
+const LOURDEUR_PLANCHER = 0.6
+
+/**
+ * ♾️ Le dernier tronçon franchi — la « carte » qu'on vient de boucler.
+ *
+ * Sert à repérer le moment où l'on recommence : c'est là qu'on encaisse les
+ * pots verts, comme une course en ligne verse les siens à l'arrivée.
+ *
+ * ⚠️ BOUCLER UNE CARTE NE REND AUCUNE VIE. On garde le même droit à l'erreur du
+ * début à la fin : sinon la partie ne finirait jamais pour qui tient un tour, et
+ * « cinq obstacles » ne voudrait plus rien dire — ce serait « cinq par carte »,
+ * une règle qu'on ne peut plus énoncer d'une phrase.
+ */
+let dernierTroncon = 0
+
+/**
+ * L'avancement dans la course, de 0 à 1 — ce qui fait monter la croisière.
+ *
+ * ⚠️ EN INFINI, ÇA PLAFONNE. `distance / COURSE_LENGTH` grandit sans borne
+ * quand il n'y a plus de ligne d'arrivée : la vitesse de croisière doublerait
+ * tous les deux kilomètres et le jeu deviendrait injouable au bout de quelques
+ * minutes, non par difficulté mais par absurdité. On monte donc jusqu'au
+ * maximum d'une course ordinaire, puis on s'y tient — la tension vient des
+ * flammes, pas d'une vitesse que personne ne peut plus tenir.
+ */
+function avancement() {
+  const t = distance / COURSE_LENGTH
+  return modeInfini ? Math.min(1, t) : t
+}
+
+/**
+ * 🏺 Ce qui reste de la vitesse de croisière, une fois les jarres encaissées.
+ * 1 quand on est net ; jamais moins que le plancher (cf. LOURDEUR_PLANCHER).
+ */
+function facteurLourdeur() {
+  if (!modeInfini || lourdeur === 0) return 1
+  return Math.max(LOURDEUR_PLANCHER, 1 - LOURDEUR_PAR_JARRE * lourdeur)
+}
+
+/**
+ * Est-on dans les derniers mètres, ceux du sprint final ?
+ *
+ * ⚠️ Toujours FAUX en infini. Le test d'origine (`distance >= COURSE_LENGTH -
+ * SPRINT_ZONE`) deviendrait vrai pour de bon passé 1 800 m, et le jeu resterait
+ * en « sprint final » jusqu'à la fin de la partie : bannière collée à l'écran,
+ * foulée pressée en permanence, sorts bridés. Une course sans fin n'a pas de
+ * dernière ligne droite.
+ */
+function versLaFin() {
+  return !modeInfini && distance >= COURSE_LENGTH - SPRINT_ZONE
+}
 let escaladeT = 0 // temps de freinage restant après une escalade
 let stumblePrec = 0 // sa valeur à l'image d'avant : sert à repérer le choc
 let netTimer = 0 // pour n'envoyer notre position que 10 fois/s
@@ -1730,7 +1851,7 @@ function botsEnCourse() {
  */
 function majTetes() {
   // Toi : ta tete et ton nom, a ta hauteur de course
-  coureurMoi.wrap.style.bottom = `${Math.min(100, (distance / COURSE_LENGTH) * 100)}%`
+  coureurMoi.wrap.style.bottom = `${Math.min(100, (((modeInfini ? distance % COURSE_LENGTH : distance)) / COURSE_LENGTH) * 100)}%`
   coureurMoi.etiq.textContent = menu.settings.name || 'Toi'
 
   // Les rivaux : les bots en entrainement, les joueurs en ligne. Le meme banc
@@ -1918,8 +2039,21 @@ function lancerParchemin() {
     libererChaines(player.mesh) // ⛓️ les chaînes tombent
     dissiperBrume(player.mesh) // ☠️ la brume se lève
     terreEl.classList.remove('on') // 🎯 la terre du kunai s'en va avec le reste
+    /*
+     * ♾️🏺 …et la LOURDEUR des jarres part avec le reste.
+     *
+     * C'est ce qui rend le thé utile en course sans fin : les afflictions qu'il
+     * lavait (poison, chaînes, fumigène) viennent toutes d'un adversaire, et il
+     * n'y en a pas. Sans ce mal-là, il ne soignerait jamais rien.
+     */
+    const pesait = lourdeur
+    lourdeur = 0
+    majJarres() // le compteur retombe a zero avec le poids
     theFin = time + THE_DUREE // 🍵 les cercles montent
     sonDeSoin()
+    // On ne se vante que s'il y avait quelque chose à laver : annoncer une
+    // guérison quand on courait déjà net ferait douter de ce que fait le thé.
+    if (modeInfini && pesait > 0) toast('🍵 Le poids des jarres s\'en va — pleine vitesse')
   }
   // ————— 🔮 Le portail : il part, il ne vise pas —————
   else if (kind === 'onmyoji') {
@@ -1956,6 +2090,35 @@ function lancerParchemin() {
       ;(m.material as THREE.MeshBasicMaterial).color.setHex(couleur)
     }
     for (const a of portailArcs) (a.material as THREE.LineBasicMaterial).color.setHex(couleur)
+  }
+  /*
+   * ————— ♾️🎯 En course sans fin, le kunai vise la PISTE —————
+   *
+   * Il n'y a personne devant : le lancer sur un adversaire le rendrait muet
+   * (« …mais tu mènes déjà ! ») et le rouleau ne servirait à rien. Il fait donc
+   * sauter le prochain MUR — le seul obstacle qu'on ne peut pas franchir
+   * proprement, puisqu'on l'escalade et que l'escalade se paie en vitesse.
+   *
+   * ⚠️ Le mur seulement. Barrières et barres hautes se sautent ou se glissent :
+   * un kunai qui ferait sauter n'importe quoi vaudrait beaucoup ou rien selon le
+   * hasard de ce qui se présente. Limité au mur, il répond toujours à la même
+   * question — « celui-là, je ne veux pas le grimper ».
+   *
+   * Sans mur en vue, on REND le rouleau : le gâcher sur un vide serait une
+   * punition pour avoir appuyé une seconde trop tôt.
+   */
+  else if (modeInfini && kind === 'kunai') {
+    const ou = track.detruireMurDevant(player.mesh.position.x)
+    if (!ou) {
+      slots.unshift(kind)
+      drawSlots()
+      toast('🎯 …aucun mur droit devant')
+      return
+    }
+    player.geste('lancer')
+    boom(ou) // 💥 la lame éclate sur la pierre
+    jouerBruit('coup')
+    toast('🎯 Le mur vole en éclats !')
   }
   // ————— Offensif : ça part chez quelqu'un —————
   else if (p.cible === 'adversaire') {
@@ -2034,7 +2197,7 @@ function combatActif() {
  * canon ; après, le sprint final — deux moments où seul le martèlement compte.
  */
 function acte2() {
-  return state === 'course' && distance < COURSE_LENGTH - SPRINT_ZONE
+  return state === 'course' && !versLaFin()
 }
 
 /**
@@ -2123,7 +2286,23 @@ function encaisserPots() {
   // Remis à zéro TOUT DE SUITE : un double appel ne doit pas payer deux fois
   recolte.mon = 0
   recolte.hisui = 0
-  void verserPots(total).then(() => majAffichageBourse())
+  void verserPots(total).then(({ verse }) => {
+    if (verse) {
+      majAffichageBourse()
+      return
+    }
+    /*
+     * ⚠️ REFUSÉ : on REMET la récolte de côté au lieu de la jeter.
+     *
+     * Le serveur n'accepte qu'un versement par minute. En course ordinaire on
+     * ne verse qu'à l'arrivée, le cas ne se posait pas ; en course SANS FIN on
+     * verse à chaque tronçon, et une carte bouclée un peu vite passe sous le
+     * délai. Sans ce retour en arrière, le joueur perdrait les pots d'un tour
+     * entier pour avoir couru trop bien.
+     */
+    recolte.mon += total.mon
+    recolte.hisui += total.hisui
+  })
 }
 
 /**
@@ -2303,7 +2482,7 @@ function resoudCoup() {
  */
 function inSprintZone() {
   return (
-    (state === 'course' && distance >= COURSE_LENGTH - SPRINT_ZONE) ||
+    (state === 'course' && versLaFin()) ||
     state === 'depart'
   )
 }
@@ -2312,6 +2491,18 @@ function inSprintZone() {
 function backToMenu(banner?: string) {
   state = 'menu'
   online = false
+  // ♾️ On quitte le mode infini en même temps que la course : sans ça, le
+  // brasier resterait allumé derrière le menu, et la course suivante hériterait
+  // d'une règle qu'on n'a pas choisie.
+  modeInfini = false
+  // ⏸ On sort de la pause en même temps que de la course, et le bouton s'en va.
+  ouvrirPause(false)
+  btnPauseEl.classList.add('hidden')
+  degats = 0
+  lourdeur = 0 // 🏺 on repart léger
+  dernierTroncon = 0 // ♾️ la carte repart du premier tour
+  majJarres()
+  majBrasier()
   /*
    * ⏳ UNE COURSE LANCÉE MAIS PAS ENCORE REJOINTE S'ANNULE ICI.
    *
@@ -2359,6 +2550,190 @@ function backToMenu(banner?: string) {
   menu.showTitle(banner)
 }
 
+
+/**
+ * ♾️ Rapproche (ou éteint) le brasier, d'après les dégâts encaissés.
+ *
+ * Une seule variable CSS porte tout : la hauteur des flammes, leur emprise sur
+ * les bords, leur éclat. Écrire les cinq paliers en dur des deux côtés aurait
+ * demandé de les tenir d'accord à jamais.
+ *
+ * Le plancher à 0,1 n'est pas décoratif : sans lui, un joueur qui n'a rien
+ * encaissé ne verrait AUCUN feu et ne saurait pas qu'il est poursuivi. La règle
+ * doit s'apprendre en jouant, pas dans un écran d'aide.
+ */
+/**
+ * 🏺 Le compte des jarres percutées, sous le chiffre principal.
+ *
+ * Il ne s'affiche qu'en course sans fin : ailleurs, une jarre ne laisse aucune
+ * trace après le choc, et un compteur figé à zéro poserait une question sans
+ * réponse.
+ */
+/**
+ * ⏸ Ouvre ou ferme le voile de pause.
+ *
+ * ⚠️ EN LIGNE, ON N'ARRÊTE RIEN. Les autres continuent de courir : figer sa
+ * propre piste donnerait un écran menteur, et l'on reprendrait après avoir
+ * traversé sans les voir les obstacles de ces secondes-là. Le voile s'ouvre
+ * quand même — il faut pouvoir quitter — mais le jeu tourne derrière, et le
+ * texte le dit franchement au lieu de laisser croire à un répit.
+ */
+function ouvrirPause(ouvert: boolean) {
+  // Le bouton ne répond qu'en course : au menu ou sur l'écran de fin, il n'y a
+  // rien à mettre en pause, et le voile masquerait ce qu'on est en train de lire.
+  if (ouvert && state !== 'course' && state !== 'depart') return
+  enPause = ouvert && !online
+  pauseEl.classList.toggle('hidden', !ouvert)
+  pauseTitreEl.textContent = online ? '⚔️ Course en ligne' : '⏸ Pause'
+  /*
+   * ⌨️ Le rappel de la touche T n'apparaît QUE sur un appareil à pointeur fin —
+   * c'est-à-dire une souris, donc un clavier. L'afficher sur un téléphone
+   * parlerait d'une touche qui n'existe pas, à côté d'un bouton qu'on a sous le
+   * pouce.
+   */
+  const clavier = matchMedia('(pointer: fine)').matches ? ' (ou la touche T)' : ''
+  pauseMotEl.textContent = online
+    ? 'La course CONTINUE — on ne met pas les autres en attente. Tu peux la quitter, mais tu ne la reprendras pas.'
+    : `La course est arrêtée. Reprends quand tu veux${clavier}.`
+  // « Reprendre » ne promet pas la même chose des deux côtés : hors ligne on
+  // repart où l'on s'est arrêté, en ligne on retourne à une course qui a
+  // continué sans nous.
+  btnReprendreEl.textContent = online ? '↩ RETOUR À LA COURSE' : '▶ REPRENDRE'
+}
+
+function majJarres() {
+  jarresEl.classList.toggle('hidden', !modeInfini)
+  if (!modeInfini) return
+  jarresNEl.textContent = String(lourdeur)
+  // Le pourcentage n'apparaît que s'il y a quelque chose à perdre : « −0 % »
+  // occuperait la place pour ne rien dire.
+  const perte = Math.round((1 - facteurLourdeur()) * 100)
+  jarresPctEl.textContent = perte > 0 ? `−${perte} %` : ''
+}
+
+function majBrasier() {
+  const p = modeInfini ? 0.1 + 0.9 * (degats / DEGATS_MAX) : 0
+  brasierEl.style.setProperty('--proche', p.toFixed(3))
+  const critique = modeInfini && DEGATS_MAX - degats <= 1
+  // Le dernier palier bat plus vite : on doit sentir que c'est maintenant,
+  // sans avoir à lire un chiffre.
+  brasierEl.classList.toggle('critique', critique)
+
+  // ————— Le compte des coups, en haut au milieu —————
+  degatsEl.classList.toggle('hidden', !modeInfini)
+  degatsEl.classList.toggle('critique', critique)
+  if (!modeInfini) return
+
+  // Les pastilles sont bâties une fois puis seulement rallumées : les recréer à
+  // chaque coup relancerait leur transition depuis le début, et le fondu de
+  // celles déjà éteintes repartirait à zéro sous les yeux du joueur.
+  if (degatsPucesEl.childElementCount !== DEGATS_MAX) {
+    degatsPucesEl.replaceChildren(
+      ...Array.from({ length: DEGATS_MAX }, () => document.createElement('i'))
+    )
+  }
+  const puces = degatsPucesEl.children
+  for (let i = 0; i < puces.length; i++) puces[i].classList.toggle('pris', i < degats)
+
+  /*
+   * ⚠️ COURT. Le chrono tient le coin gauche, les boutons le coin droit : au
+   * milieu il ne reste qu'environ 145 px sur un téléphone étroit. « 6 avant les
+   * flammes » passait sous les boutons. Les PASTILLES disent déjà tout — celles
+   * qui restent et celles qu'on a perdues — ce mot n'est qu'un rappel chiffré.
+   */
+  const reste = DEGATS_MAX - degats
+  degatsMotEl.textContent =
+    reste === 0 ? 'RATTRAPÉ' : reste === 1 ? 'DERNIÈRE' : `reste ${reste}`
+}
+/**
+ * ————— ♾️ Un coup encaissé, en mode infini —————
+ *
+ * Appelée depuis la SEULE branche où le joueur perd vraiment sa vitesse :
+ * l'armure et l'escalade passent ailleurs, et ne comptent donc jamais.
+ *
+ * Le compteur ne redescend pas. C'était tentant — récompenser une longue série
+ * propre en éloignant un peu les flammes — mais cela changerait la règle
+ * annoncée : « cinq obstacles et c'est fini » deviendrait « cinq obstacles
+ * rapprochés ». Une règle qu'on ne peut pas énoncer en une phrase ne se retient
+ * pas, et le joueur ne saurait plus combien il lui reste de droit à l'erreur.
+ */
+function encaisserCoup() {
+  degats = Math.min(DEGATS_MAX, degats + 1)
+  majBrasier()
+  const reste = DEGATS_MAX - degats
+  if (reste <= 0) {
+    finInfini()
+    return
+  }
+  // Le message ne RÉPÈTE plus le compte : la jauge du haut le montre en
+  // permanence. Il marque l'instant du coup, ce qu'une jauge ne sait pas faire.
+  toast(reste === 1 ? '🔥 Dernière chance !' : '🔥 Les flammes gagnent du terrain')
+}
+
+/**
+ * ————— ♾️ Les flammes ont rattrapé le coureur —————
+ *
+ * On mesure en MÈTRES, et le plus loin gagne — l'inverse d'une course. Le
+ * record vit donc sous sa propre clé : le mêler aux chronos rendrait les deux
+ * illisibles, puisqu'ils ne se comparent pas dans le même sens.
+ */
+function finInfini() {
+  if (state === 'fini') return // deux obstacles dans la même image ne tuent qu'une fois
+  state = 'fini'
+  const metres = Math.floor(distance)
+
+  /*
+   * ♾️ La distance entre au tableau des courses sans fin — le SIEN, pas celui
+   * des chronos : on y trie du plus grand au plus petit (cf. scores.ts).
+   *
+   * Le rang n'est annoncé que s'il existe : dire « 11ᵉ » quand la table n'en
+   * garde que dix serait un classement fantôme.
+   */
+  const { recordAvant, precedentes } = ajouterInfini({
+    metres,
+    nom: menu.settings.name || 'Guerrier anonyme',
+    fighter: menu.settings.fighter,
+    date: Date.now(),
+    pays: menu.settings.pays, // 🌍 le drapeau du jour, figé avec la distance
+  })
+  const bat = metres > recordAvant
+  jouerBruit(bat ? 'victoire' : 'defaite')
+
+  /*
+   * ————— ♾️ Un relevé, pas un podium —————
+   *
+   * Un podium à trois marches suppose trois coureurs ; ici on court seul, et
+   * deux marches vides se liraient comme un abandon. On montre donc les seuls
+   * chiffres qui aient un sens en solitaire : ce qu'on vient de faire, le
+   * record, et les courses d'avant — de quoi voir si l'on progresse.
+   *
+   * ⚠️ Le record affiché est celui d'AVANT quand on vient de le battre : « tu
+   * as fait 1240, ton record est 1240 » n'apprendrait rien. On montre ce qui a
+   * été dépassé, ce qui est toute la nouvelle.
+   */
+  const resume = [
+    { label: 'Cette course', valeur: `${metres} m`, fort: true },
+    {
+      label: bat ? 'Ancien record' : 'Ton record',
+      valeur: `${bat ? recordAvant : Math.max(recordAvant, metres)} m`,
+    },
+    ...precedentes.map((p, i) => ({
+      label: i === 0 ? 'Course précédente' : 'Celle d\'avant',
+      valeur: `${p.metres} m`,
+    })),
+  ]
+
+  menu.showFin({
+    titre: bat
+      ? `🔥 Rattrapé — mais c'est ton RECORD&nbsp;!`
+      : `🔥 Les flammes t'ont rattrapé`,
+    joueurs: [],
+    canReplay: true,
+    canLobby: false,
+    resume,
+  })
+}
+
 /** Lance une course. En ligne, la graine vient du serveur : même piste pour les deux ! */
 function startRace(seed: number) {
   // Le décompte fait déjà partie de la course : la piste démarre avec lui.
@@ -2368,7 +2743,8 @@ function startRace(seed: number) {
   // On aligne joueur + bots sur la MÊME ligne, répartis de gauche à droite sur
   // les 3 voies (le joueur à gauche, les bots vers la droite). En duel, c'est le
   // serveur qui donne la place ; ici on ne gère que la grille solo.
-  const nbCoureurs = 1 + nbBots
+  // ♾️ Seul sur la piste en infini : la grille n'a qu'un coureur, donc le milieu.
+  const nbCoureurs = modeInfini ? 1 : 1 + nbBots
   const voieDe = (k: number) => (nbCoureurs === 1 ? 1 : Math.round((k / (nbCoureurs - 1)) * 2))
   player.reset(online ? net.myStartLane : voieDe(0))
   // Les avatars des rivaux sont (re)placés par syncRivals dès la 1re position
@@ -2380,7 +2756,14 @@ function startRace(seed: number) {
   recolte.hisui = 0
   // 🏋️ Les pots verts n'existent qu'EN LIGNE : ils donnent de la monnaie, et
   // l'entraînement se relance seul, à volonté. Voir buildJarrePlan.
-  track.reset(COURSE_LENGTH, seed, online)
+  /*
+   * 🟢 Les pots verts existent EN LIGNE et en COURSE SANS FIN.
+   *
+   * Ils étaient réservés au multi parce que l'entraînement se relance à
+   * volonté : on y aurait moissonné en boucle. La course sans fin, elle, se paie
+   * en distance — pour toucher le tronçon suivant il faut vraiment y survivre.
+   */
+  track.reset(COURSE_LENGTH, seed, online || modeInfini, modeInfini)
   time = 0
   distance = 0
   speed = 0
@@ -2399,6 +2782,12 @@ function startRace(seed: number) {
   ventFin = 0
   kusarigamaFin = 0
   armure = 0
+  // ♾️ Le droit à l'erreur repart entier à chaque partie, et le feu recule.
+  degats = 0
+  lourdeur = 0 // 🏺 on repart léger
+  dernierTroncon = 0 // ♾️ la carte repart du premier tour
+  majJarres()
+  majBrasier()
   grueFin = 0
   miroirFin = 0
   fumigeneFin = 0
@@ -2464,7 +2853,8 @@ function startRace(seed: number) {
   const rangees = construireRangees(track.obstaclesPrevus())
   const rouleaux = track.parcheminsPrevus()
   bots.forEach((b, i) => {
-    b.actif = !online && i < nbBots
+    // ♾️ Pas de rivaux en course sans fin : on court contre les flammes.
+    b.actif = !online && !modeInfini && i < nbBots
     // Graine dérivée : chaque rival tire ses fautes ailleurs dans la suite,
     // sinon les 4 rateraient exactement les mêmes obstacles au même endroit.
     // Le joueur est l'indice 0 de la grille, les bots suivent (voie répartie).
@@ -2479,6 +2869,9 @@ function startRace(seed: number) {
   state = 'depart'
   shadersPrets = false // ⚡ la piste va être repeuplée : on recompile au décompte
   menu.hide()
+  // ⏸ Le bouton n'a de sens qu'en course : il apparaît avec elle.
+  btnPauseEl.classList.remove('hidden')
+  ouvrirPause(false)
   updateMeLabel()
   countEl.classList.add('show')
   // Le départ canon : la jauge apparaît dans les 3 dernières secondes (cf. boucle)
@@ -2785,7 +3178,21 @@ const identity = () => ({
 const menu = new Menu({
   onSolo() {
     online = false
+    modeInfini = false
     menu.showBotPick()
+  },
+  /**
+   * ♾️ La course sans fin part TOUT DE SUITE.
+   *
+   * Pas d'écran de choix : il n'y a ni rivaux à doser ni longueur à régler.
+   * Passer par la fiche des bots pour n'y rien décider ferait un détour que le
+   * joueur devrait refaire à chaque partie — or c'est un mode où l'on
+   * recommence beaucoup.
+   */
+  onInfini() {
+    online = false
+    modeInfini = true
+    startRace(Math.floor(Math.random() * 2 ** 31))
   },
   onOnline() {
     // Plus de recherche 1v1 : on ouvre l'accueil des salons (créer / rejoindre).
@@ -3029,6 +3436,28 @@ void connecter().then(async () => {
   }
 })
 
+
+/* ————— ⏸ Le bouton de pause et ses deux issues ————— */
+btnPauseEl.addEventListener('click', () => {
+  jouerBruit('clic')
+  ouvrirPause(true)
+})
+btnReprendreEl.addEventListener('click', () => {
+  jouerBruit('clic')
+  ouvrirPause(false)
+})
+btnQuitterPartieEl.addEventListener('click', () => {
+  jouerBruit('clic')
+  ouvrirPause(false)
+  /*
+   * ⚠️ ON PRÉVIENT LE SERVEUR AVANT DE PARTIR. Sans `leave`, le salon nous
+   * garderait en course : les autres attendraient un coureur qui ne franchira
+   * jamais la ligne, et le classement resterait suspendu.
+   */
+  if (online) net.leave()
+  clearRivals()
+  backToMenu()
+})
 btnGo.addEventListener('click', () => {
   online = false
   startRace(Math.floor(Math.random() * 2 ** 31))
@@ -3161,6 +3590,17 @@ new Input(document.body, {
   // pendant le décompte, or le DÉPART CANON se martèle pendant le décompte !
   sprint: () => sprintTaps.push(performance.now() / 1000),
   isSprint: inSprintZone,
+  // ⏸ Le verrou unique : tant qu'il est levé, aucun geste ne parvient au jeu.
+  bloque: () => enPause,
+  /*
+   * ⏸ T bascule la pause, dans les deux sens.
+   *
+   * ⚠️ On lit le VOILE, pas `enPause` : en ligne le voile s'ouvre sans rien
+   * figer, donc `enPause` y reste faux. Se fier à lui rouvrirait le voile à
+   * chaque appui au lieu de le refermer — la touche ne servirait à rien
+   * précisément là où la souris est la plus loin.
+   */
+  pause: () => ouvrirPause(pauseEl.classList.contains('hidden')),
 })
 
 // ————— La boucle de jeu (60 fois par seconde) —————
@@ -3169,7 +3609,16 @@ const timer = new THREE.Timer()
 function tick(now?: number) {
   requestAnimationFrame(tick)
   timer.update(now)
-  const dt = Math.min(timer.getDelta(), 0.05) // temps écoulé depuis la dernière image
+  /*
+   * ⏸ En pause, le temps ne passe plus.
+   *
+   * ⚠️ On CONSOMME quand même le delta (`getDelta` remet le compteur à zéro),
+   * puis on le jette. Sans ça, il s'accumulerait pendant toute la pause et la
+   * reprise avalerait d'un coup les secondes écoulées — le coureur ferait un
+   * bond de plusieurs mètres à travers les obstacles.
+   */
+  const ecoule = Math.min(timer.getDelta(), 0.05) // temps écoulé depuis la dernière image
+  const dt = enPause ? 0 : ecoule
 
   /*
    * ————— ⏳ Le salon avant la grille —————
@@ -3223,10 +3672,18 @@ function tick(now?: number) {
       dernierChiffre = chiffre
     }
 
-    // ————— Le DÉPART CANON : marteler dans les 3 dernières secondes —————
-    // Pas plus tôt : sur le décompte d'un salon, marteler dès le début serait
-    // épuisant et sans intérêt. La jauge n'apparaît que dans la ligne droite.
-    const canon = countdown <= 3.2
+    /*
+     * ————— Le DÉPART CANON : marteler dans les 3 dernières secondes —————
+     * Pas plus tôt : sur le décompte d'un salon, marteler dès le début serait
+     * épuisant et sans intérêt. La jauge n'apparaît que dans la ligne droite.
+     *
+     * ♾️ PAS EN COURSE SANS FIN. Le départ canon départage deux coureurs sur
+     * quelques dixièmes — or ici on court seul, contre les flammes. Gagner 0,3 s
+     * sur personne ne rapporte rien, et demander de marteler l'écran avant
+     * CHAQUE partie d'un mode où l'on recommence beaucoup n'est plus un choix
+     * tactique : c'est une corvée à l'entrée.
+     */
+    const canon = countdown <= 3.2 && !modeInfini
     sprintEl.classList.toggle('hidden', !canon)
     const pnow = performance.now() / 1000
     sprintTaps = sprintTaps.filter((t) => pnow - t < SPRINT_WINDOW)
@@ -3246,10 +3703,17 @@ function tick(now?: number) {
     if (ready) {
       countEl.classList.remove('show')
       state = 'course'
-      // La jauge convertit le martèlement en vitesse initiale : à fond, on
-      // part directement à la vitesse de croisière (≈ 0,3 s de gagnées) —
-      // toujours moins qu'un trébuchement : ça départage, ça ne décide pas.
-      speed = 12 + 10 * sprintCharge
+      /*
+       * La jauge convertit le martèlement en vitesse initiale : à fond, on part
+       * directement à la vitesse de croisière (≈ 0,3 s de gagnées) — toujours
+       * moins qu'un trébuchement : ça départage, ça ne décide pas.
+       *
+       * ♾️ Sans départ canon, on part À FOND. Laisser 12 punirait le joueur
+       * pour un mécanisme qu'on lui a RETIRÉ, et il passerait ses premières
+       * secondes à rattraper une lenteur qu'il ne pouvait pas éviter. Il n'y a
+       * d'ailleurs personne à départager : c'est le meilleur départ, pour tous.
+       */
+      speed = modeInfini ? 22 : 12 + 10 * sprintCharge
       player.auRepos = false // 🧍→🏃 fin de l'attente, la foulée reprend
       if (sprintCharge > 0.75) toast('🚀 Départ canon !')
       if (online)
@@ -3361,7 +3825,9 @@ function tick(now?: number) {
     aspiEl.classList.toggle('hidden', aspiCharge < 0.25)
 
     // La vitesse de croisière augmente au fil de la course…
-    let cruise = 22 + 8 * (distance / COURSE_LENGTH)
+    let cruise = 22 + 8 * avancement()
+    // 🏺 …les jarres encaissées la rabotent, et ça ne s'en va qu'au thé…
+    cruise *= facteurLourdeur()
     // …la course propre et le sillage la portent dans le corps de course…
     cruise *= 1 + LIGNE_BOOST * ligneCharge + ASPI_BOOST * aspiCharge
     // …le martèlement la pousse encore un peu dans les derniers mètres…
@@ -3799,7 +4265,7 @@ function tick(now?: number) {
      * sprinterait sur la ligne de départ.
      */
     player.presse =
-      time < ventFin || distance >= COURSE_LENGTH - SPRINT_ZONE
+      time < ventFin || versLaFin()
     // 🧪 Banc d'essai figé : on se tient debout au lieu de pédaler sur place.
     // La foulée « repos » existe déjà pour la grille de départ, on la réutilise.
     player.auRepos = gele
@@ -3895,7 +4361,10 @@ function tick(now?: number) {
         flash()
         boom(new THREE.Vector3(player.mesh.position.x, 0.9, player.mesh.position.z)) // 💥
         jouerBruit('chute')
-        toast('💥 Trébuché !')
+        // ♾️ ICI, et nulle part ailleurs : c'est la seule branche où le coup
+        // est réellement encaissé. L'armure et l'escalade sont au-dessus.
+        if (modeInfini) encaisserCoup()
+        else toast('💥 Trébuché !')
         // Le rival doit le voir TOUT DE SUITE : sa version de nous ralentit
         // immédiatement (au lieu que son extrapolation nous fasse dépasser à tort)
         if (online) net.sendAction({ t: 'stumble', keep: player.grip })
@@ -3941,7 +4410,21 @@ function tick(now?: number) {
         chaine = 0 // le choc casse l'enchaînement en cours
         jouerBruit('jarre') // la poterie éclate quand même
         jouerBruit('chute')
-        toast('🏺 Jarre percutée !')
+        /*
+         * ♾️ La lourdeur s'installe, et elle RESTE. Le choc lui-même se dissipe
+         * en une seconde ; ce qu'on emporte, c'est le poids — jusqu'au thé.
+         *
+         * ⚠️ Ça ne compte PAS dans les cinq coups. Une jarre n'est pas un
+         * obstacle : elle se contourne sans rien lire, et la faire compter
+         * doublerait sa punition tout en rendant la règle des cinq impossible à
+         * énoncer simplement.
+         */
+        if (modeInfini) {
+          lourdeur++
+          majJarres()
+          const perte = Math.round((1 - facteurLourdeur()) * 100)
+          toast(`🏺 Alourdi — ${perte} % de vitesse en moins (🍵 pour laver)`)
+        } else toast('🏺 Jarre percutée !')
         if (online) net.sendAction({ t: 'stumble', keep: JARRE_FREIN })
       }
     }
@@ -4002,9 +4485,14 @@ function tick(now?: number) {
     }
 
     // Interface : chrono + progression
-    scoreEl.textContent = `${time.toFixed(1)} s`
+    // ♾️ En infini, c'est la DISTANCE qui compte, et c'est elle qu'on classe.
+    // Afficher un chrono donnerait à surveiller un chiffre qui ne décide de
+    // rien, pendant que le seul qui compte resterait invisible.
+    scoreEl.textContent = modeInfini ? `${Math.floor(distance)} m` : `${time.toFixed(1)} s`
     // La colonne monte : le remplissage ET ta tete suivent ta distance
-    const pct = Math.min(100, (distance / COURSE_LENGTH) * 100)
+    // ♾️ En infini, la colonne montre l'avancée DANS LE CYCLE : une jauge qui
+    // resterait pleine à jamais ne dirait plus rien.
+    const pct = Math.min(100, ((modeInfini ? distance % COURSE_LENGTH : distance) / COURSE_LENGTH) * 100)
     progressEl.style.height = `${pct}%`
 
     // Interface du sprint : on annonce, puis la jauge suit le martèlement
@@ -4066,7 +4554,29 @@ function tick(now?: number) {
     }
 
     // ⛩️ Ligne d'arrivée !
-    if (distance >= COURSE_LENGTH) crossFinishLine()
+    // ♾️ Une course sans fin n'a pas de ligne d'arrivée à franchir : ce sont
+    // les flammes qui décident, et elles passent par encaisserCoup().
+    if (!modeInfini && distance >= COURSE_LENGTH) crossFinishLine()
+
+    /*
+     * ————— ♾️🟢 On a bouclé la carte : les pots sont versés —————
+     *
+     * Ce que l'arrivée fait pour une course en ligne, la fin de tronçon le fait
+     * ici. C'est le seul moment naturel : il n'y a pas d'arrivée, mais il y a un
+     * tour de carte, et il se mérite.
+     *
+     * ⚠️ Les vies NE REPARTENT PAS. Recommencer la carte ne rend pas le droit à
+     * l'erreur : autrement, qui tient un tour ne perdrait jamais, et « cinq
+     * obstacles » deviendrait « cinq par carte ».
+     */
+    if (modeInfini) {
+      const troncon = Math.floor(distance / COURSE_LENGTH)
+      if (troncon > dernierTroncon) {
+        dernierTroncon = troncon
+        encaisserPots()
+        toast(`🗺️ Carte bouclée — tour ${troncon + 1}`)
+      }
+    }
   } else {
     // Au menu / en attente : le décor défile doucement.
     //
@@ -4103,8 +4613,22 @@ function tick(now?: number) {
    * une nappe ailleurs ne demandera pas de revenir ici.
    */
   const enCourse = state === 'depart' || state === 'course' || state === 'fini'
-  const biomeIci = enCourse ? BIOMES[indexBiome(distance, COURSE_LENGTH)] : null
-  feuAmbiance(biomeIci?.ambiance === 'feu' ? 1 : 0, dt)
+  // ♾️ En infini les biomes BOUCLENT (cf. Track.biomeDe) : sans le modulo, on
+  // resterait sur le dernier décor — et son ambiance sonore — pour toujours.
+  const biomeIci = enCourse
+    ? BIOMES[indexBiome(modeInfini ? distance % COURSE_LENGTH : distance, COURSE_LENGTH)]
+    : null
+  /*
+   * ♾️ En infini, le feu qui poursuit COUVRE celui du décor.
+   *
+   * Les deux se disputeraient le même bruit de flammes, et le joueur ne saurait
+   * plus lequel il entend : celui du village qu'il traverse, ou celui qui va le
+   * rattraper. Le second est le seul qui puisse le tuer — il gagne, et il monte
+   * avec les dégâts pour qu'on l'entende approcher sans quitter la piste des
+   * yeux.
+   */
+  const feuPoursuite = modeInfini && enCourse ? 0.25 + 0.75 * (degats / DEGATS_MAX) : 0
+  feuAmbiance(Math.max(feuPoursuite, biomeIci?.ambiance === 'feu' ? 1 : 0), dt)
   oiseauxAmbiance(biomeIci?.ambiance === 'oiseaux' ? 1 : 0, dt)
 
   // La caméra suit en douceur la ligne du joueur

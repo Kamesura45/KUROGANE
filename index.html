@@ -78,13 +78,37 @@
     <!-- Interface par-dessus le jeu (chrono, sort équipé, progression) -->
     <div id="hud">
       <div id="score">0.0 s</div>
+      <!-- 🏺 Le compte des jarres percutées, façon pièces de Mario Kart : sous
+           le chiffre principal, petit, toujours là. Le pourcentage dit ce que
+           ça COÛTE — un compteur seul ne se relierait à rien. -->
+      <div id="jarres" class="hidden">🏺 <b id="jarresN">0</b><small id="jarresPct"></small></div>
       <div id="gap" class="hidden"></div>
       <!-- Le sillage d'un rival : sans ce témoin, on accélère sans comprendre -->
       <div id="aspi" class="hidden">🌀 ASPIRATION</div>
-      <!-- Deux rouleaux en main : le 1er est celui qu'on lancera (file d'attente) -->
-      <div id="spells">
-        <div class="slot actif" id="slot0">—</div>
-        <div class="slot" id="slot1">—</div>
+      <!-- Le coin droit tient DEUX choses l'une sous l'autre : le bouton de
+           pause, puis les rouleaux en main. En rangée ils se disputaient le
+           coin ; en colonne, chacun garde sa place quelle que soit la largeur. -->
+      <div id="hudDroite">
+        <button id="btnPause" class="hudbtn hidden" aria-label="Pause">⏸</button>
+        <!-- Deux rouleaux en main : le 1er est celui qu'on lancera (file d'attente) -->
+        <div id="spells">
+          <div class="slot actif" id="slot0">—</div>
+          <div class="slot" id="slot1">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!--
+      ⏸ Le voile de pause. Il COUVRE la piste : on ne doit pas pouvoir lire les
+      obstacles qui arrivent pendant qu'on réfléchit — ce serait un repos gratuit.
+      En ligne il ne fige rien (cf. main.ts) et le dit franchement.
+    -->
+    <div id="pause" class="hidden">
+      <div class="pausebox">
+        <b id="pauseTitre">⏸ Pause</b>
+        <small id="pauseMot"></small>
+        <button id="btnReprendre" class="primary">▶ REPRENDRE</button>
+        <button id="btnQuitterPartie" class="secondary">✕ QUITTER</button>
       </div>
     </div>
     <!-- La progression, en colonne à gauche : le départ en bas, le torii en
@@ -102,6 +126,14 @@
     <!-- 🎯 La terre du kunai : éclaboussures sur les bords, le centre reste
          lisible. Elle COLLE tant qu'on n'a pas bu le thé. -->
     <div id="terre"></div>
+    <!-- ♾️ Le brasier du mode infini : il monte du bas et gagne les bords à
+         chaque obstacle encaissé. Un effet d'ÉCRAN, et non un décor 3D — la
+         caméra regarde devant, un mur de feu dans le dos ne se verrait pas. -->
+    <div id="brasier"></div>
+    <!-- ♾️ Le droit à l'erreur, en haut au milieu : combien de coups pris, et
+         combien il en reste. Six pastilles plutôt qu'un « 2/6 » — on lit un
+         nombre de points d'un coup d'œil, un chiffre demande de le comparer. -->
+    <div id="degats" class="hidden"><div id="degatsPuces"></div><small id="degatsMot"></small></div>
     <div id="toast"></div>
 
     <!-- Sprint final : la jauge de martèlement des derniers mètres -->
@@ -492,6 +524,17 @@
           <button class="back" data-back aria-label="Retour">‹</button>
           <h2>Meilleurs temps</h2>
         </header>
+        <!--
+          ⚠️ DEUX CATÉGORIES AVANT TOUT LE RESTE.
+          Une course VS.E se mesure en SECONDES et le plus petit gagne ; la
+          course sans fin se mesure en MÈTRES et c'est le plus grand. Les deux
+          dans un même tableau ne se compareraient pas — il faudrait trier dans
+          deux sens à la fois. On sépare donc en haut, une bonne fois.
+        -->
+        <div class="seg seg-cat" id="scoresCategories">
+          <button data-c="course">⚔️ Course VS.E</button>
+          <button data-c="infini">♾️ Course Infinity</button>
+        </div>
         <!-- Trois lectures du même sujet : les meilleurs de tous, les tiens sur
              cet appareil, et ce que tu viens de courir. -->
         <div class="seg" id="scoresOnglets">
@@ -545,6 +588,7 @@
         <div class="stack">
           <button id="btnQuickJouer">⚡ PARTIE RAPIDE</button>
           <button id="btnSolo" class="secondary">🏋️ ENTRAÎNEMENT</button>
+          <button id="btnInfini" class="secondary">♾️ COURSE SANS FIN</button>
           <button id="btnCreateJouer" class="secondary">🏮 CRÉER UN SALON</button>
           <button id="btnRejoindre" class="ghost">🔑 REJOINDRE UN SALON</button>
         </div>

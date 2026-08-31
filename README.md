@@ -35,6 +35,9 @@
 - 💬 **Chat de salon** en attendant le départ
 - 🏋️ Mode **entraînement solo** contre **1 à 4 rivaux** (voir
   [le roster](#-les-rivaux-dentraînement)), avec record personnel sauvegardé
+- ♾️ Mode **course sans fin** : pas de ligne d'arrivée, pas de rivaux. **Cinq
+  obstacles encaissés et les flammes te rattrapent** — on marque en mètres
+  ([voir le mode](#️-la-course-sans-fin))
 - 🏆 **Le classement**, en trois lectures : **Mondial** (le meilleur temps de
   chaque joueur), **Local** (tes temps sur cet appareil) et **Récentes** (tes
   dernières courses). Seules les courses **en ligne** entrent au mondial — ce
@@ -122,7 +125,8 @@ kurogane/
 ├── animation/          Les .fbx Mixamo déposés (la SOURCE des mouvements)
 ├── tools/
 │   ├── cuire-anims.mjs    La cuisson : .fbx → anims-cuites.json
-│   └── verifier-anims.ts  Le contrôle anatomique des mouvements reciblés
+│   ├── verifier-anims.ts  Le contrôle anatomique des mouvements reciblés
+│   └── verifier-infini.ts ♾️ La piste sans fin : coutures, biomes, équité
 └── server/
     └── src/
         ├── index.ts    Démarrage du serveur (port 2567) + les routes /api
@@ -562,6 +566,368 @@ On ne sonde que les **membres solides**. Les queues, capes et écharpes traînen
 volontiers plus bas : les inclure relèverait le corps entier pour sauver un
 bout de tissu, et la glissade se jouerait debout.
 
+
+
+## ⏸ La pause — et pourquoi elle n'existe pas en ligne
+
+Un bouton dans le coin haut-droit, au-dessus des rouleaux. Il n'apparaît qu'en
+course : au menu ou sur l'écran de fin, il n'y a rien à arrêter, et le voile
+masquerait ce qu'on est en train de lire.
+
+⚠️ **En ligne, on ne met RIEN en pause.** Les autres continuent de courir. Figer
+sa propre piste donnerait un écran menteur : on reprendrait cinq secondes plus
+tard en ayant traversé cinq secondes d'obstacles sans les voir. Le voile s'ouvre
+quand même — il faut pouvoir quitter — mais le jeu tourne derrière, et le texte
+le dit franchement au lieu de laisser croire à un répit.
+
+| | Hors ligne | En ligne |
+|---|---|---|
+| Le jeu | **arrêté** | continue |
+| Le bouton | ▶ REPRENDRE | ↩ RETOUR À LA COURSE |
+| Quitter | retour au menu | `net.leave()` **puis** retour au menu |
+
+Le `leave` n'est pas une politesse : sans lui, le salon nous garderait en course
+et les autres attendraient un coureur qui ne franchira jamais la ligne.
+
+### Comment le jeu s'arrête vraiment
+
+⚠️ **`dt` passe à zéro, et c'est tout.** Chrono, distance, sorts, flammes,
+lourdeur : tout est écrit en `x += v * dt`, donc tout s'arrête de soi-même. Un
+drapeau lu à **un seul endroit** ne peut pas être oublié dans un coin du code —
+là où traiter chaque cas séparément aurait laissé passer quelque chose.
+
+⚠️ **On consomme quand même le delta avant de le jeter.** `getDelta` remet le
+compteur à zéro ; sans cet appel, le temps de la pause s'accumulerait et la
+reprise l'avalerait d'un coup — le coureur ferait un bond de plusieurs mètres à
+travers les obstacles. *Vérifié : 62 m avant la pause, 79 m une seconde et demie
+après la reprise. Aucun saut.*
+
+
+### ⌨️ La touche T, et le bouton discret
+
+Sur PC, **T** met en pause et l'en sort.
+
+⚠️ **Elle est lue AVANT le verrou des entrées.** Derrière lui, on pourrait mettre
+en pause et jamais en sortir : il faudrait aller chercher la souris, ce qui vide
+la touche de son intérêt.
+
+⚠️ **Et elle lit le VOILE, pas `enPause`.** En ligne le voile s'ouvre sans rien
+figer, donc `enPause` y reste faux : se fier à lui rouvrirait le voile à chaque
+appui au lieu de le refermer — la touche ne servirait à rien précisément là où la
+souris est la plus loin.
+
+Le rappel « (ou la touche T) » n'apparaît que sur un appareil à **pointeur fin**
+— une souris, donc un clavier. Sur un téléphone il parlerait d'une touche qui
+n'existe pas, à côté d'un bouton qu'on a déjà sous le pouce.
+
+**Le bouton, lui, a maigri : 34 px au lieu de 44.** Mais 44 px reste le minimum
+tenable pour un pouce — en dessous, on rate le bouton et le geste devient un
+**swipe**, c'est-à-dire qu'on saute au lieu de mettre en pause, en pleine course.
+
+⚠️ On a donc réduit le **dessin**, pas la **cible** : un `::after` invisible
+déborde de 6 px tout autour, ce qui rend 46 px de zone touchable sous un carré de
+34. Le bouton paraît discret sans devenir difficile à viser.
+### Le verrou des entrées
+
+⚠️ **Un seul garde, dans `Input`, pas sept dans les gestes.** Les uns après les
+autres, on en oublie un — et celui qu'on oublie est justement celui qui fait
+sauter le joueur derrière l'écran de pause.
+
+Un simple `pointer-events` sur le voile n'aurait pas suffi : les écouteurs vivent
+sur `document.body`, donc les gestes faits **sur** le voile remontent jusqu'à
+eux, et le clavier ne passe pas par le voile du tout. D'où `bloque()`, interrogé
+par les quatre écouteurs (clavier, souris, `touchstart`, `touchend`).
+
+*Vérifié : cinq touches et un clic pendant la pause, le compteur n'a pas bougé
+d'un mètre.*
+
+> ⚠️ Les styles de bouton vivaient sous `#overlay button` — or le voile de pause
+> n'est pas dans `#overlay`. Ses deux boutons s'affichaient donc **nus**,
+> rectangles blancs du navigateur au milieu d'un jeu sombre. Vu à l'écran, et
+> corrigé en partageant le sélecteur : ces styles ne sont pas une affaire
+> d'écran de menu, mais d'interface entière.
+## ♾️ La course sans fin
+
+Pas de ligne d'arrivée, pas de rivaux, pas de chrono : on court jusqu'à ce que
+les flammes vous rattrapent, et l'on marque en **mètres**.
+
+### La règle tient en une phrase
+
+**Cinq obstacles encaissés, et c'est fini.** Chacun rapproche le feu d'un
+cinquième ; au cinquième, il vous prend.
+
+⚠️ **Cinq COUPS, pas cinq rencontres.** Deux façons de croiser un obstacle sans
+rien payer :
+
+| Ce qui arrive | Compté ? | Pourquoi |
+|---|---|---|
+| 🛡️ L'armure encaisse | **non** | C'est tout l'intérêt de l'armure. La faire compter quand même la viderait de son sens |
+| 🧗 On escalade | **non** | On a franchi l'obstacle, pas subi. Le prix est déjà payé en vitesse |
+| 💥 On trébuche | **oui** | La seule branche où l'on perd vraiment son élan |
+
+Ce n'est pas trois règles mais une seule, et le code le dit : le compteur
+s'incrémente **dans la branche du trébuchement**, celle qui casse la vitesse.
+L'armure et l'escalade sont des branches sœurs, en amont ; elles ne peuvent pas
+compter par construction, sans qu'on ait à les traiter à part.
+
+**Le compteur ne redescend jamais.** C'était tentant — récompenser une longue
+série propre en éloignant un peu les flammes — mais « cinq obstacles et c'est
+fini » deviendrait « cinq obstacles rapprochés ». Une règle qu'on ne peut plus
+énoncer en une phrase ne se retient pas, et le joueur ne saurait plus combien il
+lui reste de droit à l'erreur.
+
+
+### Ce que le mode retire, et pourquoi
+
+**Pas de départ canon.** Le martèlement du 3-2-1 départage deux coureurs sur
+quelques dixièmes — or ici on court seul, contre les flammes. Gagner 0,3 s sur
+personne ne rapporte rien, et l'exiger avant **chaque** partie d'un mode où l'on
+recommence beaucoup n'est plus un choix tactique : c'est une corvée à l'entrée.
+
+⚠️ **On part donc à pleine vitesse** (22, la croisière). Laisser la vitesse de
+départ à vide punirait le joueur pour un mécanisme qu'on lui a *retiré*, et il
+passerait ses premières secondes à rattraper une lenteur qu'il ne pouvait pas
+éviter.
+
+**Quatre rouleaux sur dix.** La piste ne fait plus tomber que 🛡️ l'armure,
+🕊️ le saut de la grue, 🍵 le thé et 🎯 le kunai. Les six autres visent un
+**adversaire** ou parent un sort reçu — or on court seul : ils tomberaient sur
+une cible qui n'existe pas. Un rouleau sur deux sans effet, ce n'est pas un mode
+plus difficile, c'est un ramassage qui ment.
+
+> ⚠️ Le 🎯 kunai est gardé sur demande, mais il vise lui aussi un adversaire :
+> sans rival devant, il part dans le vide (« …mais tu mènes déjà ! ») et libère
+> son emplacement. Il est donc, en l'état, un ramassage sans effet.
+
+
+
+### 🟢🗺️ Les pots verts, versés à chaque carte bouclée
+
+Ce que l'arrivée fait pour une course en ligne, la **fin de tronçon** le fait
+ici : tous les 1 920 m, la carte recommence et la récolte est versée.
+
+⚠️ **Boucler la carte NE REND AUCUNE VIE.** On garde le même droit à l'erreur du
+premier mètre au dernier. Autrement, qui tient un tour ne perdrait jamais, et
+« cinq obstacles » deviendrait « cinq par carte » — une règle qu'on ne peut plus
+énoncer d'une phrase.
+
+⚠️ **Un versement refusé n'est plus perdu.** Le serveur n'accepte qu'un
+versement par minute ; en course ordinaire on ne verse qu'à l'arrivée, le cas ne
+se posait pas. Ici on verse à chaque tronçon, et une carte bouclée un peu vite
+passe sous le délai — la récolte est donc **remise de côté** pour le tour
+suivant au lieu d'être jetée.
+
+⚠️ **LA RARETÉ EXTRÊME EST VOULUE — ne la « corrige » pas.**
+
+Un tronçon porte 0, 1 ou 2 pots, tirés au sort : 3 % deux, 17 % un, **80 %
+aucun**. Et il faut **survivre à une carte complète** (1 920 m) pour encaisser.
+Les deux conditions se multiplient.
+
+Mesuré : des parties d'essai finissaient entre **175 et 1 238 m**, donc toutes
+sous la barre des 1 920 m. En clair, **presque aucune course ne verse quoi que ce
+soit** — c'est un exploit, pas un revenu.
+
+Ça ressemble à un défaut d'équilibrage, et ç'aurait pu en être un : le réglage
+vient des courses, où un tronçon = une course entière. La question a été posée,
+et la réponse est de le **laisser rare**. C'est écrit ici pour que le prochain à
+passer ne prenne pas cette rareté pour un oubli et ne monte pas le taux « pour
+réparer ».
+
+### 🏺 Les jarres alourdissent, le thé lave
+
+Percuter une poterie ne coûte plus seulement l'instant du choc : **ça alourdit,
+et ça reste**. Chaque jarre encaissée retire 7 % de vitesse de croisière,
+définitivement — jusqu'au 🍵 **thé**, qui remet à neuf.
+
+⚠️ **C'est ce qui redonne un rôle au thé.** Il ne lavait que les afflictions
+(poison, chaînes, fumigène), toutes envoyées par un *adversaire* — donc
+inexistantes ici. Un rouleau qui ne peut jamais rien soigner est un rouleau
+mort ; celui-ci répond maintenant à un mal qu'on peut vraiment attraper.
+
+⚠️ **Et il y a un plancher : 40 % de perte au maximum.** Sans lui, une poignée
+de jarres ramènerait la course à l'arrêt et il n'y aurait plus rien à jouer —
+juste à attendre les flammes. Assez pour que ça pèse, jamais assez pour que la
+partie soit finie sans l'être.
+
+**Une jarre ne compte PAS dans les cinq coups.** Elle se contourne sans rien lire ;
+la faire compter doublerait sa punition et rendrait la règle des cinq impossible
+à énoncer simplement.
+
+
+### Un relevé de fin, pas un podium
+
+⚠️ **Un podium à trois marches suppose trois coureurs.** En course sans fin il
+n'y en a qu'un : deux marches restaient vides, et un podium creux se lit comme un
+abandon — ou pire, comme des adversaires qu'on aurait manqués.
+
+On montre donc les seuls chiffres qui aient un sens en solitaire :
+
+| Ligne | Ce qu'elle dit |
+|---|---|
+| **Cette course** | Ce qu'on vient de faire — en évidence, c'est elle qu'on cherche des yeux |
+| **Ton record** | Le meilleur de tous les temps. Quand on vient de le battre, il devient « Ancien record » et montre ce qui a été **dépassé** — « tu as fait 1240, ton record est 1240 » n'apprendrait rien |
+| **Course précédente** · **Celle d'avant** | Les deux d'avant, pour voir si l'on progresse |
+
+⚠️ **Il a fallu passer le stockage en JOURNAL chronologique.** Le tableau était
+trié par distance et coupé aux dix meilleures : « les deux courses d'avant » se
+mettaient alors à montrer des courses vieilles de plusieurs jours dès qu'on
+enchaînait quelques parties moyennes, et une mauvaise course disparaissait
+aussitôt de l'histoire. `chargerInfini` rend maintenant le journal (30 courses,
+la plus récente en tête) et `meilleuresInfini` trie quand il s'agit de classer.
+Deux questions différentes, deux lectures.
+
+#### ⚠️ Le podium doit REVENIR — c'est l'invariant à ne pas casser
+
+Le relevé ne remplace le podium **que** dans la course sans fin. Les trois autres
+écrans de fin — entraînement, course en ligne, banc d'essai — n'en savent rien et
+gardent leurs trois marches.
+
+Tout tient dans une ligne :
+
+```ts
+this.el.podium.classList.toggle('hidden', !!opts.resume)
+```
+
+⚠️ **Le piège n'est pas « le podium disparaît en infini », c'est « il ne revient
+pas après ».** Masquer sans jamais remontrer laisserait l'entraînement suivant
+avec un écran de fin vide — et le défaut ne se verrait qu'en enchaînant les deux
+modes dans cet ordre, ce que personne ne fait en testant une seule chose.
+
+`toggle` avec un second argument **retire** la classe quand `resume` est absent :
+le podium se rétablit donc de lui-même. Si un jour on remplace cette ligne par un
+`add('hidden')` conditionnel, il faudra un `remove` en face.
+
+**Pour le vérifier sans courir 1 920 m**, la console de développement offre
+`__sorts.fin(n)` — il monte un podium de `n` coureurs à la demande :
+
+```js
+document.getElementById('podium').classList.add('hidden') // on simule l'après-infini
+__sorts.fin(4)                                            // le podium doit revenir
+```
+
+### 🏺 Le compteur de jarres
+
+**En bas à droite**, petit et permanent, façon pièces de Mario Kart : `🏺 3 −21 %`.
+
+⚠️ **Il porte le pourcentage, pas seulement le compte.** Un compteur seul dirait
+« 3 » sans dire trois quoi ; ce qui manque, c'est de la vitesse.
+
+⚠️ **Et il est ancré hors de la rangée du HUD.** `#hud` est un flex en ligne :
+laissé dedans, le compteur se rangeait à *droite* du chrono, en plein dans la
+bande où vivent les pastilles de dégâts — mesuré à l'écran, il mordait dessus.
+
+Il occupe donc le **seul coin encore libre** : le haut porte le chrono, les
+pastilles et la pause ; la gauche, la colonne de progression. Sa marge basse est
+généreuse pour le remonter au-dessus de la zone où le pouce se pose sur mobile.
+
+### 🎯 Le kunai fait sauter les murs
+
+Sans rival devant, le kunai partait dans le vide. Il vise donc la **piste** : il
+détruit le prochain **mur**, et rien d'autre.
+
+⚠️ **Et il va TOUT DROIT.** Seuls les murs de **ta voie** sautent. Une lame qui
+partirait en biais chercher le mur d'à côté ne se lirait pas — on la voit filer
+devant soi — et elle rendrait le rouleau meilleur qu'il n'y paraît : il faudrait
+deviner ce qu'il va choisir. Tout droit, on sait exactement ce qu'on détruit
+avant d'appuyer. *(Vérifié : 0 tir en biais sur 338 destructions.)*
+
+⚠️ **Le mur seulement.** Barrières et barres hautes se sautent ou se glissent :
+elles ne coûtent rien à qui les lit à temps. Le mur est le seul obstacle qu'on ne
+peut pas franchir proprement — on l'escalade, et l'escalade se paie en vitesse.
+Un kunai qui ferait sauter n'importe quoi vaudrait beaucoup ou rien selon le
+hasard de ce qui se présente ; limité au mur, il répond toujours à la même
+question : « celui-là, je ne veux pas le grimper ».
+
+Sans mur en vue, **le rouleau est rendu** : le gâcher sur un vide punirait d'avoir
+appuyé une seconde trop tôt.
+
+*Le banc le vérifie sur le vrai `Track` : 341 murs détruits sur 11 520 m, et zéro
+destruction hors du plan des murs.*
+### Le droit à l'erreur, en haut au milieu
+
+Cinq pastilles : rouges pour les coups pris, creuses pour ceux qui restent. Sous
+elles, un mot court (`reste 4`, puis `DERNIÈRE`).
+
+⚠️ **Des pastilles, pas un « 2 / 5 ».** On lit un nombre de points d'un coup
+d'œil, sans quitter la piste des yeux ; un chiffre demande de le lire *puis* de
+le comparer au maximum. Sur une piste qui défile à 25 m/s, cette demi-seconde
+est un obstacle raté.
+
+Et le mot est **court** parce que la place l'est : le chrono tient le coin
+gauche, les boutons le coin droit, il ne reste qu'environ 145 px au milieu sur
+un téléphone étroit. « 6 avant les flammes » passait sous les boutons.
+### Les flammes sont un effet d'ÉCRAN, pas un décor
+
+⚠️ **La caméra est derrière le coureur et regarde devant : un mur de feu dans
+son dos ne se verrait jamais.** Le brasier envahit donc l'image par le bas et
+par les bords — là où l'œil le perçoit sans quitter la piste des yeux.
+
+Tout est piloté par **une seule variable CSS**, `--proche` (0 → 1) : le jeu n'y
+touche qu'au moment d'un coup, et la mise en scène (hauteur des flammes, emprise
+sur les bords, éclat, vacillement) vit entièrement dans `style.css`. Écrire les
+cinq paliers en dur des deux côtés aurait demandé de les tenir d'accord à jamais.
+
+Deux détails qui font la différence :
+
+- **Un feu de fond dès le premier mètre** (`--proche` part à 0,1). Sans lui, un
+  joueur qui n'a rien encaissé ne verrait aucun feu et ne saurait pas qu'il est
+  poursuivi. La règle doit s'apprendre en jouant, pas dans un écran d'aide.
+- **Pas de `z-index`.** Il en portait un, et le brasier passait alors PAR-DESSUS
+  le menu : à la mort, l'écran de fin s'affichait noyé d'orange et le bouton
+  « rejouer » devenait illisible. `#overlay` se peint en `auto`, donc selon
+  l'ordre du DOM — il suffit que le brasier soit déclaré avant lui.
+
+Le feu qui poursuit **couvre** celui du village en flammes, côté son : les deux
+se disputeraient le même bruit, et le joueur ne saurait plus lequel il entend —
+or un seul peut le tuer.
+
+### La piste se coud au fur et à mesure
+
+Une course ordinaire est décidée d'un bloc. Sans fin, il n'y a pas de bloc : on
+bâtit des **tronçons** de 1 920 m avec les mêmes générateurs, puis on décale
+leurs mètres et on les rattache. La piste sans fin est faite des mêmes morceaux
+que l'autre, mis bout à bout.
+
+Trois pièges, tous traités dans `Track.etendre()` :
+
+- **Les marges tombent au raccord.** Chaque générateur laisse des mètres calmes
+  au début et dégage la zone de sprint à la fin. Les garder creuserait plus de
+  150 m sans rien **à chaque couture** — un hoquet régulier que le joueur
+  finirait par sentir. D'où les paramètres `depart` et `garde`.
+- ⚠️ **Les plateformes à cheval sont repassées au générateur d'obstacles.** Une
+  plateforme du tronçon précédent peut déborder sur le suivant ; le générateur,
+  qui ne connaît que son propre tronçon, poserait des barrières sur les deux
+  lignes restantes sans savoir que la troisième est prise. On obtiendrait une
+  rangée **sans aucun passage** — le seul défaut vraiment injuste que cette
+  piste puisse produire.
+- **Les biomes bouclent.** `indexBiome` borne au dernier décor dès qu'on dépasse
+  la longueur : sans modulo, on courrait sur le flanc du Fuji jusqu'à la fin des
+  temps, ambiance sonore comprise.
+
+Et **la vitesse plafonne**. `distance / COURSE_LENGTH` grandit sans borne quand
+il n'y a plus d'arrivée : la croisière doublerait tous les deux kilomètres et le
+jeu deviendrait injouable au bout de quelques minutes — non par difficulté, mais
+par absurdité. On monte jusqu'au maximum d'une course ordinaire, puis on s'y
+tient. La tension vient des flammes, pas d'une vitesse que personne ne peut plus
+tenir.
+
+### Ce que le banc vérifie
+
+`npm run infini:test` fait courir le **vrai** `Track` sur six cycles (11 520 m),
+sur six graines :
+
+- le plan garde toujours de l'avance sur le coureur ;
+- une course ordinaire, elle, s'arrête bien à sa ligne d'arrivée ;
+- les biomes reviennent tous, et le 6ᵉ cycle rejoue depuis le premier décor ;
+- ⚠️ **les coutures ne concentrent pas les rangées chargées** (4,9 % contre
+  5,3 % ailleurs).
+
+> ⚠️ Ce dernier test **compare**, il ne compte pas. Une première version comptait
+> les rangées « bouchées » dans l'absolu et en trouvait 105 — y compris sur une
+> course ordinaire, pourtant juste par construction. La mesure était donc fausse,
+> pas la piste. Une mesure grossière reste utile si elle est grossière **partout
+> pareil** : on regarde si les coutures sortent du lot, ce qui est la seule chose
+> que le mode infini puisse avoir cassée.
 ## 🏆 Le classement — pourquoi le solo n'y entre pas
 
 Trois onglets, et une règle qui explique tout : **seules les courses en ligne
@@ -597,6 +963,26 @@ Le mondial fait `distinct on (joueur)`. Sans ça, un joueur très régulier
 occuperait les vingt lignes avec ses vingt meilleures courses, et le tableau ne
 dirait plus rien de la communauté.
 
+
+### ⚔️ / ♾️ Deux catégories, parce qu'elles ne se comparent pas
+
+L'écran des scores s'ouvre sur un choix : **Course VS.E** ou **Course Infinity**.
+
+⚠️ **Ce n'est pas un rangement, c'est une nécessité.** Une course se mesure en
+**secondes** et le plus petit gagne ; l'infini se mesure en **mètres** et c'est le
+plus grand. Les mêler dans un même tableau ne demanderait pas une colonne de
+plus : il faudrait trier dans **deux sens à la fois**. Deux tables, deux tris,
+aucune ambiguïté — et le titre de l'écran suit (« Meilleurs temps » / « Plus
+longues courses »).
+
+En Infinity, les trois onglets (Mondial · Local · Récentes) **disparaissent** au
+lieu de se griser : « Mondial » et « Récentes » sont servis par le serveur, qui
+ne connaît que les chronos. Les laisser en place promettrait trois lectures dont
+deux n'existent pas.
+
+Il n'y a donc pas de mondial des distances : le serveur devrait apprendre un
+second mode de calcul, **et** se défendre contre les distances trafiquées —
+puisque c'est le client qui les compte, exactement comme pour les chronos solo.
 ### 🔎 Chercher un pseudo
 
 Les trois onglets portent un champ de recherche, à la place du bouton
