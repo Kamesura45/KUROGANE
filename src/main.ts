@@ -3438,6 +3438,17 @@ void connecter().then(async () => {
 
 
 /* ————— ⏸ Le bouton de pause et ses deux issues ————— */
+/*
+ * ⚠️ Le toucher s'ARRÊTE sur le bouton, il ne redescend pas sur la piste.
+ *
+ * Les gestes de jeu sont écoutés sur `document.body` : sans ces trois lignes, un
+ * doigt posé sur la pause y remonterait aussi, et serait compté comme un tap —
+ * deux appuis rapprochés sur le bouton auraient lancé un SORT en même temps
+ * qu'ils ouvraient le voile.
+ */
+for (const ev of ['touchstart', 'touchend', 'pointerdown']) {
+  btnPauseEl.addEventListener(ev, (e) => e.stopPropagation())
+}
 btnPauseEl.addEventListener('click', () => {
   jouerBruit('clic')
   ouvrirPause(true)

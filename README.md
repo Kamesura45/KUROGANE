@@ -607,6 +607,26 @@ après la reprise. Aucun saut.*
 
 Sur PC, **T** met en pause et l'en sort.
 
+
+> ⚠️ **Le bouton n'a longtemps répondu à rien, et mes essais ne l'ont pas vu.**
+> `#hud` est en `pointer-events: none` — et il le faut, sinon ce calque avalerait
+> les swipes destinés à la piste. Mais la règle s'**hérite**, donc elle éteignait
+> aussi le seul enfant qui doit se laisser toucher.
+>
+> Le défaut est passé au travers parce que je déclenchais le bouton en
+> JavaScript (`.click()`), ce qui **court-circuite le test de collision du
+> pointeur** : le code s'exécutait, alors qu'un vrai doigt — et une vraie souris
+> — n'atteignait jamais le bouton. Mesuré depuis : sans `pointer-events: auto`,
+> `elementFromPoint` au centre du bouton rend `game`, le canevas du jeu ; avec,
+> il rend `btnPause`.
+>
+> **La leçon vaut au-delà de ce bouton : un `.click()` ne teste pas qu'un bouton
+> est cliquable.** Pour ça, il faut viser des coordonnées et vérifier ce qui se
+> trouve dessous.
+>
+> Un toucher sur le bouton est aussi **arrêté** là (`stopPropagation`) : les
+> gestes de jeu sont écoutés sur `document.body`, et sans ça deux appuis
+> rapprochés sur la pause auraient lancé un **sort** en même temps.
 ⚠️ **Elle est lue AVANT le verrou des entrées.** Derrière lui, on pourrait mettre
 en pause et jamais en sortir : il faudrait aller chercher la souris, ce qui vide
 la touche de son intérêt.
@@ -1020,18 +1040,33 @@ convertissent en émoji en décalant chaque lettre vers les *indicateurs
 régionaux* (`0x1F1E6 - 65`) : `FR` → 🇫🇷. Deux points de code, et le système
 dessine le drapeau. Embarquer 194 images aurait pesé plus que le jeu.
 
-**Ce qu'on propose sous le pays, et pourquoi trois minimum :**
+**Ce qu'on propose sous le pays — trois niveaux, par ordre de finesse :**
 
-| Cas | Ce qu'on liste |
-|---|---|
-| Pays détaillés (🇫🇷 🇧🇪 🇨🇭 🇨🇦) | Leurs vraies **régions** — 18 pour la France. |
-| Tous les autres | **3 villes connues**, la capitale en tête : 🇯🇵 Tokyo · Osaka · Kyoto. |
+| Niveau | Qui | Exemple |
+|---|---|---|
+| 🏘️ **Département** | 🇫🇷 France | ses **101 départements**, numérotés : `29 Finistère` |
+| 🏞️ **Région** | **25 pays** — 🇧🇪 provinces, 🇨🇭 cantons, 🇯🇵 préfectures, 🇺🇸 États, 🇲🇦 🇩🇿 🇹🇳 🇸🇳 🇨🇮 régions… | 🇯🇵 47 préfectures, 🇺🇸 51 États |
+| 🏙️ **Ville** | les 168 autres | 🇨🇳 Pékin · Shanghai · Canton |
 
-Un seul choix n'est pas un menu. Ouvrir aux villes secondaires demanderait des
-dizaines de milliers d'entrées à tenir à jour, pour des classements qui
-resteraient vides. Trois suffisent à se situer et tiennent dans un fichier qu'un
-humain peut relire. **L'ordre du fichier est celui du menu** : on ne trie pas
-alphabétiquement, la capitale doit venir en premier.
+⚠️ **C'est une PRIORITÉ, pas un mélange** : le plus fin d'abord, et jamais deux
+échelles dans la même liste. « Bretagne » et « Finistère » côte à côte ne se
+comparent pas — on ne saurait plus ce qu'on choisit.
+
+⚠️ **Et l'étiquette du champ suit.** Appeler « Région » les cent-un départements
+français serait aussi faux que d'appeler « Ville » les provinces belges : le
+joueur chercherait la sienne dans un menu qui ne l'a pas. Le menu ne devine pas,
+il demande à `niveauDe()`.
+
+⚠️ **ON NE DÉTAILLE QUE CE DONT ON EST SÛR.** Inventer les provinces d'un pays
+qu'on connaît mal serait pire qu'un menu court : le joueur y lirait des noms
+faux, et l'erreur nous serait invisible — c'est de la donnée, pas du code, aucun
+typage ne la rattrape. Les 168 pays restants gardent donc leurs trois villes, un
+plancher honnête. En détailler un de plus est **une ligne** dans `pays.ts`.
+
+Le format est compact à dessein : en tableaux imbriqués, ces quelques milliers de
+noms auraient fait autant de lignes que personne ne relit. **L'ordre du fichier
+est celui du menu** : on ne trie pas alphabétiquement, et la capitale — ou le
+département n° 1 — vient en tête.
 
 *Une exception assumée : le **Saint-Siège** n'a qu'une entrée. C'est un État
 d'un demi-kilomètre carré ; lui inventer deux villes serait faux, et la fausseté
