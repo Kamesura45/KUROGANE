@@ -1012,7 +1012,15 @@ body {
 }
 
 /* ——— Les boutons ——— */
-#overlay button {
+/*
+ * ⚠️ Le VOILE DE PAUSE partage ces styles, alors qu'il vit hors de `#overlay`.
+ *
+ * Sans lui dans ce sélecteur, ses deux boutons s'affichaient NUS — rectangles
+ * blancs du navigateur au milieu d'un jeu sombre. Vu à l'écran. Les styles de
+ * bouton ne sont pas une affaire d'écran de menu, mais d'interface entière.
+ */
+#overlay button,
+.pausebox button {
   font-family: inherit;
   font-size: 1.05rem;
   font-weight: 700;
@@ -1025,14 +1033,17 @@ body {
   cursor: pointer;
   box-shadow: 0 6px 22px rgba(226, 75, 58, 0.35);
 }
-#overlay button:active {
+#overlay button:active,
+.pausebox button:active {
   transform: scale(0.97);
 }
-#overlay button:focus-visible {
+#overlay button:focus-visible,
+.pausebox button:focus-visible {
   outline: 2px solid #d6ac5a;
   outline-offset: 3px;
 }
-#overlay button.secondary {
+#overlay button.secondary,
+.pausebox button.secondary {
   background: transparent;
   border: 2px solid #3d4560;
   box-shadow: none;
@@ -2462,18 +2473,19 @@ body {
    dire trois quoi ; c'est la vitesse qui manque, pas les jarres qui comptent. */
 #jarres {
   /*
-   * ⚠️ HORS DE LA RANGÉE, ancré SOUS le chrono.
+   * ⚠️ EN BAS À DROITE, et hors de la rangée du HUD.
    *
    * `#hud` est un flex en ligne : laissé dedans, le compteur se rangeait à
-   * DROITE du chrono, en plein dans la bande où vivent les pastilles de dégâts
-   * (centrées en haut) — mesuré à l'écran, il mordait dessus.
+   * droite du chrono, en plein dans la bande des pastilles de dégâts. Il est
+   * donc `fixed`, dans le seul coin encore libre — le haut porte le chrono, les
+   * pastilles et la pause ; la gauche, la colonne de progression.
    *
-   * `#hud` est déjà `position: fixed`, donc il sert de repère : on cale le
-   * compteur sur la même marge gauche que le chrono, une ligne plus bas.
+   * ⚠️ Il se lit AVEC le pouce dessus, sur mobile : d'où la marge basse
+   * généreuse, qui le remonte au-dessus de la zone où la main se pose.
    */
-  position: absolute;
-  left: 18px;
-  top: calc(max(14px, env(safe-area-inset-top)) + 30px);
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: calc(max(18px, env(safe-area-inset-bottom)) + 8px);
   font-size: 0.86rem;
   color: #f0e8d8;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
@@ -2530,4 +2542,68 @@ body {
 .resumeligne.fort b {
   font-size: 1.35rem;
   color: #ffb08a;
+}
+
+/* ————— ⏸ Le bouton de pause et son voile ————— */
+
+/* Le coin droit, en colonne : le bouton, puis les rouleaux. */
+#hudDroite {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* ⚠️ Assez GRAND pour un pouce. 44 px est le minimum tenable sur mobile ;
+   en dessous, on le rate et l'on swipe à la place — c'est-à-dire qu'on saute
+   au lieu de mettre en pause, en pleine course. */
+.hudbtn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid #2b3350;
+  background: rgba(13, 16, 28, 0.62);
+  color: #f0e8d8;
+  font-size: 1.05rem;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.hudbtn:active {
+  background: rgba(226, 75, 58, 0.35);
+  border-color: #e24b3a;
+}
+
+#pause {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  /* ⚠️ OPAQUE, ET C'EST VOULU. Un voile transparent laisserait lire les
+     obstacles qui approchent pendant qu'on réfléchit : un repos gratuit. */
+  background: rgba(13, 16, 28, 0.92);
+  backdrop-filter: blur(6px);
+}
+#pause.hidden {
+  display: none;
+}
+.pausebox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(320px, 100%);
+  text-align: center;
+}
+.pausebox > b {
+  font-size: 1.3rem;
+  letter-spacing: 0.06em;
+}
+.pausebox > small {
+  color: #9aa4c0;
+  line-height: 1.5;
+  margin-bottom: 4px;
 }

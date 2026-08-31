@@ -9,6 +9,18 @@ export interface Handlers {
   sprint(): void
   /** Sommes-nous dans le sprint final ? Les taps accélèrent au lieu d'esquiver. */
   isSprint(): boolean
+  /**
+   * ⏸ Faut-il ignorer TOUTE entrée ? (pause)
+   *
+   * ⚠️ Un seul verrou, ICI, plutôt qu'un garde dans chacun des sept gestes.
+   * Les uns après les autres, on en oublie un — et celui qu'on oublie est
+   * justement celui qui fait sauter le joueur derrière l'écran de pause.
+   *
+   * Un simple `pointer-events` sur le voile n'aurait pas suffi : les écouteurs
+   * vivent sur `document.body`, donc les gestes faits SUR le voile remontent
+   * jusqu'à eux, et le clavier ne passe pas par le voile du tout.
+   */
+  bloque?(): boolean
 }
 
 const SWIPE_MIN = 24 // pixels minimum pour compter comme un swipe
@@ -30,6 +42,7 @@ export class Input {
   constructor(el: HTMLElement, h: Handlers) {
     // — Clavier (flèches + ZQSD pour les claviers français) —
     addEventListener('keydown', (e) => {
+      if (h.bloque?.()) return // ⏸ en pause, le clavier ne commande plus rien
       const k = e.key.toLowerCase()
 
       if (h.isSprint() && (k === ' ' || k === 'enter')) {
@@ -67,6 +80,7 @@ export class Input {
     // pointerType filtre le tactile, qui émet aussi des événements souris
     // de compatibilité : sans ça, un tap mobile compterait double.
     el.addEventListener('pointerdown', (e) => {
+      if (h.bloque?.()) return // ⏸
       if (e.pointerType !== 'mouse') return
       if (h.isSprint()) h.sprint()
     })
@@ -75,6 +89,7 @@ export class Input {
     el.addEventListener(
       'touchstart',
       (e) => {
+        if (h.bloque?.()) return // ⏸
         if (h.isSprint()) {
           // Un doigt qui se pose = un coup. On compte CHAQUE doigt : le
           // martèlement à deux pouces doit marcher, et on répond dès la pose
@@ -95,6 +110,7 @@ export class Input {
         // Pendant le sprint, tout est déjà géré au touchstart. Surtout, on ne
         // veut PAS de la logique de swipe ci-dessous : à deux pouces, le départ
         // d'un doigt et l'arrivée de l'autre se mélangent et simulent un swipe.
+        if (h.bloque?.()) return // ⏸
         if (h.isSprint()) return
 
         const t = e.changedTouches[0]

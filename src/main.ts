@@ -331,6 +331,12 @@ const degatsMotEl = document.getElementById('degatsMot')!
 const jarresEl = document.getElementById('jarres')!
 const jarresNEl = document.getElementById('jarresN')!
 const jarresPctEl = document.getElementById('jarresPct')!
+const pauseEl = document.getElementById('pause')!
+const pauseTitreEl = document.getElementById('pauseTitre')!
+const pauseMotEl = document.getElementById('pauseMot')!
+const btnPauseEl = document.getElementById('btnPause')!
+const btnReprendreEl = document.getElementById('btnReprendre')!
+const btnQuitterPartieEl = document.getElementById('btnQuitterPartie')!
 const progressEl = document.getElementById('progressfill')!
 const gapEl = document.getElementById('gap')!
 const aspiEl = document.getElementById('aspi')!
@@ -416,6 +422,22 @@ let departImminent: number | null = null
  * ce drapeau y reste donc à `false` pour toujours.
  */
 let gele = false
+
+/*
+ * ————— ⏸ La pause —————
+ *
+ * ⚠️ ELLE N'EXISTE PAS EN LIGNE, et ce n'est pas un oubli : les autres
+ * continuent de courir. Figer sa propre piste pendant que la course avance
+ * donnerait un écran menteur — on reprendrait cinq secondes plus tard en ayant
+ * traversé cinq secondes d'obstacles sans les voir. Le bouton reste, mais il
+ * n'y propose que de QUITTER.
+ *
+ * Hors ligne, on met `dt` à zéro plutôt que de traiter chaque cas : chrono,
+ * distance, sorts, flammes, tout est écrit en `x += v * dt` et s'arrête donc de
+ * lui-même. Un drapeau lu à un seul endroit ne peut pas être oublié dans un
+ * coin du code.
+ */
+let enPause = false
 
 /*
  * ————— ♾️ LE MODE INFINI —————
@@ -2444,6 +2466,9 @@ function backToMenu(banner?: string) {
   // brasier resterait allumé derrière le menu, et la course suivante hériterait
   // d'une règle qu'on n'a pas choisie.
   modeInfini = false
+  // ⏸ On sort de la pause en même temps que de la course, et le bouton s'en va.
+  ouvrirPause(false)
+  btnPauseEl.classList.add('hidden')
   degats = 0
   lourdeur = 0 // 🏺 on repart léger
   majJarres()
@@ -2514,6 +2539,31 @@ function backToMenu(banner?: string) {
  * trace après le choc, et un compteur figé à zéro poserait une question sans
  * réponse.
  */
+/**
+ * ⏸ Ouvre ou ferme le voile de pause.
+ *
+ * ⚠️ EN LIGNE, ON N'ARRÊTE RIEN. Les autres continuent de courir : figer sa
+ * propre piste donnerait un écran menteur, et l'on reprendrait après avoir
+ * traversé sans les voir les obstacles de ces secondes-là. Le voile s'ouvre
+ * quand même — il faut pouvoir quitter — mais le jeu tourne derrière, et le
+ * texte le dit franchement au lieu de laisser croire à un répit.
+ */
+function ouvrirPause(ouvert: boolean) {
+  // Le bouton ne répond qu'en course : au menu ou sur l'écran de fin, il n'y a
+  // rien à mettre en pause, et le voile masquerait ce qu'on est en train de lire.
+  if (ouvert && state !== 'course' && state !== 'depart') return
+  enPause = ouvert && !online
+  pauseEl.classList.toggle('hidden', !ouvert)
+  pauseTitreEl.textContent = online ? '⚔️ Course en ligne' : '⏸ Pause'
+  pauseMotEl.textContent = online
+    ? 'La course CONTINUE — on ne met pas les autres en attente. Tu peux la quitter, mais tu ne la reprendras pas.'
+    : 'La course est arrêtée. Reprends quand tu veux.'
+  // « Reprendre » ne promet pas la même chose des deux côtés : hors ligne on
+  // repart où l'on s'est arrêté, en ligne on retourne à une course qui a
+  // continué sans nous.
+  btnReprendreEl.textContent = online ? '↩ RETOUR À LA COURSE' : '▶ REPRENDRE'
+}
+
 function majJarres() {
   jarresEl.classList.toggle('hidden', !modeInfini)
   if (!modeInfini) return
@@ -2774,6 +2824,9 @@ function startRace(seed: number) {
   state = 'depart'
   shadersPrets = false // ⚡ la piste va être repeuplée : on recompile au décompte
   menu.hide()
+  // ⏸ Le bouton n'a de sens qu'en course : il apparaît avec elle.
+  btnPauseEl.classList.remove('hidden')
+  ouvrirPause(false)
   updateMeLabel()
   countEl.classList.add('show')
   // Le départ canon : la jauge apparaît dans les 3 dernières secondes (cf. boucle)
@@ -3338,6 +3391,28 @@ void connecter().then(async () => {
   }
 })
 
+
+/* ————— ⏸ Le bouton de pause et ses deux issues ————— */
+btnPauseEl.addEventListener('click', () => {
+  jouerBruit('clic')
+  ouvrirPause(true)
+})
+btnReprendreEl.addEventListener('click', () => {
+  jouerBruit('clic')
+  ouvrirPause(false)
+})
+btnQuitterPartieEl.addEventListener('click', () => {
+  jouerBruit('clic')
+  ouvrirPause(false)
+  /*
+   * ⚠️ ON PRÉVIENT LE SERVEUR AVANT DE PARTIR. Sans `leave`, le salon nous
+   * garderait en course : les autres attendraient un coureur qui ne franchira
+   * jamais la ligne, et le classement resterait suspendu.
+   */
+  if (online) net.leave()
+  clearRivals()
+  backToMenu()
+})
 btnGo.addEventListener('click', () => {
   online = false
   startRace(Math.floor(Math.random() * 2 ** 31))
@@ -3470,6 +3545,8 @@ new Input(document.body, {
   // pendant le décompte, or le DÉPART CANON se martèle pendant le décompte !
   sprint: () => sprintTaps.push(performance.now() / 1000),
   isSprint: inSprintZone,
+  // ⏸ Le verrou unique : tant qu'il est levé, aucun geste ne parvient au jeu.
+  bloque: () => enPause,
 })
 
 // ————— La boucle de jeu (60 fois par seconde) —————
@@ -3478,7 +3555,16 @@ const timer = new THREE.Timer()
 function tick(now?: number) {
   requestAnimationFrame(tick)
   timer.update(now)
-  const dt = Math.min(timer.getDelta(), 0.05) // temps écoulé depuis la dernière image
+  /*
+   * ⏸ En pause, le temps ne passe plus.
+   *
+   * ⚠️ On CONSOMME quand même le delta (`getDelta` remet le compteur à zéro),
+   * puis on le jette. Sans ça, il s'accumulerait pendant toute la pause et la
+   * reprise avalerait d'un coup les secondes écoulées — le coureur ferait un
+   * bond de plusieurs mètres à travers les obstacles.
+   */
+  const ecoule = Math.min(timer.getDelta(), 0.05) // temps écoulé depuis la dernière image
+  const dt = enPause ? 0 : ecoule
 
   /*
    * ————— ⏳ Le salon avant la grille —————

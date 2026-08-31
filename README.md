@@ -567,6 +567,60 @@ volontiers plus bas : les inclure relèverait le corps entier pour sauver un
 bout de tissu, et la glissade se jouerait debout.
 
 
+
+## ⏸ La pause — et pourquoi elle n'existe pas en ligne
+
+Un bouton dans le coin haut-droit, au-dessus des rouleaux. Il n'apparaît qu'en
+course : au menu ou sur l'écran de fin, il n'y a rien à arrêter, et le voile
+masquerait ce qu'on est en train de lire.
+
+⚠️ **En ligne, on ne met RIEN en pause.** Les autres continuent de courir. Figer
+sa propre piste donnerait un écran menteur : on reprendrait cinq secondes plus
+tard en ayant traversé cinq secondes d'obstacles sans les voir. Le voile s'ouvre
+quand même — il faut pouvoir quitter — mais le jeu tourne derrière, et le texte
+le dit franchement au lieu de laisser croire à un répit.
+
+| | Hors ligne | En ligne |
+|---|---|---|
+| Le jeu | **arrêté** | continue |
+| Le bouton | ▶ REPRENDRE | ↩ RETOUR À LA COURSE |
+| Quitter | retour au menu | `net.leave()` **puis** retour au menu |
+
+Le `leave` n'est pas une politesse : sans lui, le salon nous garderait en course
+et les autres attendraient un coureur qui ne franchira jamais la ligne.
+
+### Comment le jeu s'arrête vraiment
+
+⚠️ **`dt` passe à zéro, et c'est tout.** Chrono, distance, sorts, flammes,
+lourdeur : tout est écrit en `x += v * dt`, donc tout s'arrête de soi-même. Un
+drapeau lu à **un seul endroit** ne peut pas être oublié dans un coin du code —
+là où traiter chaque cas séparément aurait laissé passer quelque chose.
+
+⚠️ **On consomme quand même le delta avant de le jeter.** `getDelta` remet le
+compteur à zéro ; sans cet appel, le temps de la pause s'accumulerait et la
+reprise l'avalerait d'un coup — le coureur ferait un bond de plusieurs mètres à
+travers les obstacles. *Vérifié : 62 m avant la pause, 79 m une seconde et demie
+après la reprise. Aucun saut.*
+
+### Le verrou des entrées
+
+⚠️ **Un seul garde, dans `Input`, pas sept dans les gestes.** Les uns après les
+autres, on en oublie un — et celui qu'on oublie est justement celui qui fait
+sauter le joueur derrière l'écran de pause.
+
+Un simple `pointer-events` sur le voile n'aurait pas suffi : les écouteurs vivent
+sur `document.body`, donc les gestes faits **sur** le voile remontent jusqu'à
+eux, et le clavier ne passe pas par le voile du tout. D'où `bloque()`, interrogé
+par les quatre écouteurs (clavier, souris, `touchstart`, `touchend`).
+
+*Vérifié : cinq touches et un clic pendant la pause, le compteur n'a pas bougé
+d'un mètre.*
+
+> ⚠️ Les styles de bouton vivaient sous `#overlay button` — or le voile de pause
+> n'est pas dans `#overlay`. Ses deux boutons s'affichaient donc **nus**,
+> rectangles blancs du navigateur au milieu d'un jeu sombre. Vu à l'écran, et
+> corrigé en partageant le sélecteur : ces styles ne sont pas une affaire
+> d'écran de menu, mais d'interface entière.
 ## ♾️ La course sans fin
 
 Pas de ligne d'arrivée, pas de rivaux, pas de chrono : on court jusqu'à ce que
@@ -695,7 +749,7 @@ __sorts.fin(4)                                            // le podium doit reve
 
 ### 🏺 Le compteur de jarres
 
-Sous la distance, petit et permanent, façon pièces de Mario Kart : `🏺 3 −21 %`.
+**En bas à droite**, petit et permanent, façon pièces de Mario Kart : `🏺 3 −21 %`.
 
 ⚠️ **Il porte le pourcentage, pas seulement le compte.** Un compteur seul dirait
 « 3 » sans dire trois quoi ; ce qui manque, c'est de la vitesse.
@@ -703,7 +757,11 @@ Sous la distance, petit et permanent, façon pièces de Mario Kart : `🏺 3 −
 ⚠️ **Et il est ancré hors de la rangée du HUD.** `#hud` est un flex en ligne :
 laissé dedans, le compteur se rangeait à *droite* du chrono, en plein dans la
 bande où vivent les pastilles de dégâts — mesuré à l'écran, il mordait dessus.
-Il est donc positionné sous le chrono, sur la même marge gauche.
+
+Il occupe donc le **seul coin encore libre** : le haut porte le chrono, les
+pastilles et la pause ; la gauche, la colonne de progression. Sa marge basse est
+généreuse pour le remonter au-dessus de la zone où le pouce se pose sur mobile.
+
 ### 🎯 Le kunai fait sauter les murs
 
 Sans rival devant, le kunai partait dans le vide. Il vise donc la **piste** : il
