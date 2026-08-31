@@ -2554,22 +2554,35 @@ body {
   gap: 8px;
 }
 
-/* ⚠️ Assez GRAND pour un pouce. 44 px est le minimum tenable sur mobile ;
-   en dessous, on le rate et l'on swipe à la place — c'est-à-dire qu'on saute
-   au lieu de mettre en pause, en pleine course. */
+/* ⚠️ PLUS PETIT À L'ŒIL, PAS SOUS LE DOIGT.
+
+   Il prenait 44 px, ce qui reste le minimum tenable pour un pouce : en dessous,
+   on rate le bouton et le geste devient un SWIPE — c'est-à-dire qu'on saute au
+   lieu de mettre en pause, en pleine course.
+
+   On réduit donc le carré visible à 34 px, et l'on rend la place perdue par une
+   zone tactile invisible qui déborde de 6 px tout autour (`::after`). Le bouton
+   paraît discret, mais il se touche toujours aussi bien — 46 px de cible. */
 .hudbtn {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   border: 1px solid #2b3350;
   background: rgba(13, 16, 28, 0.62);
   color: #f0e8d8;
-  font-size: 1.05rem;
+  font-size: 0.82rem;
   line-height: 1;
   display: grid;
   place-items: center;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+/* La cible, invisible, plus large que le dessin. */
+.hudbtn::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
 }
 .hudbtn:active {
   background: rgba(226, 75, 58, 0.35);

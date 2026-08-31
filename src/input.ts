@@ -21,6 +21,16 @@ export interface Handlers {
    * jusqu'à eux, et le clavier ne passe pas par le voile du tout.
    */
   bloque?(): boolean
+  /**
+   * ⏸ La touche **T** : met en pause, et la lève.
+   *
+   * ⚠️ ELLE EST LUE AVANT `bloque`, et c'est indispensable. Derrière le verrou,
+   * on pourrait mettre en pause et jamais en sortir — il faudrait aller chercher
+   * la souris, ce qui vide la touche de son intérêt.
+   *
+   * Réservée au clavier : sur mobile il y a le bouton, et il est sous le pouce.
+   */
+  pause?(): void
 }
 
 const SWIPE_MIN = 24 // pixels minimum pour compter comme un swipe
@@ -42,8 +52,15 @@ export class Input {
   constructor(el: HTMLElement, h: Handlers) {
     // — Clavier (flèches + ZQSD pour les claviers français) —
     addEventListener('keydown', (e) => {
-      if (h.bloque?.()) return // ⏸ en pause, le clavier ne commande plus rien
       const k = e.key.toLowerCase()
+
+      // ⏸ AVANT le verrou : c'est la touche qui doit aussi SORTIR de la pause.
+      if (k === 't') {
+        if (!e.repeat) h.pause?.()
+        return
+      }
+
+      if (h.bloque?.()) return // ⏸ en pause, le clavier ne commande plus rien
 
       if (h.isSprint() && (k === ' ' || k === 'enter')) {
         // e.repeat : maintenir la touche enfoncée ne donne RIEN. Sans ça, la

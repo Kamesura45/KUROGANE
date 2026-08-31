@@ -602,6 +602,31 @@ reprise l'avalerait d'un coup — le coureur ferait un bond de plusieurs mètres
 travers les obstacles. *Vérifié : 62 m avant la pause, 79 m une seconde et demie
 après la reprise. Aucun saut.*
 
+
+### ⌨️ La touche T, et le bouton discret
+
+Sur PC, **T** met en pause et l'en sort.
+
+⚠️ **Elle est lue AVANT le verrou des entrées.** Derrière lui, on pourrait mettre
+en pause et jamais en sortir : il faudrait aller chercher la souris, ce qui vide
+la touche de son intérêt.
+
+⚠️ **Et elle lit le VOILE, pas `enPause`.** En ligne le voile s'ouvre sans rien
+figer, donc `enPause` y reste faux : se fier à lui rouvrirait le voile à chaque
+appui au lieu de le refermer — la touche ne servirait à rien précisément là où la
+souris est la plus loin.
+
+Le rappel « (ou la touche T) » n'apparaît que sur un appareil à **pointeur fin**
+— une souris, donc un clavier. Sur un téléphone il parlerait d'une touche qui
+n'existe pas, à côté d'un bouton qu'on a déjà sous le pouce.
+
+**Le bouton, lui, a maigri : 34 px au lieu de 44.** Mais 44 px reste le minimum
+tenable pour un pouce — en dessous, on rate le bouton et le geste devient un
+**swipe**, c'est-à-dire qu'on saute au lieu de mettre en pause, en pleine course.
+
+⚠️ On a donc réduit le **dessin**, pas la **cible** : un `::after` invisible
+déborde de 6 px tout autour, ce qui rend 46 px de zone touchable sous un carré de
+34. Le bouton paraît discret sans devenir difficile à viser.
 ### Le verrou des entrées
 
 ⚠️ **Un seul garde, dans `Input`, pas sept dans les gestes.** Les uns après les

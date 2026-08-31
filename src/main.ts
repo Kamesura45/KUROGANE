@@ -2585,9 +2585,16 @@ function ouvrirPause(ouvert: boolean) {
   enPause = ouvert && !online
   pauseEl.classList.toggle('hidden', !ouvert)
   pauseTitreEl.textContent = online ? '⚔️ Course en ligne' : '⏸ Pause'
+  /*
+   * ⌨️ Le rappel de la touche T n'apparaît QUE sur un appareil à pointeur fin —
+   * c'est-à-dire une souris, donc un clavier. L'afficher sur un téléphone
+   * parlerait d'une touche qui n'existe pas, à côté d'un bouton qu'on a sous le
+   * pouce.
+   */
+  const clavier = matchMedia('(pointer: fine)').matches ? ' (ou la touche T)' : ''
   pauseMotEl.textContent = online
     ? 'La course CONTINUE — on ne met pas les autres en attente. Tu peux la quitter, mais tu ne la reprendras pas.'
-    : 'La course est arrêtée. Reprends quand tu veux.'
+    : `La course est arrêtée. Reprends quand tu veux${clavier}.`
   // « Reprendre » ne promet pas la même chose des deux côtés : hors ligne on
   // repart où l'on s'est arrêté, en ligne on retourne à une course qui a
   // continué sans nous.
@@ -3585,6 +3592,15 @@ new Input(document.body, {
   isSprint: inSprintZone,
   // ⏸ Le verrou unique : tant qu'il est levé, aucun geste ne parvient au jeu.
   bloque: () => enPause,
+  /*
+   * ⏸ T bascule la pause, dans les deux sens.
+   *
+   * ⚠️ On lit le VOILE, pas `enPause` : en ligne le voile s'ouvre sans rien
+   * figer, donc `enPause` y reste faux. Se fier à lui rouvrirait le voile à
+   * chaque appui au lieu de le refermer — la touche ne servirait à rien
+   * précisément là où la souris est la plus loin.
+   */
+  pause: () => ouvrirPause(pauseEl.classList.contains('hidden')),
 })
 
 // ————— La boucle de jeu (60 fois par seconde) —————
