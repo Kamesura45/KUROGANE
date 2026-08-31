@@ -454,6 +454,8 @@ export class Track {
   private tronçons = 0
   /** Retenu au reset : les tronçons suivants doivent en hériter. */
   private avecPots = true
+  /** ♾️ Le décor tiré pour chaque créneau, retenu (cf. ordreSlot). */
+  private slots: number[] = []
 
   // ————— Les biomes —————
   private decors: Decor[] = []
@@ -710,7 +712,10 @@ export class Track {
     // Les rouleaux sont places APRES les obstacles : ils doivent s'en ecarter
     this.parcheminPlan = buildParcheminPlan(length, seed, occupe)
     this.parcheminIdx = 0
-    this.jarrePlan = buildJarrePlan(length, seed, occupe, avecPots)
+    // ♾️ La dorée puise dans la MÊME table restreinte que les rouleaux : sans
+    // ça, elle rendait les sorts qu’on venait d’écarter du mode.
+    const sorts = infini ? TIRAGE_INFINI : TIRAGE
+    this.jarrePlan = buildJarrePlan(length, seed, occupe, avecPots, undefined, undefined, sorts)
     this.jarreIdx = 0
     for (const p of this.plateformes) {
       p.active = false
@@ -756,6 +761,7 @@ export class Track {
     this.bord = length
     this.tronçons = 0
     this.avecPots = avecPots
+    this.slots = [] // ♾️ nouvelle course, nouveau tirage de décors
     // Il n'y a pas de ligne d'arrivée à une course sans fin.
     this.finish.visible = !infini
   }
@@ -769,9 +775,50 @@ export class Track {
    * flanc du Fuji jusqu'à la fin des temps.
    */
   private biomeDe(d: number): number {
-    return this.cycle > 0
-      ? indexBiome(d % this.cycle, this.cycle)
-      : indexBiome(d, this.courseLength)
+    if (this.cycle <= 0) return indexBiome(d, this.courseLength)
+    return this.ordreSlot(Math.max(0, Math.floor(d / (this.cycle / BIOMES.length))))
+  }
+
+  /**
+   * ————— ♾️ Quel décor occupe le créneau `k` ? —————
+   *
+   * Un cycle vaut `BIOMES.length` créneaux ; en course sans fin, ils défilent
+   * indéfiniment et leur ordre est TIRÉ AU SORT.
+   *
+   * Trois règles, et chacune répare un défaut qu'on verrait tout de suite :
+   *
+   *  · LE PREMIER EST TOUJOURS LE VILLAGE EN FLAMMES. On commence là où le
+   *    joueur s'attend à commencer ; ouvrir sur la neige un coup sur trois
+   *    donnerait l'impression de tomber au hasard dans une partie déjà entamée.
+   *
+   *  · JAMAIS DEUX FOIS LE MÊME D'AFFILÉE. Deux créneaux identiques, ce sont
+   *    1 280 m du même décor — ça ne se lit pas comme du hasard, ça se lit
+   *    comme un bug d'affichage.
+   *
+   *  · TIRÉ DE LA GRAINE, pas de `Math.random`. La piste doit rester une pure
+   *    fonction de sa graine : c'est ce qui la rend rejouable, et identique pour
+   *    deux joueurs qui la partageraient.
+   */
+  private ordreSlot(k: number): number {
+    if (k <= 0) return 0 // 🔥 le village en flammes ouvre toujours
+    /*
+     * ⚠️ MÉMORISÉ, parce que chaque créneau dépend du précédent : sans cache,
+     * `biomeDe` refait toute la chaîne depuis zéro à chaque appel — et il est
+     * appelé à chaque image ET pour chaque obstacle qui apparaît. Au bout de
+     * quelques kilomètres, ça se sentirait.
+     */
+    const vu = this.slots[k]
+    if (vu !== undefined) return vu
+
+    const precedent = this.ordreSlot(k - 1)
+    // Une graine par créneau, dérivée de celle de la course.
+    const r = mulberry32(this.graine ^ Math.imul(k + 1, 0x85ebca6b))()
+    // On tire parmi les AUTRES, ce qui interdit la répétition par construction
+    // plutôt que par un « si c'est le même, recommence » qui peut boucler.
+    const i = Math.floor(r * (BIOMES.length - 1))
+    const choix = i >= precedent ? i + 1 : i
+    this.slots[k] = choix
+    return choix
   }
 
   /**
@@ -812,7 +859,7 @@ export class Track {
     const obstLoc = buildPlan(long, g, [...aCheval, ...platsLoc], DEBUT, 0)
     const occupeLoc = [...obstLoc, ...commeObstacles(platsLoc)]
     const parchLoc = buildParcheminPlan(long, g, occupeLoc, DEBUT, 0)
-    const jarreLoc = buildJarrePlan(long, g, occupeLoc, this.avecPots, DEBUT, 0)
+    const jarreLoc = buildJarrePlan(long, g, occupeLoc, this.avecPots, DEBUT, 0, TIRAGE_INFINI)
     const murLoc = buildMurPlan(long, g, DEBUT, 0)
 
     // On ne décale que `d` : longueurs, rampes et lignes ne bougent pas.
@@ -849,6 +896,19 @@ export class Track {
    * Le plan complet de la course. Les bots le LISENT pour esquiver : ils ne
    * voient pas la piste, ils la connaissent — comme un pilote son circuit.
    */
+  /**
+   * ♾️ Le décor à cette distance — le MÊME que celui que la piste dessine.
+   *
+   * Le jeu en a besoin pour l'ambiance sonore (feu, oiseaux). Il la calculait
+   * lui-même avec `indexBiome`, ce qui marchait tant que l'ordre des décors
+   * était fixe ; depuis qu'il est tiré au sort, seule la piste le connaît — et
+   * l'entendre le crépitement du village dans la neige serait pire que pas de
+   * son du tout.
+   */
+  biomeA(distance: number): number {
+    return this.biomeDe(distance)
+  }
+
   obstaclesPrevus(): readonly PlannedObstacle[] {
     return this.planBots
   }
@@ -1384,9 +1444,11 @@ export class Track {
     // image saute ou si l'on rejoint une course en retard, la couleur est juste
     // malgré tout. Même principe que la ligne d'arrivée plus bas.
     // ♾️ En infini, l'ambiance boucle avec les biomes (cf. biomeDe).
+    // ♾️ En infini, l'ambiance suit le MÊME tirage que les décors (ordreSlot) :
+    // sans ça, on courrait dans la neige sous la lumière orange du village.
     const amb = enCourse
       ? this.cycle > 0
-        ? ambianceA(distance % this.cycle, this.cycle)
+        ? ambianceA(distance, this.cycle, (k) => this.ordreSlot(k))
         : ambianceA(distance, this.courseLength)
       : ambianceA(0, 1)
     this.brume.color.copy(amb.brume)
@@ -2141,7 +2203,23 @@ export function buildJarrePlan(
   obstacles: PlannedObstacle[],
   avecPots = true,
   depart = 90,
-  garde = SPRINT_ZONE + 30
+  garde = SPRINT_ZONE + 30,
+  /**
+   * ⚠️ LA TABLE DE SORTS DE LA JARRE DORÉE.
+   *
+   * Elle tirait dans `TIRAGE`, toujours, quel que soit le mode — si bien qu'en
+   * course sans fin une dorée rendait poison, miroir, fumigène ou chaînes,
+   * c'est-à-dire précisément les sorts qu'on avait retirés des rouleaux. Le
+   * ramassage promettait quatre pouvoirs et en donnait dix.
+   *
+   * Le banc ne l'avait pas vu : il vérifiait `tirerParchemin`, et la dorée ne
+   * passe pas par là.
+   *
+   * ⚠️ Le nombre d'appels à `rng()` ne change PAS avec la table — un seul dans
+   * les deux cas. Le plan reste une pure fonction de la graine, et deux joueurs
+   * en duel voient la même piste.
+   */
+  sorts: readonly ParcheminKind[] = TIRAGE
 ): PlannedJarre[] {
   const rng = mulberry32(seed ^ 0x2b91e6a7)
   const plan: PlannedJarre[] = []
@@ -2191,7 +2269,7 @@ export function buildJarrePlan(
           d: d + ecart * i,
           lane,
           kind: i === doree ? 'doree' : 'vide',
-          parchemin: TIRAGE[Math.floor(rng() * TIRAGE.length)],
+          parchemin: sorts[Math.floor(rng() * sorts.length)],
         })
         if (i > 0) eligibles.push(plan.length - 1)
       }

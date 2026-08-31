@@ -825,6 +825,46 @@ document.getElementById('podium').classList.add('hidden') // on simule l'après-
 __sorts.fin(4)                                            // le podium doit revenir
 ```
 
+
+### 🗺️ Les décors sont tirés au sort
+
+Un cycle vaut trois **créneaux** de 640 m. En course sans fin, ils défilent
+indéfiniment et **leur ordre est tiré au sort** — village, puis peut-être le
+pont, peut-être la neige, puis un autre.
+
+Trois règles, et chacune répare un défaut qu'on verrait tout de suite :
+
+| Règle | Sans elle |
+|---|---|
+| **Le premier est toujours le village en flammes** | Ouvrir sur la neige un coup sur trois donnerait l'impression de tomber au hasard dans une partie déjà commencée |
+| **Jamais deux fois le même d'affilée** | Deux créneaux identiques, c'est 1 280 m du même décor — ça ne se lit pas comme du hasard, mais comme un bug d'affichage |
+| **Tiré de la GRAINE, pas de `Math.random`** | La piste ne serait plus rejouable, ni identique pour deux joueurs qui la partagent |
+
+⚠️ **L'ambiance suit le même tirage.** `ambianceA` accepte désormais l'ordre des
+créneaux : sans ça on courrait dans la neige sous la lumière orange du village,
+et l'on entendrait le crépitement des flammes au clair de lune. Le jeu ne
+recalcule plus le décor de son côté — il le **demande** à la piste
+(`track.biomeA`), seule à connaître le tirage.
+
+Le tirage est **mémorisé** : chaque créneau dépend du précédent, et sans cache
+`biomeA` referait toute la chaîne depuis zéro à chaque image *et* pour chaque
+obstacle qui apparaît.
+
+### ⚠️ La jarre dorée rendait les sorts qu'on avait retirés
+
+Les quatre rouleaux du mode (armure, grue, thé, kunai) étaient bien filtrés…
+pour les **rouleaux**. La jarre **dorée**, elle, tirait son sort ailleurs — dans
+`buildJarrePlan` — et puisait dans la table complète. Elle rendait donc poison,
+miroir, fumigène et chaînes : précisément les quatre écartés.
+
+**Le banc ne l'avait pas vu parce qu'il vérifiait `tirerParchemin`, et la dorée
+ne passe pas par là.** Une table filtrée ne suffit pas : il faut vérifier *tous*
+les chemins par lesquels un sort peut arriver dans la main du joueur. Le banc
+couvre maintenant les deux.
+
+⚠️ Le nombre d'appels à `rng()` ne change pas avec la table — un seul dans les
+deux cas. Le plan reste une pure fonction de la graine, et deux joueurs en duel
+voient la même piste.
 ### 🏺 Le compteur de jarres
 
 **En bas à droite**, petit et permanent, façon pièces de Mario Kart : `🏺 3 −21 %`.

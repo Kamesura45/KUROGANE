@@ -284,5 +284,77 @@ console.log('\n————— 🟢 Les pots verts tombent aussi en course sans 
   ok(sans === 0, 'sans le drapeau, aucun — l entrainement reste sec', `${sans}`)
 }
 
+console.log('\n————— 🏺 La jarre DOREE aussi puise dans la table restreinte —————\n')
+{
+  /*
+   * ⚠️ CE TROU A LAISSE PASSER UN VRAI BUG. Le banc ne verifiait que
+   * `tirerParchemin`, c'est-a-dire les ROULEAUX — or la doree tire son sort
+   * ailleurs, dans buildJarrePlan. Elle rendait donc poison, miroir, fumigene et
+   * chaines en course sans fin : precisement les quatre qu'on avait ecartes.
+   */
+  const INTERDITS = ['senbon', 'miroir', 'fumigene', 'kusarigama', 'vent', 'onmyoji']
+  const GRAINES = [1, 7, 99, 1234, 4242, 55555, 8675309, 31337]
+
+  const sortsDorees = (table?: any) => {
+    const vus = new Set<string>()
+    for (const g of GRAINES) {
+      for (const j of buildJarrePlan(CYCLE, g, [], true, undefined, undefined, table)) {
+        if (j.kind === 'doree') vus.add(j.parchemin)
+      }
+    }
+    return vus
+  }
+
+  const infini = sortsDorees(TIRAGE_INFINI)
+  const ordinaire = sortsDorees()
+
+  ok(
+    [...infini].every((k) => TIRAGE_INFINI.includes(k as any)),
+    'en infini, la doree ne rend QUE les quatre gardes',
+    [...infini].sort().join(', ')
+  )
+  ok(
+    ![...infini].some((k) => INTERDITS.includes(k)),
+    'aucun sort ecarte ne revient par la doree',
+    [...infini].filter((k) => INTERDITS.includes(k)).join(', ') || 'aucun'
+  )
+  ok(
+    ordinaire.size > 4,
+    'et une course ORDINAIRE garde ses dix sorts',
+    `${ordinaire.size} sortes`
+  )
+}
+
+console.log('\n————— 🗺️ Les decors sont tires au sort —————\n')
+{
+  const suite = (graine: number, combien = 12) => {
+    const t = new Track(new THREE.Scene())
+    t.reset(CYCLE, graine, false, true)
+    const part = CYCLE / BIOMES.length
+    // On lit le decor au MILIEU de chaque creneau, la ou il n'y a pas de fondu.
+    return Array.from({ length: combien }, (_, k) => t.biomeA(k * part + part / 2))
+  }
+
+  const GRAINES = [1, 7, 99, 1234, 4242, 55555]
+  const suites = GRAINES.map((g) => suite(g))
+
+  ok(
+    suites.every((s) => s[0] === 0),
+    'on commence TOUJOURS par le village en flammes',
+    suites.map((s) => s[0]).join(',')
+  )
+  ok(
+    suites.every((s) => s.every((b, i) => i === 0 || b !== s[i - 1])),
+    'jamais deux fois le meme decor d affilee'
+  )
+  ok(
+    new Set(suites.map((s) => s.join(''))).size > 1,
+    'des graines differentes donnent des ordres differents',
+    suites.map((s) => s.join('')).join(' | ')
+  )
+  // Rejouable : la meme graine doit redonner exactement la meme suite.
+  ok(suite(4242).join('') === suite(4242).join(''), 'la meme graine redonne la meme suite')
+}
+
 console.log(rates === 0 ? '\nTout est bon.\n' : `\n❌ ${rates} verification(s) en echec.\n`)
 process.exit(rates === 0 ? 0 : 1)

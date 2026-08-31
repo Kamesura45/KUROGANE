@@ -3039,19 +3039,47 @@ export function indexBiome(distance: number, length: number): number {
  * On mélange sur les derniers `FONDU` de chaque biome. L'objet renvoyé est
  * TOUJOURS le même : ne pas le stocker, le lire tout de suite.
  */
-export function ambianceA(distance: number, length: number): Ambiance {
+export function ambianceA(
+  distance: number,
+  length: number,
+  /**
+   * ♾️ Quel biome occupe le créneau `k` ?
+   *
+   * Absent, c'est l'ordre naturel de `BIOMES` et le fondu s'arrête au dernier —
+   * une course a une fin. Fourni, les créneaux se suivent SANS FIN et dans
+   * l'ordre qu'on veut : c'est ce qui permet de tirer les décors au sort tout en
+   * gardant les couleurs, la brume et la lumière d'accord avec eux.
+   *
+   * ⚠️ Sans ce paramètre, mélanger les décors aurait fait mentir l'ambiance : on
+   * aurait couru dans la neige sous la lumière orange du village.
+   */
+  ordre?: (k: number) => number
+): Ambiance {
   const n = BIOMES.length
-  const t = length > 0 ? Math.min(0.9999, Math.max(0, distance / length)) : 0
   const part = 1 / n // la part de course d'un biome
-  const i = Math.min(n - 1, Math.floor(t / part))
-
-  // Où en est-on DANS ce biome, de 0 à 1 ?
-  const dedans = (t - i * part) / part
   // Le fondu occupe la fin du biome. `FONDU` est une fraction de la COURSE,
   // ramenée ici à une fraction du biome.
   const seuil = 1 - FONDU / part
-  const suivant = Math.min(n - 1, i + 1)
-  const melange = dedans <= seuil || i === n - 1 ? 0 : (dedans - seuil) / (1 - seuil)
+
+  let i: number
+  let suivant: number
+  let melange: number
+
+  if (ordre) {
+    // ♾️ Les créneaux défilent indéfiniment : pas de dernier, donc pas de cas
+    // particulier — le fondu franchit aussi la couture entre deux cycles.
+    const k = Math.max(0, Math.floor(distance / (length / n)))
+    const dedans = (distance / (length / n)) - k
+    melange = dedans <= seuil ? 0 : (dedans - seuil) / (1 - seuil)
+    i = ordre(k)
+    suivant = ordre(k + 1)
+  } else {
+    const t = length > 0 ? Math.min(0.9999, Math.max(0, distance / length)) : 0
+    i = Math.min(n - 1, Math.floor(t / part))
+    const dedans = (t - i * part) / part
+    suivant = Math.min(n - 1, i + 1)
+    melange = dedans <= seuil || i === n - 1 ? 0 : (dedans - seuil) / (1 - seuil)
+  }
 
   const A = BIOMES[i]
   const B = BIOMES[suivant]

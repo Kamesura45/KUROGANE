@@ -61,7 +61,7 @@ import {
   oiseauxAmbiance,
   prechauffeFeu,
 } from './sfx'
-import { BIOMES, indexBiome } from './biomes'
+import { BIOMES } from './biomes'
 import type { Quality } from './settings'
 import { Musique } from './audio'
 
@@ -4624,11 +4624,9 @@ function tick(now?: number) {
    * une nappe ailleurs ne demandera pas de revenir ici.
    */
   const enCourse = state === 'depart' || state === 'course' || state === 'fini'
-  // ♾️ En infini les biomes BOUCLENT (cf. Track.biomeDe) : sans le modulo, on
-  // resterait sur le dernier décor — et son ambiance sonore — pour toujours.
-  const biomeIci = enCourse
-    ? BIOMES[indexBiome(modeInfini ? distance % COURSE_LENGTH : distance, COURSE_LENGTH)]
-    : null
+  // ♾️ On DEMANDE le décor à la piste plutôt que de le recalculer : en infini
+  // leur ordre est tiré au sort, et elle seule connaît le tirage.
+  const biomeIci = enCourse ? BIOMES[track.biomeA(distance)] : null
   /*
    * ♾️ En infini, le feu qui poursuit COUVRE celui du décor.
    *
