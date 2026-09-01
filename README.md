@@ -340,6 +340,72 @@ npm run torii:test   # aucun saut ne doit heurter le portique, et les 3 voies
                      # plus les 2 couloirs de paroi doivent rester libres
 ```
 
+## 🖼️ Les boutons peints
+
+Quatre boutons portent un **dessin fait à la main** plutôt que du texte : la
+pause (休憩), Jouer (遊ぶ), Course Infinity (無限) et Compte (戦士).
+
+### Le fond blanc, et pourquoi il fallait le retirer
+
+Les images sont arrivées avec un **fond blanc opaque**. Le canal alpha était
+bien là — toutes en RVBA — mais **aucun pixel ne s'en servait** :
+
+| | pixels transparents | blanc pur opaque |
+|---|---|---|
+| `pause.png` | 0 % | 23 % |
+| `jouer.png` | 0 % | 28 % |
+| `infini.png` | 0 % | 18 % |
+| `compte.png` | 0 % | 19 % |
+
+Posées telles quelles sur l'interface sombre, elles auraient dessiné quatre
+rectangles blancs. D'où [`tools/detourer.mjs`](tools/detourer.mjs), qui lit et
+réécrit le PNG (zlib + défiltrage à la main, sans dépendance).
+
+⚠️ **Il ne supprime pas « tout ce qui est blanc ».** C'était le piège, et il
+aurait troué les dessins : le parchemin de « Jouer » est gris très clair en son
+centre, la plaque de 戦士 aussi. Il part donc des **bords** et se propage de
+proche en proche — seul le blanc **relié au bord** disparaît. Vérifié après
+coup : le parchemin est identique **au pixel près**.
+
+⚠️ **Et il décompose les bords au lieu de les couper.** Un seuil unique laissait
+un liseré pâle tout autour de chaque dessin — les bords sont anticrénelés, donc
+faits de pixels mi-fond mi-dessin. Deux seuils : en deçà c'est du fond (alpha
+zéro), au-delà c'est du dessin (intact), et entre les deux on remonte à la vraie
+couleur par `F = (C − (1−a)·B) / a`.
+
+> Sans cette division, un bord à moitié transparent garderait sa couleur
+> **délavée par le blanc** : sur fond sombre il resterait clair, et l'on aurait
+> un halo plus discret au lieu de pas de halo. Rendre le pixel translucide ne
+> suffit pas — il faut lui rendre sa couleur.
+
+Mesuré après : **0 pixel blanc** sur les bords des quatre.
+
+### Un fichier absent ne casse rien
+
+`menu.ts` **charge l'image avant de la poser**. C'est tout l'intérêt de passer
+par du JavaScript plutôt qu'un `background-image` en CSS : un fichier manquant,
+mal nommé ou pas encore déployé laisserait sinon un bouton **sans fond et sans
+texte** — donc invisible. On ne pourrait plus ni lancer une partie, ni sortir
+d'une pause. Tant que le fichier ne répond pas, le bouton garde exactement
+l'apparence qu'il avait.
+
+### Deux pièges de cascade, tous deux mesurés
+
+⚠️ **`.ghost` gagnait sur `.peint`.** Même spécificité (`#overlay button.ghost`
+contre `#overlay button.peint`), donc l'ordre du fichier tranche — et `.ghost`
+est plus bas. Le bouton Compte gardait son fond gris et son texte, image chargée
+ou non. Le déplacer marcherait aujourd'hui et casserait à la première variante
+ajoutée en dessous : la règle n'est pas « peint arrive après » mais « peint
+REMPLACE toute autre peau ». D'où le `!important`, qui dit exactement ça.
+
+⚠️ **`font-size: 0` ne descend pas jusqu'aux enfants.** Les tuiles de modes
+donnent une taille ABSOLUE à leur `<b>` et leur `<small>` : « Course Infinity /
+Jusqu'aux flammes » restait écrit **par-dessus** le dessin, qui porte déjà 無限.
+Il faut masquer les enfants, pas seulement réduire le texte du parent.
+
+⚠️ **Le nom du bouton vit dans `aria-label`.** Masquer le texte le retirerait
+sinon aux lecteurs d'écran : le dessin dit « 遊ぶ », le code doit le dire aussi.
+
 ## 🎴 Le menu Jouer : trois modes en tuiles
 
 ```

@@ -1123,6 +1123,70 @@ body {
   line-height: 1.2;
   opacity: 0.75;
 }
+/*
+ * ————— 🖼️ LES BOUTONS PEINTS —————
+ *
+ * La classe n'est posée par menu.ts qu'une fois l'image CHARGÉE. Tant qu'elle
+ * ne l'est pas, rien de ce qui suit ne s'applique et le bouton garde son
+ * apparence ordinaire — texte compris.
+ *
+ * `font-size: 0` fait céder la place au dessin, qui porte déjà le mot. Le nom
+ * du bouton n'est pas perdu pour autant : il vit dans `aria-label`, posé sur
+ * chacun des quatre.
+ *
+ * ⚠️ `contain` et non `cover` : ces dessins ont des proportions très
+ * différentes des boutons (2,68 pour la bannière du Compte, 1,28 pour la
+ * pause). Un `cover` rognerait — et ce qui se trouve sur les bords, ce sont
+ * justement les coups de pinceau qui font le cadre.
+ *
+ * ⚠️ `!important`, et ce n'est pas de la paresse.
+ *
+ * « Peint » et « fantôme » ont la MÊME spécificité (`#overlay button.ghost`
+ * contre `#overlay button.peint`), donc c'est l'ordre du fichier qui tranche —
+ * et `.ghost` est plus bas. Mesuré : le bouton Compte gardait son fond gris et
+ * son texte, image chargée ou pas. Le déplacer plus bas marcherait aujourd’hui
+ * et casserait à la première variante ajoutée en dessous.
+ *
+ * Or la règle n'est pas « peint arrive après », c'est « peint REMPLACE toute
+ * autre peau ». Un bouton à moitié peint — dessin plus fond gris plus texte
+ * par-dessus — est pire que pas peint du tout.
+ */
+#overlay button.peint,
+.hudbtn.peint {
+  background: var(--art) center / contain no-repeat !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-size: 0 !important;
+  padding: 0 !important;
+}
+/*
+ * ⚠️ Et l'on cache les ENFANTS, pas seulement le texte du bouton.
+ *
+ * `font-size: 0` ne descend pas jusqu'à eux : les tuiles de modes donnent une
+ * taille ABSOLUE à leur `<b>` et à leur `<small>` (0,84 et 0,62 rem), qui
+ * ignorent donc le zéro du parent. Vu à l'écran : « Course Infinity / Jusqu'aux
+ * flammes » restait écrit PAR-DESSUS le dessin, qui porte déjà 無限.
+ */
+#overlay button.peint > * {
+  display: none !important;
+}
+
+/* ▶️ Le parchemin de « Jouer » : ses proportions décident de sa taille. */
+#btnJouer.peint {
+  align-self: center;
+  width: min(200px, 60%);
+  aspect-ratio: 342 / 246;
+}
+/* 👤 La bannière du Compte, large et basse : elle reste dans sa demi-rangée. */
+#btnCompte.peint {
+  aspect-ratio: 404 / 151;
+  padding: 0;
+}
+/* ⏸ La pause garde sa taille de pastille — elle vit sur le HUD, pas au menu. */
+.hudbtn.peint {
+  width: 42px;
+}
+
 /* 🚧 Le mode à venir : présent, lisible, et clairement pas cliquable. */
 #overlay button.mode:disabled {
   background: rgba(61, 69, 96, 0.3);

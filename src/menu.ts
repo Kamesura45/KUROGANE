@@ -283,6 +283,8 @@ export class Menu {
       compte: document.getElementById('scr-compte')!,
     }
 
+    this.peindre()
+
     // — Écran-titre —
     document.getElementById('btnJouer')!.addEventListener('click', () => this.ouvrir('jouer'))
 
@@ -1277,6 +1279,42 @@ export class Menu {
       bloc.appendChild(ligne)
     }
     return bloc
+  }
+
+  /**
+   * ————— 🖼️ LES BOUTONS PEINTS —————
+   *
+   * Quatre images dessinées à la main remplacent quatre boutons : la pause
+   * (休憩), Jouer (遊ぶ), la course sans fin (無限) et le Compte (戦士).
+   *
+   * ⚠️ L'IMAGE EST CHARGÉE AVANT D'ÊTRE POSÉE, et c'est tout l'intérêt de
+   * passer par du JavaScript plutôt qu'un `background-image` en CSS. Un
+   * fichier absent, mal nommé ou pas encore déployé laisserait alors un bouton
+   * SANS FOND ET SANS TEXTE — donc invisible, et l'on ne pourrait plus ni
+   * jouer ni reprendre une partie en pause. Ici, tant que le fichier ne
+   * répond pas, le bouton garde exactement l'apparence qu'il avait.
+   *
+   * ⚠️ Chemin RELATIF (`ui/…`), pas absolu : le jeu doit pouvoir vivre dans un
+   * sous-dossier. Un `/ui/…` chercherait à la racine du domaine.
+   */
+  private peindre() {
+    const ART: Record<string, string> = {
+      btnPause: 'pause',
+      btnJouer: 'jouer',
+      btnInfini: 'infini',
+      btnCompte: 'compte',
+    }
+    for (const [id, nom] of Object.entries(ART)) {
+      const b = document.getElementById(id)
+      if (!b) continue
+      const src = `ui/${nom}.png`
+      const img = new Image()
+      img.onload = () => {
+        b.style.setProperty('--art', `url("${src}")`)
+        b.classList.add('peint')
+      }
+      img.src = src
+    }
   }
 
   /** Le podium se lit d'un coup d'œil ; au-delà, le chiffre suffit. */
