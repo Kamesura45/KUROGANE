@@ -309,6 +309,32 @@ export class Menu {
     document.getElementById('btnRoster')!.addEventListener('click', () => this.ouvrir('roster'))
     document.getElementById('btnOptions')!.addEventListener('click', () => this.ouvrir('options'))
     document.getElementById('btnHelp')!.addEventListener('click', () => this.ouvrir('help'))
+
+    /*
+     * ————— 🎮 LES TROIS ONGLETS DE MODES, DANS L'AIDE —————
+     *
+     * Un seul panneau visible à la fois. On garde les trois dans le document
+     * plutôt que de les reconstruire : le texte est écrit à la main dans
+     * `index.html`, où il se relit et se corrige — le sortir en JavaScript
+     * ferait de chaque virgule une chaîne de caractères.
+     */
+    for (const b of document.querySelectorAll<HTMLElement>('#aideModes button')) {
+      b.addEventListener('click', () => this.montrerMode(b.dataset.m ?? 'vse'))
+    }
+
+    /*
+     * ❓ Depuis le menu Jouer : la MÊME aide, mais ouverte sur les modes.
+     *
+     * ⚠️ On ne duplique pas l'écran. Deux aides à tenir à jour finissent
+     * toujours par se contredire, et c'est celle qu'on a oubliée que le joueur
+     * lira. On ouvre donc la seule qui existe, et on la fait défiler jusqu'au
+     * bloc des modes — la question du moment est « lequel je lance ».
+     */
+    document.getElementById('btnAideModes')?.addEventListener('click', () => {
+      this.ouvrir('help')
+      this.montrerMode('vse')
+      document.getElementById('aideModesTitre')?.scrollIntoView({ block: 'start' })
+    })
     // 🏆 Le tableau se REBÂTIT à chaque ouverture : on vient souvent d'y ajouter
     // une ligne en finissant une course.
     document.getElementById('btnScores')!.addEventListener('click', () => {
@@ -1349,6 +1375,23 @@ export class Menu {
         b.classList.add('peint')
       }
       img.src = src
+    }
+  }
+
+  /**
+   * 🎮 Montre le mode demandé dans l'aide, et lui seul.
+   *
+   * Les trois panneaux vivent côte à côte dans `index.html` ; on n'en laisse
+   * qu'un visible. Le même mot (`data-m`) désigne l'onglet et son panneau :
+   * ajouter un mode, c'est ajouter deux blocs qui portent le même nom, sans
+   * toucher à ce code.
+   */
+  private montrerMode(quel: string) {
+    for (const b of document.querySelectorAll<HTMLElement>('#aideModes button')) {
+      b.classList.toggle('on', b.dataset.m === quel)
+    }
+    for (const p of document.querySelectorAll<HTMLElement>('.aidemode')) {
+      p.classList.toggle('hidden', p.dataset.m !== quel)
     }
   }
 

@@ -502,31 +502,99 @@
           partir, et il le dit.
         </p>
 
-        <!-- ♾️ Le mode a ses propres règles : il faut les dire quelque part, et
-             cet écran est le seul que le joueur ouvre pour comprendre. -->
-        <h3>♾️ La course sans fin</h3>
-        <p class="lead">
-          Pas de ligne d'arrivée, pas de rivaux : on court jusqu'à ce que les
-          <b>flammes</b> vous rattrapent, et l'on marque en <b>mètres</b>.
-        </p>
-        <p class="lead">
-          <b>Cinq obstacles encaissés et c'est fini.</b> Les cinq pastilles en
-          haut de l'écran comptent ce qu'il te reste. Deux façons de croiser un
-          obstacle sans rien payer : l'🛡️ <b>armure</b> qui encaisse, et une
-          🧗 <b>escalade</b> — tu l'as franchi, pas subi.
-        </p>
-        <p class="lead">
-          🏺 <b>Les jarres alourdissent</b>, et ça reste : chacune retire un cran
-          de vitesse, définitivement. Le compteur en bas à droite dit combien tu
-          en as pris et ce que ça coûte. Le 🍵 <b>thé</b> lave tout d'un coup.
-        </p>
-        <p class="lead">
-          🎯 Le <b>kunai</b> y fait sauter le prochain <b>mur</b> droit devant toi
-          — celui-là seulement, et pas les barrières qui se sautent. 🗺️ Les décors
-          se suivent au hasard, et tous les 1 920 m la carte recommence : c'est là
-          que les 🟢 <b>pots verts</b> ramassés sont versés. Boucler la carte ne
-          rend aucune vie.
-        </p>
+        <!--
+          ————— 🎮 LES TROIS FAÇONS DE COURIR, EN TROIS ONGLETS —————
+
+          Seul le mode sans fin avait sa section, et les paragraphes généraux qui
+          la suivaient semblaient lui appartenir. Trois onglets remettent chaque
+          règle sous le mode qui la porte, et laissent hors du bloc ce qui vaut
+          pour les trois — les touches, le combat, les parchemins.
+
+          ⚠️ Les mêmes noms qu'au menu Jouer et qu'au classement. On choisit son
+          mode ici, on le lance là-bas, on lit son score ailleurs : trois
+          vocabulaires pour la même chose obligeraient à traduire soi-même.
+        -->
+        <h3 id="aideModesTitre">🎮 Les trois façons de courir</h3>
+        <div class="seg" id="aideModes">
+          <button data-m="vse" class="on">⚔️ Course VS.E</button>
+          <button data-m="infini">♾️ Course Infinity</button>
+          <button data-m="solo">🏋️ Entraînement</button>
+        </div>
+
+        <div class="aidemode" data-m="vse">
+          <p class="lead">
+            <b>Contre de vrais joueurs</b>, jusqu'à <b>10</b> sur la même piste.
+            1 920 m jusqu'au torii, et c'est <b>l'ordre d'arrivée</b> qui compte.
+          </p>
+          <p class="lead">
+            Trois portes, toutes derrière « Course VS.E » : ⚡ la <b>partie
+            rapide</b> qui te met dans le premier salon libre, 🏮 <b>créer un
+            salon</b> pour jouer entre vous — il te donne un code à partager — et
+            le <b>code</b> ou la liste pour rejoindre celui d'un ami.
+          </p>
+          <p class="lead">
+            🟢 Les <b>pots verts</b> n'existent qu'ici : ils versent la monnaie de
+            la boutique, à l'arrivée. Et seules ces courses entrent au
+            <b>classement mondial</b> — ce sont les seules que le serveur
+            chronomètre lui-même.
+          </p>
+          <p class="lead">
+            ⏸ <b>La pause ne fige rien en ligne</b> : les autres continuent de
+            courir. Le bouton ne sert alors qu'à partir, et il le dit.
+          </p>
+        </div>
+
+        <div class="aidemode hidden" data-m="infini">
+          <p class="lead">
+            Pas de ligne d'arrivée, pas de rivaux : on court jusqu'à ce que les
+            <b>flammes</b> vous rattrapent, et l'on marque en <b>mètres</b>.
+          </p>
+          <p class="lead">
+            <b>Cinq obstacles encaissés et c'est fini.</b> Les cinq pastilles en
+            haut de l'écran comptent ce qu'il te reste. Deux façons de croiser un
+            obstacle sans rien payer : l'🛡️ <b>armure</b> qui encaisse, et une
+            🧗 <b>escalade</b> — tu l'as franchi, pas subi.
+          </p>
+          <p class="lead">
+            🏺 <b>Les jarres alourdissent</b>, et ça reste : chacune retire un cran
+            de vitesse, définitivement. Le compteur en bas à droite dit combien tu
+            en as pris et ce que ça coûte. Le 🍵 <b>thé</b> lave tout d'un coup.
+          </p>
+          <p class="lead">
+            🎯 Le <b>kunai</b> y fait sauter le prochain <b>mur</b> droit devant toi
+            — celui-là seulement, et pas les barrières qui se sautent. 🗺️ Les décors
+            se suivent au hasard, et tous les 1 920 m la carte recommence : c'est là
+            que les 🟢 <b>pots verts</b> ramassés sont versés. Boucler la carte ne
+            rend aucune vie.
+          </p>
+        </div>
+
+        <div class="aidemode hidden" data-m="solo">
+          <p class="lead">
+            <b>Seul, contre 1 à 4 rivaux</b> tenus par la machine. La même piste de
+            1 920 m, le même torii — mais rien à perdre.
+          </p>
+          <p class="lead">
+            C'est l'endroit pour <b>apprendre</b> : choisis le nombre de rivaux,
+            recommence autant que tu veux, et tente les gestes que tu n'oses pas en
+            ligne. Ton <b>meilleur temps</b> est gardé sur cet appareil.
+          </p>
+          <p class="lead">
+            ⚠️ Rien n'y rapporte : ni 🟢 pot vert, ni monnaie, ni place au
+            <b>classement mondial</b>. Une course qu'on relance à volonté ne peut
+            pas remplir un classement — sinon le premier serait celui qui a le plus
+            de temps libre, pas le plus adroit.
+          </p>
+          <p class="lead">
+            ⏸ Ici la pause <b>arrête vraiment tout</b>, chrono compris.
+          </p>
+        </div>
+        <!--
+          ⚠️ Il FAUT une rupture ici. Sans titre, ces paragraphes enchaînent sur
+          le panneau du mode affiché et l'on croit qu'ils lui appartiennent —
+          c'est exactement le défaut qu'on vient de corriger, un cran plus bas.
+        -->
+        <h3>🥷 Ce qui vaut pour les trois</h3>
         <p class="lead">
           ⚔️ Le même geste sert à bouger et à frapper : s'il y a une <b>jarre</b>
           ou un <b>rival</b> dans cette direction, tu attaques ; sinon tu te
@@ -656,6 +724,23 @@
         <header class="head">
           <button class="back" data-back aria-label="Retour">‹</button>
           <h2>Jouer</h2>
+          <!--
+            ❓ L'aide DES MODES, à portée du choix qu'on est en train de faire.
+
+            Celle du titre explique tout le jeu ; celle-ci ouvre le même écran
+            mais AU BLOC DES MODES. On est venu choisir entre trois tuiles, la
+            question du moment est « laquelle », pas « comment on saute ».
+          -->
+          <button id="btnAideModes" class="ghost aidebtn" aria-label="Aide sur les modes">❓</button>
+          <!--
+            🎓 Le tutoriel — ANNONCÉ, pas encore écrit.
+
+            Désactivé tant qu'il n'existe pas, comme la tuile « En cours de
+            Dev… » : un joueur qui voit qu'il en vient un attend ; celui à qui
+            l'on n'a rien dit croit avoir fait le tour. Un bouton qui ouvre le
+            vide serait pire que les deux.
+          -->
+          <button id="btnTuto" class="ghost aidebtn" aria-label="Tutoriel — bientôt" disabled>🎓</button>
         </header>
         <!--
           ————— 🎴 LES MODES EN TUILES : TROIS EN HAUT, DEUX EN BAS —————

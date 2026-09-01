@@ -1608,6 +1608,43 @@ body {
   color: #fff;
 }
 
+/*
+ * 🎮 Un panneau de mode dans l'aide. Il n'a pas de décor à lui : ce sont les
+ * mêmes paragraphes que le reste de la page, simplement montrés ou cachés
+ * ensemble. Lui donner un cadre le détacherait de l'écran alors qu'il en fait
+ * partie.
+ */
+.aidemode {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+/*
+ * 🎓 Un bouton d'en-tête ANNONCÉ mais pas encore branché.
+ *
+ * ⚠️ Il faut qu'il se voie ET qu'on comprenne qu'il ne répond pas. À demi
+ * effacé, il dit « ça vient » ; à pleine opacité, on taperait dessus trois
+ * fois avant de conclure que le jeu est cassé.
+ *
+ * ⚠️ L'opacité est montée deux fois : 0,35, puis 0,55, puis 0,75. Un émoji a
+ * SES propres couleurs, et 🎓 est sombre : sur un fond sombre, l'affaiblir le
+ * fait disparaître au lieu de le calmer. On voyait une tache qu'on prend pour
+ * un défaut d'affichage, pas un bouton qui attend.
+ *
+ * C'est donc le LISÉRÉ TIRETÉ qui porte le message — il dit « pas encore »
+ * sans rien effacer — et l'opacité ne fait plus qu'adoucir.
+ */
+#overlay button.aidebtn:disabled {
+  opacity: 0.75;
+  border-style: dashed;
+  cursor: default;
+}
+#overlay button.aidebtn:disabled:active {
+  transform: none;
+}
+
 /* ——— Comment jouer ——— */
 .lead {
   font-size: 0.9rem;
@@ -1712,6 +1749,17 @@ body {
   height: 38px;
   padding: 0;
   font-size: 1.05rem;
+}
+/*
+ * ⚠️ SEUL LE PREMIER pousse vers la droite.
+ *
+ * `margin-left: auto` sur deux voisins ne colle pas le second au premier : les
+ * deux marges automatiques se PARTAGENT l'espace libre, et il s'ouvre un trou
+ * entre eux. Mesuré dans l'en-tête de Jouer : 26 px au lieu des 10 px de la
+ * rangée. Le second n'a donc rien à pousser — le premier l'a déjà fait.
+ */
+.aidebtn + .aidebtn {
+  margin-left: 0;
 }
 
 /* ——— Attente / verdict ——— */

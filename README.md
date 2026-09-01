@@ -589,6 +589,55 @@ REMPLACE. Sur la tuile « Course Infinity », un label laissé là aurait masqu�
 « Jusqu'aux flammes » écrit dessous — le lecteur d'écran en aurait dit moins
 que ce que tout le monde voit.
 
+## 🎮 L'aide, en trois onglets de mode
+
+Un seul mode avait sa section — la course sans fin — et les paragraphes
+généraux qui la suivaient semblaient lui appartenir. Trois onglets remettent
+chaque règle sous le mode qui la porte :
+
+| Onglet | Ce qui y vit |
+|---|---|
+| ⚔️ **Course VS.E** | Jusqu'à 10 joueurs, les trois portes du salon, les pots verts et le mondial, la pause qui ne fige rien |
+| ♾️ **Course Infinity** | Les cinq obstacles, les jarres qui alourdissent, le thé, le kunai, la carte qui recommence |
+| 🏋️ **Entraînement** | 1 à 4 rivaux, le record local, et **ce qui n'y rapporte rien** |
+
+⚠️ **Les mêmes noms qu'au menu Jouer et qu'au classement.** On choisit son mode
+ici, on le lance là-bas, on lit son score ailleurs : trois vocabulaires pour la
+même chose obligeraient le joueur à traduire lui-même.
+
+⚠️ **Un titre sépare les onglets du reste** (« 🥷 Ce qui vaut pour les trois »).
+Sans lui, les paragraphes communs — combat, chaîne, murs, parchemins — enchaînent
+sur le panneau affiché et l'on croit qu'ils lui appartiennent. C'est exactement
+le défaut corrigé, un cran plus bas.
+
+⚠️ **Les trois panneaux restent dans `index.html`**, montrés ou cachés. Le texte
+s'y relit et s'y corrige ; le sortir en JavaScript ferait de chaque virgule une
+chaîne de caractères.
+
+### ❓ et 🎓 dans l'en-tête de Jouer
+
+Deux boutons à droite du titre, au format des autres boutons d'en-tête
+(`.aidebtn`, comme le vestiaire et les sorts du salon).
+
+**❓ ouvre la MÊME aide, mais au bloc des modes.** On ne duplique pas l'écran :
+deux aides à tenir à jour finissent toujours par se contredire, et c'est celle
+qu'on a oubliée que le joueur lira. On est venu choisir entre trois tuiles — la
+question du moment est « laquelle », pas « comment on saute ».
+
+**🎓 est le tutoriel, annoncé et pas encore écrit.** Désactivé, liséré tireté,
+comme la tuile « En cours de Dev… » : un joueur qui voit qu'il en vient un
+attend ; celui à qui l'on n'a rien dit croit avoir fait le tour.
+
+⚠️ **`margin-left: auto` ne va que sur le PREMIER des deux.** Sur deux voisins,
+les marges automatiques se PARTAGENT l'espace libre et il s'ouvre un trou entre
+eux — mesuré : 26 px au lieu des 10 px de la rangée. Le second n'a rien à
+pousser, le premier l'a déjà fait.
+
+⚠️ **L'opacité du bouton désactivé est montée deux fois** (0,35 → 0,55 → 0,75).
+Un émoji a ses propres couleurs, et 🎓 est sombre : sur un fond sombre,
+l'affaiblir le fait disparaître au lieu de le calmer. C'est le liséré tireté qui
+porte le message ; l'opacité ne fait plus qu'adoucir.
+
 ## 🎴 Le menu Jouer : trois modes en tuiles
 
 ```
