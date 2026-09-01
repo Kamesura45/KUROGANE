@@ -340,6 +340,93 @@ npm run torii:test   # aucun saut ne doit heurter le portique, et les 3 voies
                      # plus les 2 couloirs de paroi doivent rester libres
 ```
 
+## 📈 Ce que coûte vraiment le jeu
+
+```bash
+npm run endurance
+```
+
+Avant d'optimiser quoi que ce soit, on mesure. Le banc fait courir la VRAIE
+piste sur 20 km — un quart d'heure de course sans fin — et relève tout du long :
+
+| distance | µs/image | plan | réserve d'obstacles |
+|---|---|---|---|
+| 2 km | 46,8 | 333 | 46 |
+| 10 km | 3,3 | 1 027 | 63 |
+| 20 km | 3,0 | 1 879 | 66 |
+
+**La simulation ne dérive pas** : 3 µs par image après 20 km, contre 46 au
+premier palier — et ces 46 sont le temps de chauffe du compilateur, pas une
+lenteur. **Les réserves de maillages plafonnent** (46 → 66), donc le recyclage
+fait son travail : rien ne fuit vers la mémoire vidéo.
+
+⚠️ **Les plans, eux, grandissent** — 333 → 1 879 entrées — et c'est voulu. Ils
+se lisent par un curseur qui avance ; personne ne les reparcourt. Un plan de
+2 000 entrées coûte quelques dizaines de kilo-octets et zéro temps de calcul.
+
+### 🖊️ Le HUD ne se réécrit que quand il change
+
+C'est la seule dépense inutile que la mesure ait révélée. Écrire dans le DOM
+invalide la mise en page de l'élément — **y compris quand on y remet ce qu'il
+portait déjà**. Or le chrono s'affiche au dixième de seconde : il ne peut
+changer que 10 fois par seconde, et on l'écrivait 60 fois.
+
+| | écritures utiles | évitées |
+|---|---|---|
+| chrono | 874 / 5 237 | **83 %** |
+| jauge de progression | 1 001 / 5 237 | **81 %** |
+
+(Mesuré sur une course de 1 920 m à 60 images/s, par `npm run endurance`.)
+
+Un cache d'une variable par élément, et non une `Map` : la consulter coûterait
+plus cher que l'écriture qu'on évite.
+
+⚠️ **La jauge est arrondie au dixième de pour-cent AVANT la comparaison.** Sans
+cet arrondi, elle change à chaque image et le cache ne sauterait jamais rien —
+on aurait ajouté un test pour rien. Un dixième de pour-cent sur 200 px de haut
+vaut un cinquième de pixel : invisible, et cinq fois moins d'écritures.
+
+⚠️ **Le cache s'oublie à chaque départ** (`oublierHud`). Sans ça il mentirait :
+une nouvelle course commence à « 0.0 s », et si la précédente s'était terminée
+sur cette valeur on sauterait l'écriture — l'écran garderait le chrono d'avant.
+
+### Ce qui a été mesuré et laissé tel quel
+
+- **Le nombre de pixels** est déjà plafonné (`applyQuality`), sans ombres.
+- **Les collisions** sortent tôt sur la distance avant tout calcul de boîte.
+- **La musique** est déjà à 64 kbps et chargée en `preload = 'none'` : ses 15 Mo
+  viennent de la durée (10 à 12 minutes par piste), pas de l'encodage.
+- **Les allocations de `hitbox()`** — 15 petits objets par image. Les mutualiser
+  aurait introduit un état partagé mutable pour un gain que le ramasse-miettes
+  générationnel rend nul. On ne paie pas un risque de corruption pour rien.
+
+## 🐛 Ce qui survivait d'une course à l'autre
+
+Trois minuteurs se comparaient au chrono — qui repart à zéro — mais gardaient
+la valeur de la course PRÉCÉDENTE. Le « rejouer » de l'écran de fin ne repasse
+pas par le menu, donc rien ne les nettoyait.
+
+| | effet | gravité |
+|---|---|---|
+| `escaladeT` | la course suivante démarre à **16 % de vitesse** pendant 1,12 s | jouabilité |
+| `boomFin` | l'explosion du kunai reste à l'écran, **retournée et opaque** | visuel |
+| `chaineToastT` | le message « clouté au sol » reste muet | information |
+
+⚠️ **`escaladeT` était le pire, et il se jouait à la manette.** Il multiplie la
+vitesse par 0,16. Finir ou quitter dans la seconde qui suit une escalade — le
+cas normal en course sans fin, où l'on meurt souvent juste après — et l'on
+repartait au ralenti. Le décompte n'y changeait rien : le minuteur ne s'écoule
+que dans l'état `course`, jamais pendant le 3-2-1.
+
+⚠️ **`boomFin` faisait pire qu'une rémanence.** Le facteur
+`(boomFin - time) / BOOM_DUREE` doit descendre de 1 à 0 ; avec un reste il
+valait des dizaines, donc une **échelle négative** et une opacité saturée — une
+sphère retournée, opaque, plantée dans le décor.
+
+> La leçon : tout ce qui se compare à `time` doit être remis à zéro là où `time`
+> l'est. Les minuteurs de sorts l'étaient tous ; ces trois-là avaient été
+> ajoutés plus tard, ailleurs dans le fichier, loin du bloc qui nettoie.
+
 ## 🖼️ Les boutons peints
 
 Quatre boutons portent un **dessin fait à la main** plutôt que du texte : la

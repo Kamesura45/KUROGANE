@@ -2819,6 +2819,34 @@ function startRace(seed: number) {
   lueurJoueur.visible = false
   lueurRival.visible = false
   hideSpark()
+
+  /*
+   * ————— 🐛 CE QUI SURVIVAIT D'UNE COURSE À L'AUTRE —————
+   *
+   * Ces trois-là se comparent au chrono de la course, qui repart à zéro — mais
+   * eux gardaient la valeur de la course PRÉCÉDENTE. Le « rejouer » de l'écran
+   * de fin ne repasse pas par le menu, donc rien ne les nettoyait.
+   *
+   * ⚠️ `escaladeT` était le plus grave, et il se jouait à la manette : il
+   * multiplie la vitesse par 0,16. Finir ou quitter dans la seconde qui suit
+   * une escalade — le cas normal en course sans fin, où l'on meurt souvent
+   * juste après — et la course suivante démarrait à 16 % de vitesse pendant
+   * plus d'une seconde. Le décompte n'y changeait rien : le minuteur ne
+   * s'écoule que dans l'état `course`, jamais pendant le 3-2-1.
+   *
+   * ⚠️ `boomFin` laissait l'explosion du kunai à l'écran. Pire qu'une simple
+   * rémanence : le facteur `(boomFin - time) / BOOM_DUREE` valait alors des
+   * dizaines au lieu de descendre de 1 à 0, donc une ÉCHELLE NÉGATIVE et une
+   * opacité saturée — une sphère retournée, opaque, plantée dans le décor.
+   *
+   * ⚠️ `chaineToastT` retenait le message « clouté au sol » pendant tout le
+   * temps déjà écoulé à la course d'avant. Un avertissement qu'on ne voit pas
+   * est pire qu'absent : le joueur subit l'effet sans savoir ce qui le frappe.
+   */
+  escaladeT = 0
+  boomFin = 0
+  boomMesh.visible = false
+  chaineToastT = 0
   fumeeEl.classList.remove('show')
   canvas.classList.remove('poison')
   // 🌸💥💨 Les effets de course repartent à zéro : cerisier au départ, pétales
@@ -2879,6 +2907,7 @@ function startRace(seed: number) {
   sprintEl.classList.add('hidden')
   sprintLabelEl.textContent = '🚀 DÉPART CANON'
   sprintFillEl.style.width = '0%'
+  oublierHud() // le HUD repart de zéro : le cache ne doit rien retenir
   progressbarEl.classList.remove('hidden')
   progressEl.style.height = '0%'
   coureurMoi.wrap.style.bottom = '0%'
@@ -3620,6 +3649,36 @@ new Input(document.body, {
   pause: () => ouvrirPause(pauseEl.classList.contains('hidden')),
 })
 
+/*
+ * ————— 🖊️ LE HUD NE SE RÉÉCRIT QUE QUAND IL CHANGE —————
+ *
+ * Écrire dans le DOM invalide la mise en page de l'élément — y compris quand
+ * on y remet EXACTEMENT ce qu'il portait déjà. Or le chrono s'affiche au
+ * dixième de seconde : il ne change que 10 fois par seconde, et on l'écrivait
+ * 60. Cinq écritures sur six ne servaient à rien, et la jauge, les mètres et
+ * l'écart au rival étaient dans le même cas.
+ *
+ * Une variable par élément plutôt qu'une `Map` : la consulter coûterait plus
+ * cher que l'écriture qu'on évite.
+ */
+let hudScore = ''
+let hudCount = ''
+let hudGap = ''
+let hudProgress = ''
+let hudSprint = ''
+let hudVitesse = ''
+/*
+ * ⚠️ ET ON OUBLIE TOUT ENTRE DEUX COURSES.
+ *
+ * Sans ça, le cache mentirait : une nouvelle course commence à « 0.0 s », et
+ * si la précédente s'était terminée sur cette valeur, on sauterait l'écriture
+ * — l'écran garderait alors le chrono de la course d'avant. Un cache doit être
+ * vidé quand ce qu'il décrit peut changer sous lui.
+ */
+function oublierHud() {
+  hudScore = hudCount = hudGap = hudProgress = hudSprint = hudVitesse = '\u0000'
+}
+
 // ————— La boucle de jeu (60 fois par seconde) —————
 const timer = new THREE.Timer()
 
@@ -3679,7 +3738,11 @@ function tick(now?: number) {
     // serveur pose. Le plafond à 10 n'est qu'un garde-fou d'affichage au cas où
     // une horloge mal synchronisée renverrait un écart absurde.
     const chiffre = countdown > 0 ? Math.min(10, Math.ceil(countdown)) : 0
-    countEl.textContent = countdown > 0 ? `${chiffre}` : 'GO !'
+    const mot = countdown > 0 ? `${chiffre}` : 'GO !'
+    if (mot !== hudCount) {
+      hudCount = mot
+      countEl.textContent = mot
+    }
 
     // Un bip par seconde égrenée, mais seulement dans les 3 dernières : sur un
     // décompte de salon, biper dès le début serait harassant.
@@ -3707,7 +3770,11 @@ function tick(now?: number) {
     if (canon) {
       const startRate = sprintTaps.length / SPRINT_WINDOW
       sprintCharge += (Math.min(1, startRate / SPRINT_FULL_RATE) - sprintCharge) * Math.min(1, dt * 8)
-      sprintFillEl.style.width = `${sprintCharge * 100}%`
+      const jauge = `${(sprintCharge * 100).toFixed(1)}%`
+      if (jauge !== hudSprint) {
+        hudSprint = jauge
+        sprintFillEl.style.width = jauge
+      }
     }
 
     // Le GO : à l'heure programmée en duel (petit temps d'affichage du
@@ -4219,7 +4286,11 @@ function tick(now?: number) {
     let vitesseInten = 0
     if (sprinting) vitesseInten = 0.3 + 0.7 * sprintCharge
     if (dashing) vitesseInten = Math.max(vitesseInten, 0.9)
-    speedEl.style.opacity = `${vitesseInten}`
+    const opa = `${vitesseInten}`
+    if (opa !== hudVitesse) {
+      hudVitesse = opa
+      speedEl.style.opacity = opa
+    }
 
     // 🌸💥💨 On ne fait plus naître de pétales passé les 2,5 premières secondes ;
     // ceux déjà en l'air finissent de tomber pendant que le cerisier s'éloigne.
@@ -4505,12 +4576,28 @@ function tick(now?: number) {
     // ♾️ En infini, c'est la DISTANCE qui compte, et c'est elle qu'on classe.
     // Afficher un chrono donnerait à surveiller un chiffre qui ne décide de
     // rien, pendant que le seul qui compte resterait invisible.
-    scoreEl.textContent = modeInfini ? `${Math.floor(distance)} m` : `${time.toFixed(1)} s`
+    const chiffre = modeInfini ? `${Math.floor(distance)} m` : `${time.toFixed(1)} s`
+    if (chiffre !== hudScore) {
+      hudScore = chiffre
+      scoreEl.textContent = chiffre
+    }
     // La colonne monte : le remplissage ET ta tete suivent ta distance
     // ♾️ En infini, la colonne montre l'avancée DANS LE CYCLE : une jauge qui
     // resterait pleine à jamais ne dirait plus rien.
     const pct = Math.min(100, ((modeInfini ? distance % COURSE_LENGTH : distance) / COURSE_LENGTH) * 100)
-    progressEl.style.height = `${pct}%`
+    /*
+     * ⚠️ Arrondie au dixième de pour-cent AVANT la comparaison.
+     *
+     * Sans l'arrondi, `pct` change à chaque image et le cache ne sauterait
+     * jamais une écriture — on aurait ajouté un test pour rien. Un dixième de
+     * pour-cent, sur une jauge haute de 200 px, vaut un cinquième de pixel :
+     * personne ne peut le voir, et cela divise les écritures par cinq.
+     */
+    const jauge = `${pct.toFixed(1)}%`
+    if (jauge !== hudProgress) {
+      hudProgress = jauge
+      progressEl.style.height = jauge
+    }
 
     // Interface du sprint : on annonce, puis la jauge suit le martèlement
     if (sprinting) {
@@ -4519,7 +4606,11 @@ function tick(now?: number) {
         sprintEl.classList.remove('hidden')
         toast('🔥 MARTÈLE L\'ÉCRAN !')
       }
-      sprintFillEl.style.width = `${sprintCharge * 100}%`
+      const jauge = `${(sprintCharge * 100).toFixed(1)}%`
+      if (jauge !== hudSprint) {
+        hudSprint = jauge
+        sprintFillEl.style.width = jauge
+      }
     }
 
     // En ligne : on envoie notre position 20 fois par seconde
@@ -4549,7 +4640,11 @@ function tick(now?: number) {
       if (proche) {
         const lead = proche.opp.distanceNow - distance
         // textContent, pas innerHTML : le pseudo vient d'un autre joueur
-        gapEl.textContent = `${proche.name} ${lead >= 0 ? '+' : '−'}${Math.abs(lead).toFixed(0)} m`
+        const ecart = `${proche.name} ${lead >= 0 ? '+' : '−'}${Math.abs(lead).toFixed(0)} m`
+        if (ecart !== hudGap) {
+          hudGap = ecart
+          gapEl.textContent = ecart
+        }
         gapEl.classList.toggle('ahead', lead >= 0)
       }
     } else {
@@ -4565,7 +4660,11 @@ function tick(now?: number) {
       }
       if (closestBot) {
         const lead = closestBot.distance - distance
-        gapEl.textContent = `${closestBot.profil.nom} ${lead >= 0 ? '+' : '−'}${Math.abs(lead).toFixed(0)} m`
+        const ecart = `${closestBot.profil.nom} ${lead >= 0 ? '+' : '−'}${Math.abs(lead).toFixed(0)} m`
+        if (ecart !== hudGap) {
+          hudGap = ecart
+          gapEl.textContent = ecart
+        }
         gapEl.classList.toggle('ahead', lead >= 0)
       }
     }
