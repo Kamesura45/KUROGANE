@@ -396,8 +396,19 @@ gameServer.listen(port).then(() => {
     // ————— Les comptes —————
     if (req.url?.startsWith('/api/auth')) {
       if (!authHandler) {
-        res.writeHead(503, { 'content-type': 'application/json' })
-        res.end(JSON.stringify({ erreur: 'comptes indisponibles (pas de base)' }))
+        /*
+         * ⚠️ PAR `repondre`, donc AVEC les en-têtes CORS.
+         *
+         * Cette réponse-là écrivait ses en-têtes à la main et n'en posait
+         * aucun. Le navigateur bloquait donc la réponse au nom du CORS — et
+         * le joueur ne voyait pas « comptes indisponibles » mais une erreur
+         * de politique d'origine, qui ne dit rien de la panne réelle.
+         *
+         * C'est justement le cas qui arrive : sans `DATABASE_URL`, TOUTES les
+         * requêtes de compte passent ici. Le serveur avait pris soin de dire
+         * franchement ce qui n'allait pas, et le message n'atteignait personne.
+         */
+        repondre(res, 503, { erreur: 'comptes indisponibles (pas de base)' }, req)
         return
       }
       // Better Auth ecrit lui-meme sa reponse : on pose les en-teres CORS

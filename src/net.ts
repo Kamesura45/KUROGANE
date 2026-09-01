@@ -56,6 +56,16 @@ export interface SalonInfo {
  */
 export interface LobbyView {
   code: string
+  /**
+   * 💬 L'identifiant Colyseus de la salle — celui qui distingue VRAIMENT
+   * deux salons.
+   *
+   * ⚠️ `code` ne suffit pas : toutes les parties rapides portent le code
+   * `PUBLIC`. Deux salons rapides différents ont donc le même code, et le
+   * chat de l'un se serait déversé dans l'autre — précisément le défaut
+   * signalé. `roomId`, lui, est unique par salle et par vie de salle.
+   */
+  salle: string
   isPublic: boolean
   hostId: string
   phase: string // lobby | countdown | racing | results
@@ -354,6 +364,7 @@ export class Net {
 
     const view: LobbyView = {
       code: state.code ?? '',
+      salle: this.room?.roomId ?? '',
       isPublic: state.isPublic ?? false,
       hostId: state.hostId ?? '',
       phase: state.phase ?? 'lobby',

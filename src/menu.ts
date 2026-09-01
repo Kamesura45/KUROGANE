@@ -159,6 +159,8 @@ export class Menu {
   private spin = 0
   /** La dernière vue du salon reçue — pour savoir qui je suis, si je suis prêt… */
   private view: LobbyView | null = null
+  /** 💬 La salle dont le chat est affiché. Change → le journal repart vierge. */
+  private salleChat = ''
   /** D'où l'on a ouvert l'aide, pour y revenir. null = depuis le titre. */
 /*
    * ————— D'où l'on vient —————
@@ -497,7 +499,14 @@ export class Menu {
   /** Ouvre l'accueil « jouer en ligne » et charge la liste des salons. */
   showSalon() {
     this.el.joinCode.value = ''
-    this.el.chatLog.innerHTML = '' // nouveau salon = chat vierge
+    /*
+     * 💬 On OUBLIE la salle plutôt que de vider le journal : c'est `showLobby`
+     * qui décide, et lui seul. Repartir de la liste des salons signifie que la
+     * prochaine entrée sera une entrée neuve — même si le hasard nous ramène
+     * dans la salle qu'on vient de quitter, où la conversation a continué sans
+     * nous.
+     */
+    this.salleChat = ''
     /*
      * ⚠️ On retient d'où l'on vient AVANT d'afficher, et on le repose APRÈS.
      *
@@ -608,6 +617,27 @@ export class Menu {
   }
 
   showLobby(view: LobbyView) {
+    /*
+     * ————— 💬 UN CHAT PAR SALON, ET RIEN QUE LUI —————
+     *
+     * Le journal se vidait à l'ouverture de la LISTE des salons. Tous les
+     * chemins n'y passent pas : on tombait dans une partie rapide avec, sous
+     * les yeux, la conversation du salon d'avant — des messages adressés à
+     * des gens qui ne sont plus là, dans une salle qui n'est plus la même.
+     *
+     * ⚠️ On compare la SALLE, pas le code. Toutes les parties rapides portent
+     * le code `PUBLIC` : deux salons rapides successifs auraient eu le même
+     * code, et le journal aurait survécu de l'un à l'autre — le cas exact
+     * signalé. `salle` est le `roomId` Colyseus, unique par salle.
+     *
+     * ⚠️ Et c'est bien ICI, dans `showLobby`, qui est rappelée à CHAQUE
+     * rafraîchissement du salon. Vider sans condition effacerait le chat à
+     * chaque fois que quelqu'un se déclare prêt.
+     */
+    if (view.salle !== this.salleChat) {
+      this.salleChat = view.salle
+      this.el.chatLog.replaceChildren()
+    }
     this.view = view
     this.el.lobbyCode.textContent = view.code === 'PUBLIC' ? '' : view.code
     this.show('lobby')

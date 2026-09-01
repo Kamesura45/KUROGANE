@@ -232,6 +232,14 @@ interface Rival {
   name: string
   rank: number
   finished: boolean
+  /**
+   * 👻 Est-il encore relié ?
+   *
+   * ⚠️ Un joueur qui coupe garde sa place 30 s côté serveur (`onDrop`), le
+   * temps de revenir. Il reste donc dans la liste, et c'est voulu. Mais il ne
+   * doit plus être DESSINÉ en train de courir.
+   */
+  connecte: boolean
   /** Était-il en l'air à l'image précédente ? (pour la poussière d'atterrissage) */
   enLAir: boolean
 }
@@ -268,13 +276,38 @@ function syncRivals(others: RemotePlayer[]) {
       if (!libre) continue // plus de 9 rivaux : les suivants ne sont pas dessinés
       libre.active = true
       libre.reset(p.startLane)
-      r = { opp: libre, id: p.id, name: '', rank: 0, finished: false, enLAir: false }
+      r = { opp: libre, id: p.id, name: '', rank: 0, finished: false, connecte: true, enLAir: false }
       rivals.set(p.id, r)
     }
     r.opp.setFighter(p.fighter, p.skin)
     r.name = p.name || 'Rival'
     r.opp.setName(r.name)
     r.rank = p.rank
+
+    /*
+     * ————— 👻 LE COUREUR FANTÔME —————
+     *
+     * Un joueur qui coupe — écran verrouillé, appli en arrière-plan, réseau
+     * qui saute — garde sa place 30 secondes le temps de revenir. Il reste
+     * donc dans la liste que le serveur envoie, et il le FAUT : sa place, son
+     * rang et son chrono l'attendent.
+     *
+     * ⚠️ Mais ses positions, elles, ne viennent plus. Et l'avatar ne s'arrête
+     * pas pour autant : l'extrapolation le fait glisser sur sa dernière
+     * vitesse connue, tout droit, pendant une demi-minute. On voyait donc un
+     * rival courir seul, sans personne derrière — et l'on croyait à un bug
+     * d'affichage alors que c'était un joueur parti.
+     *
+     * Le client recevait `connected` depuis toujours et ne s'en servait pas.
+     * `active = false` suffit : `Opponent.update` masque le maillage et sort
+     * aussitôt, donc plus de dessin ET plus d'extrapolation. On garde en
+     * revanche le rival dans la table — il compte encore au classement, et il
+     * reprendra sa place tel quel si le réseau revient.
+     */
+    r.connecte = p.connected
+    r.opp.active = p.connected
+    if (!p.connected) continue
+
     r.opp.latency = net.rtt / 2
     r.opp.onNetUpdate(
       { lane: p.lane, y: p.y, distance: p.distance, sliding: p.sliding },
@@ -287,10 +320,16 @@ function syncRivals(others: RemotePlayer[]) {
   }
 }
 
-/** Le rival le plus proche DEVANT nous : la cible naturelle d'un sort offensif. */
+/**
+ * Le rival le plus proche DEVANT nous : la cible naturelle d'un sort offensif.
+ *
+ * ⚠️ Ni les arrivés, ni les DÉCONNECTÉS. Viser quelqu'un qui a coupé gâchait un
+ * parchemin sur un adversaire qu'on ne voit même plus — et le sort partait vers
+ * une position figée, donc dans le vide.
+ */
 function rivalDevant(): Rival | undefined {
   return [...rivals.values()]
-    .filter((r) => !r.finished && r.opp.distanceNow > distance)
+    .filter((r) => r.connecte && !r.finished && r.opp.distanceNow > distance)
     .sort((a, b) => a.opp.distanceNow - b.opp.distanceNow)[0]
 }
 
@@ -4042,6 +4081,10 @@ function tick(now?: number) {
       const rivalTouche = [...rivals.values()]
         .filter(
           (r) =>
+            // 👻 Pas un déconnecté : on échangerait sa place avec un joueur
+            // parti, et l'on se retrouverait téléporté sur une position figée
+            // pendant que lui ne reçoit rien.
+            r.connecte &&
             r.opp.currentLane === portail!.lane &&
             r.opp.distanceNow > lo &&
             r.opp.distanceNow <= hi
@@ -4631,6 +4674,10 @@ function tick(now?: number) {
       let proche: Rival | null = null
       let minEcart = Infinity
       for (const r of rivals.values()) {
+        // 👻 Un déconnecté est figé quelque part sur la piste : annoncer
+        // « +12 m » sur quelqu'un qu'on ne voit nulle part, c'est la version
+        // HUD du coureur fantôme. On le saute, l'écart passe au suivant.
+        if (!r.connecte) continue
         const diff = Math.abs(r.opp.distanceNow - distance)
         if (diff < minEcart) {
           minEcart = diff
@@ -4646,6 +4693,23 @@ function tick(now?: number) {
           gapEl.textContent = ecart
         }
         gapEl.classList.toggle('ahead', lead >= 0)
+      } else {
+        /*
+         * 👻 PLUS PERSONNE À ANNONCER — et il faut le DIRE, pas se taire.
+         *
+         * ⚠️ Sans cette branche, le dernier écart calculé restait affiché. Vu à
+         * l'écran : le seul rival coupe sa connexion, on cesse (à raison) de le
+         * compter… et la bulle continuait de dire « Rival −4 m » sur un coureur
+         * que plus rien ne met à jour. On avait déplacé le fantôme de la piste
+         * vers le HUD au lieu de l'enlever.
+         *
+         * ⚠️ Et l'on vide `hudGap` en même temps, sinon le cache croirait la
+         * bulle déjà à jour au retour du rival et sauterait la réécriture.
+         */
+        if (hudGap !== '') {
+          hudGap = ''
+          gapEl.textContent = ''
+        }
       }
     } else {
       // Solo : écart par rapport au robot le plus proche

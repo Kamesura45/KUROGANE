@@ -400,6 +400,86 @@ sur cette valeur on sauterait l'écriture — l'écran garderait le chrono d'ava
   aurait introduit un état partagé mutable pour un gain que le ramasse-miettes
   générationnel rend nul. On ne paie pas un risque de corruption pour rien.
 
+## 👻 Le coureur fantôme
+
+Des joueurs voyaient un rival **courir tout seul**, sans personne derrière.
+
+Le serveur fait bien son travail : quand quelqu'un coupe pendant le décompte ou
+la course — écran verrouillé, appli en arrière-plan, wifi qui saute — `onDrop`
+lui **garde sa place 30 secondes** le temps de revenir. Il reste donc dans la
+liste envoyée aux autres, et il le faut : son rang et son chrono l'attendent.
+
+⚠️ **Mais ses positions ne viennent plus.** Et l'avatar ne s'arrête pas pour
+autant : l'extrapolation le fait glisser sur sa dernière vitesse connue, tout
+droit, pendant une demi-minute.
+
+Le client recevait `connected` **depuis toujours** et ne s'en servait nulle part.
+Il suffisait de le lire :
+
+| | avant | après |
+|---|---|---|
+| L'avatar | glisse tout droit 30 s | `active = false` — ni dessin, ni extrapolation |
+| La bulle d'écart | « Rival +3 m » sur un absent | vide |
+| Le portail 🔮 | pouvait échanger avec lui | le saute |
+| Le rival visé par un sort | pouvait être lui | le saute |
+
+⚠️ **Le rival reste dans la table**, lui. Il compte encore au classement et
+reprend sa place telle quelle si le réseau revient.
+
+⚠️ **Le piège de la bulle.** La première correction déplaçait le fantôme au lieu
+de l'enlever : en sautant les déconnectés, le calcul ne trouvait plus personne
+et... ne réécrivait rien. Le dernier écart connu restait donc affiché. Il faut
+vider explicitement — se taire n'efface pas.
+
+### Reproduit et vérifié sur un vrai serveur
+
+Deux clients, un serveur Colyseus local, une course lancée, puis un onglet fermé
+net en pleine course :
+
+```
+📡 8tBm4z-fp a coupé — place gardée 30 s
+```
+
+Côté survivant, la bulle passait de « Rival +0 m … +3 m » à **vide**, à
+l'instant de la coupure, et le restait.
+
+## 💬 Un chat par salon
+
+On pouvait entrer dans une partie rapide et y lire **la conversation d'un autre
+salon**.
+
+Le serveur n'y était pour rien : `broadcast` ne parle qu'aux clients de SA salle.
+C'était le journal côté client, qui n'était vidé qu'à l'ouverture de la LISTE des
+salons. Or tous les chemins n'y passaient pas : l'ancien bouton « Partie rapide »
+du menu Jouer appelait `onQuick()` directement — donc on tombait dans un salon
+avec, sous les yeux, les messages du précédent.
+
+⚠️ **On compare la SALLE, pas le code.** Toutes les parties rapides portent le
+code `PUBLIC` : deux salons rapides successifs ont le même code, et le journal
+aurait survécu de l'un à l'autre. `LobbyView.salle` porte le `roomId` Colyseus,
+unique par salle.
+
+⚠️ **Et c'est `showLobby` qui décide, seul.** Elle est rappelée à CHAQUE
+rafraîchissement du salon : vider sans condition effacerait le chat dès que
+quelqu'un se déclare prêt. Repartir vers la liste des salons ne vide plus rien —
+cela OUBLIE la salle, et la prochaine entrée compte comme neuve.
+
+## 🚧 Le 503 des comptes ne franchissait pas le navigateur
+
+Sans `DATABASE_URL`, le serveur répond franchement `503 comptes indisponibles
+(pas de base)`. Mais cette réponse-là écrivait ses en-têtes à la main, **sans
+CORS** — le navigateur la bloquait donc, et le joueur voyait une erreur de
+politique d'origine qui ne dit rien de la panne réelle.
+
+C'est exactement le cas qui arrive aujourd'hui, base en panne. Le serveur avait
+pris soin d'expliquer ce qui n'allait pas, et le message n'atteignait personne.
+
+```
+HTTP/1.1 503 Service Unavailable
+access-control-allow-origin: http://localhost:5173
+{"erreur":"comptes indisponibles (pas de base)"}
+```
+
 ## 🐛 Ce qui survivait d'une course à l'autre
 
 Trois minuteurs se comparaient au chrono — qui repart à zéro — mais gardaient
