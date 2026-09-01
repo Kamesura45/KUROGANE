@@ -286,16 +286,21 @@ export class Menu {
     // — Écran-titre —
     document.getElementById('btnJouer')!.addEventListener('click', () => this.ouvrir('jouer'))
 
-    // — Écran « Jouer » : les quatre entrées en piste —
+    // — Écran « Jouer » : les trois modes, et l'entraînement —
     document.getElementById('btnSolo')!.addEventListener('click', () => cb.onSolo())
     document.getElementById('btnInfini')!.addEventListener('click', () => cb.onInfini())
-    document.getElementById('btnQuickJouer')!.addEventListener('click', () => cb.onQuick())
-    document.getElementById('btnCreateJouer')!.addEventListener('click', () => cb.onCreateSalon())
-    // « Rejoindre » ouvre l'écran des salons : c'est lui qui porte le champ de
-    // code et la liste publique. Créer et partie rapide y figurent aussi — un
-    // doublon assumé, parce qu'on n'a pas envie de revenir en arrière quand on
-    // s'aperçoit qu'aucun salon ne tourne.
-    document.getElementById('btnRejoindre')!.addEventListener('click', () => cb.onOnline())
+    /*
+     * ⚔️ « Course VS.E » n'entre pas en piste : elle OUVRE l'écran « Jouer en
+     * ligne ».
+     *
+     * ⚠️ Il y avait ici trois boutons — partie rapide, créer un salon,
+     * rejoindre — qui doublaient tous les trois ce que cet écran-là propose
+     * déjà, champ de code et liste des salons ouverts en plus. Les garder en
+     * double obligeait à choisir sa porte avant de savoir ce qu'il y avait
+     * derrière : on lançait une partie rapide sans voir qu'un ami tenait un
+     * salon ouvert. Une seule entrée, et tout le reste se lit derrière.
+     */
+    document.getElementById('btnVSE')!.addEventListener('click', () => cb.onOnline())
 
     document.getElementById('btnRoster')!.addEventListener('click', () => this.ouvrir('roster'))
     document.getElementById('btnOptions')!.addEventListener('click', () => this.ouvrir('options'))
@@ -491,7 +496,23 @@ export class Menu {
   showSalon() {
     this.el.joinCode.value = ''
     this.el.chatLog.innerHTML = '' // nouveau salon = chat vierge
+    /*
+     * ⚠️ On retient d'où l'on vient AVANT d'afficher, et on le repose APRÈS.
+     *
+     * `salon` est une RACINE : y entrer efface le chemin, pour qu'un salon
+     * abandonné autrement que par « retour » ne laisse pas une marche fantôme
+     * derrière lui. C'est toujours ce qu'on veut… sauf depuis la tuile
+     * « Course VS.E », qui est une VRAIE descente : on regardait les modes, on
+     * va voir les salons ouverts, et le retour doit ramener aux modes. Renvoyer
+     * à l'écran-titre obligeait à rouvrir « Jouer » pour retrouver sa place.
+     *
+     * On garde donc les deux : l'effacement d'abord, puis la SEULE marche qui
+     * compte. Et seulement depuis « jouer » — toute autre arrivée reste une
+     * racine, sans rien derrière elle.
+     */
+    const depuis = this.current
     this.show('salon')
+    if (depuis === 'jouer') this.pile.push(depuis)
     this.refreshSalons()
   }
 

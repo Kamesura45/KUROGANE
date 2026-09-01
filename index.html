@@ -657,30 +657,60 @@
           <button class="back" data-back aria-label="Retour">‹</button>
           <h2>Jouer</h2>
         </header>
-        <div class="stack">
-          <button id="btnQuickJouer">⚡ PARTIE RAPIDE</button>
-          <!-- ♾️ Devant l'entraînement : c'est un MODE, pas un échauffement. Il
-               se joue seul comme lui, mais on y vient pour lui-même.
+        <!--
+          ————— 🎴 LES MODES EN TUILES : TROIS EN HAUT, DEUX EN BAS —————
 
-               Et PLEIN, en vert, comme « Partie rapide » est plein en
-               vermillon : ce sont les deux façons de partir courir tout de
-               suite. Un contour discret le rangeait avec les écrans de
-               réglage, alors qu'il lance une course. Deux teintes plutôt
-               qu'une : sur un bouton qu'on vise du pouce sans lire, la
-               couleur dit lequel des deux on va lancer. -->
-          <button id="btnInfini" class="vert">♾️ COURSE SANS FIN</button>
-          <button id="btnSolo" class="secondary">🏋️ ENTRAÎNEMENT</button>
-          <button id="btnCreateJouer" class="secondary">🏮 CRÉER UN SALON</button>
-          <button id="btnRejoindre" class="ghost">🔑 REJOINDRE UN SALON</button>
-        </div>
-        <div class="row">
-          <button id="btnRoster" class="ghost grow">
+          Une colonne de cinq boutons empilés donnait cinq lignes de texte à
+          lire de haut en bas. En tuiles, les trois MODES se voient d'un coup
+          et se comparent — c'est un choix, pas une liste de commandes.
+
+          ⚠️ Les trois du haut portent les MÊMES noms que les catégories du
+          classement (Course VS.E · Course Infinity · En cours de dev.). Ce
+          n'est pas une coïncidence : on choisit son mode ici et l'on va lire
+          son score là-bas. Deux vocabulaires pour la même chose obligeraient
+          le joueur à faire la traduction lui-même.
+
+          ⚠️ Et « Course VS.E » ne lance pas une partie : elle OUVRE l'écran
+          « Jouer en ligne », qui porte déjà partie rapide, création, code de
+          salon et liste des salons ouverts. Les trois boutons qui vivaient
+          ici en doublon y sont donc rentrés — ils n'ont pas disparu, ils ont
+          rejoint le seul écran qui les rassemble tous.
+        -->
+        <div class="modes">
+          <button id="btnVSE" class="mode">
+            <span class="em">⚔️</span>
+            <b>Course VS.E</b>
+            <small>Contre de vrais joueurs</small>
+          </button>
+          <!-- ♾️ En vert, comme demandé : sur une tuile qu'on vise du pouce
+               sans relire, la couleur dit lequel des modes on va lancer. -->
+          <button id="btnInfini" class="mode vert">
+            <span class="em">♾️</span>
+            <b>Course Infinity</b>
+            <small>Jusqu'aux flammes</small>
+          </button>
+          <!-- 🚧 Annoncé plutôt que caché, exactement comme au classement : un
+               joueur qui voit qu'il en vient un autre attend ; celui à qui
+               l'on n'a rien dit croit avoir fait le tour. -->
+          <button id="btnDev" class="mode" disabled>
+            <span class="em">🚧</span>
+            <b>En cours de Dev…</b>
+            <small>Le troisième mode</small>
+          </button>
+          <!-- 🥷 Le vestiaire est ICI, et en grand : on change de guerrier en
+               pensant à la course qui vient, jamais en passant. -->
+          <button id="btnRoster" class="large ghost">
             <span class="jp-mini" id="pickJp">弥助</span>
             <span class="lines">
               <small>Ton guerrier</small>
               <b id="pickName">Yasuke</b>
             </span>
             <span class="chev">🥷</span>
+          </button>
+          <button id="btnSolo" class="mode large secondary">
+            <span class="em">🏋️</span>
+            <b>Entraînement</b>
+            <small>Seul, contre des rivaux</small>
           </button>
         </div>
       </section>

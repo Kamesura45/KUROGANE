@@ -34,6 +34,21 @@ class Navigation {
     this.courant = vers
   }
 
+  /**
+   * Descendre a « Jouer en ligne » depuis la tuile Course VS.E.
+   *
+   * `salon` est une RACINE, donc y entrer efface le chemin : c'est ce qu'on
+   * veut de toutes les autres arrivees (un salon quitte ne doit pas laisser
+   * de marche fantome). Mais depuis le menu Jouer, c'est une vraie descente,
+   * et le retour doit ramener aux modes. On efface, PUIS on repose la seule
+   * marche qui compte.
+   */
+  ouvrirSalon() {
+    const depuis = this.courant
+    this.aller('salon')
+    if (depuis === 'jouer') this.pile.push(depuis)
+  }
+
   /** Le bouton retour : un cran en arriere, et un seul. */
   retour() {
     this.aller(this.pile.pop() ?? 'title')
@@ -117,6 +132,27 @@ console.log('\n————— La profondeur ne casse rien —————')
   n.retour()
   n.retour()
   verifier('trois retours ramenent au salon', n.courant, 'lobby')
+}
+
+console.log('')
+console.log('————— La tuile Course VS.E descend, elle ne saute pas —————')
+{
+  const n = new Navigation()
+  n.ouvrir('jouer')
+  n.ouvrirSalon()
+  verifier('Course VS.E ouvre les salons', n.courant, 'salon')
+  n.retour()
+  verifier('le retour ramene aux modes', n.courant, 'jouer')
+  n.retour()
+  verifier('et le suivant au titre', n.courant, 'title')
+}
+{
+  // Toute AUTRE arrivee sur les salons reste une racine : rien derriere elle.
+  const n = new Navigation()
+  n.aller('lobby')
+  n.ouvrirSalon()
+  n.retour()
+  verifier('depuis ailleurs, les salons restent une racine', n.courant, 'title')
 }
 
 console.log(echecs === 0 ? '\nTout est bon.\n' : `\n${echecs} ECHEC(S)\n`)

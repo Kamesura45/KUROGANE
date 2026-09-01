@@ -1062,6 +1062,78 @@ body {
   background: #3fa673;
   box-shadow: 0 6px 22px rgba(63, 166, 115, 0.35);
 }
+
+/*
+ * ————— 🎴 LES TUILES DE MODES —————
+ *
+ * Trois en haut, deux en bas. Une grille de SIX colonnes plutôt que de trois :
+ * une tuile ordinaire en occupe deux (donc trois par rangée), une tuile `large`
+ * en occupe trois (donc deux par rangée). Deux rangées de largeurs différentes
+ * sans une seule règle conditionnelle — six est le plus petit nombre divisible
+ * par 2 et par 3, et c'est tout le truc.
+ *
+ * ⚠️ Elles ne rétrécissent pas sous 96 px : sur un téléphone étroit, trois
+ * colonnes laissent ~120 px chacune et « Course Infinity » passe à la ligne.
+ * Sans plancher, la tuile suivrait le texte et les trois n'auraient plus la
+ * même hauteur — une rangée en dents de scie se lit comme un défaut.
+ */
+.modes {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  width: 100%;
+  margin-top: 6px;
+}
+.modes > * {
+  grid-column: span 2;
+  min-height: 96px;
+}
+.modes > .large {
+  grid-column: span 3;
+  min-height: 68px;
+}
+
+/* Une tuile empile son emblème, son nom et ce qu’elle promet. */
+#overlay button.mode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 10px 6px;
+  letter-spacing: 0.02em;
+}
+#overlay button.mode .em {
+  font-size: 1.45rem;
+  line-height: 1;
+}
+#overlay button.mode b {
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+/*
+ * La promesse, en petit. Elle n’est pas décorative : « Course VS.E » ne dit
+ * rien à qui arrive, et un sigle qu’il faut deviner fait hésiter devant le
+ * bouton — c’est là qu’on repart au menu au lieu de lancer une course.
+ */
+#overlay button.mode small {
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.2;
+  opacity: 0.75;
+}
+/* 🚧 Le mode à venir : présent, lisible, et clairement pas cliquable. */
+#overlay button.mode:disabled {
+  background: rgba(61, 69, 96, 0.3);
+  border: 1px dashed #3d4560;
+  box-shadow: none;
+  color: #9aa4c0;
+  cursor: default;
+}
+#overlay button.mode:disabled:active {
+  transform: none; /* un bouton mort ne doit pas répondre au doigt */
+}
 /* Discret : réglages, choix du guerrier, retour */
 #overlay button.ghost {
   display: flex;

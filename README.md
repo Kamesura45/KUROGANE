@@ -340,6 +340,50 @@ npm run torii:test   # aucun saut ne doit heurter le portique, et les 3 voies
                      # plus les 2 couloirs de paroi doivent rester libres
 ```
 
+## 🎴 Le menu Jouer : trois modes en tuiles
+
+```
+┌────────────┬────────────┬────────────┐
+│ ⚔️ Course  │ ♾️ Course  │ 🚧 En cours│
+│    VS.E    │  Infinity  │  de Dev…   │
+├────────────┴─────┬──────┴────────────┤
+│  🥷 Ton guerrier │  🏋️ Entraînement  │
+└──────────────────┴───────────────────┘
+```
+
+Une colonne de cinq boutons empilés donnait cinq lignes à lire de haut en bas.
+En tuiles, les trois **modes** se voient ensemble et se comparent — on choisit,
+on ne parcourt pas une liste de commandes.
+
+⚠️ **Les trois portent les mêmes noms que les catégories du classement.** Ce
+n'est pas une coïncidence : on choisit son mode ici et l'on va lire son score
+là-bas. Deux vocabulaires pour la même chose auraient laissé la traduction à la
+charge du joueur.
+
+⚠️ **« Course VS.E » ne lance rien : elle OUVRE l'écran « Jouer en ligne ».**
+Il y avait ici trois boutons — partie rapide, créer un salon, rejoindre — qui
+doublaient tous les trois ce que cet écran propose déjà, champ de code et liste
+des salons ouverts en plus. Les garder en double obligeait à choisir sa porte
+avant de savoir ce qu'il y avait derrière : on lançait une partie rapide sans
+voir qu'un ami tenait un salon ouvert. Ils n'ont pas disparu — ils ont rejoint
+le seul écran qui les rassemble tous.
+
+### La grille à six colonnes
+
+Trois tuiles en haut, deux en bas, **sans une seule règle conditionnelle** :
+la grille a **six** colonnes, une tuile ordinaire en occupe deux, une tuile
+`large` en occupe trois. Six est le plus petit nombre divisible par 2 et par 3,
+et c'est tout le mécanisme.
+
+⚠️ Les tuiles ne descendent pas sous **96 px**. Sur un téléphone étroit, trois
+colonnes laissent ~106 px chacune et « Course Infinity » passe à la ligne ; sans
+plancher, la tuile suivrait son texte et les trois n'auraient plus la même
+hauteur. Une rangée en dents de scie se lit comme un défaut.
+
+⚠️ **Chaque tuile porte une promesse en petit.** « Course VS.E » ne dit rien à
+qui arrive, et un sigle qu'il faut deviner fait hésiter devant le bouton — c'est
+là qu'on repart au menu au lieu de lancer une course.
+
 ## 🧭 Le chemin de retour dans les menus
 
 Les écrans retiennent **d'où l'on vient** dans une **pile**, pas dans un repère
@@ -353,6 +397,18 @@ Une pile retient le chemin entier, quelle que soit sa profondeur. Les écrans
 **racines** (titre, liste des salons, salon, résultats) l'effacent en y entrant :
 on y arrive, on n'y revient pas — sans quoi un chemin abandonné renverrait plus
 tard vers un salon déjà quitté.
+
+### ⚔️ La seule exception : Course VS.E
+
+La liste des salons est une racine, et le reste. Mais on y **descend** désormais
+depuis la tuile « Course VS.E », et un retour qui renvoie à l'écran-titre fait
+perdre sa place : on regardait les salons ouverts, on revient en arrière, et il
+faut rouvrir « Jouer » pour retrouver les modes.
+
+`showSalon()` garde donc les deux : l'effacement d'abord — un salon abandonné ne
+laisse toujours aucune marche fantôme — **puis** on repose la seule marche qui
+compte, et seulement si l'on venait de « jouer ». Toute autre arrivée reste une
+racine, sans rien derrière elle.
 
 ```bash
 npm run nav:test     # rejoue les parcours, dont celui qui sortait du salon
