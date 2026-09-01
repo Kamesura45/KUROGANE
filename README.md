@@ -589,6 +589,85 @@ REMPLACE. Sur la tuile « Course Infinity », un label laissé là aurait masqu�
 « Jusqu'aux flammes » écrit dessous — le lecteur d'écran en aurait dit moins
 que ce que tout le monde voit.
 
+## 🎓 Le tutoriel
+
+Le bouton 🎓 de l'écran Jouer. Deux temps, et le décor change entre les deux —
+« on recommence » doit se **voir** sans avoir à le lire.
+
+| | Décor | Ce qui se passe |
+|---|---|---|
+| ❄️ **Apprendre** | Flancs du Fuji (雪) | La piste est **nue**. Chaque obstacle arrive seul, la course se **fige** devant, le geste s'affiche. |
+| 🌉 **Courir** | Pont au clair de lune | Une vraie course, deux rivaux, plus une seule explication. |
+
+### La partition est de la donnée
+
+Tout le tutoriel tient dans [`src/tuto.ts`](src/tuto.ts), et **pas une ligne n'y
+décide quoi que ce soit** : `main.ts` lit la partition et l'exécute. Un tutoriel
+se retouche cent fois — « cette phrase est trop longue », « l'obstacle arrive
+trop tôt » — et chaque retouche doit être une valeur changée, jamais une
+condition de plus dans la boucle de jeu.
+
+⚠️ **Le parcours est DÉDUIT des étapes**, jamais recopié. Déplacer une
+explication déplace son obstacle avec elle ; deux listes à tenir en phase se
+seraient désynchronisées au premier réglage, et l'on aurait expliqué le saut
+devant une barre haute.
+
+⚠️ **L'ordre des obstacles n'est pas décoratif** : saut, glissade, mur. On
+commence par le geste qu'on devine, puis son contraire, et l'on finit par celui
+qu'aucun des deux ne résout. Ouvrir sur le mur laisserait croire qu'il se saute,
+et le premier essai se solderait par un échec qu'on n'aurait pas mérité.
+
+### On attend le VRAI geste
+
+Pas de « appuyez pour continuer ». La fiche qui annonce le saut attend un saut :
+faire le mouvement à l'arrêt, le voir marcher, puis le refaire trois secondes
+plus tard devant l'obstacle. Lire « swipe vers le haut » et cliquer OK ne fait
+apprendre que le bouton OK.
+
+⚠️ **Les autres gestes ne sont pas bloqués.** Swiper vers le bas quand la fiche
+demande un saut fait bien glisser le coureur, sur place : on essaie, on voit ce
+que ça fait, rien n'est cassé. Seul le bon geste relâche la course.
+
+⚠️ **La fiche ne capte le doigt que si elle attend un tap** (`pointer-events`).
+Sinon elle avalerait le swipe qu'elle vient de demander, et le joueur glisserait
+dans le vide en se croyant maladroit.
+
+### Deux pièges trouvés à l'écran
+
+⚠️ **L'ambiance ne suivait pas le décor imposé.** Le décor lit `biomeDe`, mais
+les couleurs — brume, sol, lumière — passent par `ambianceA`, qui a son propre
+calcul. Le tutoriel se jouait donc **sur la neige sous la lumière orange du
+village**. Le fichier des biomes met en garde contre exactement ça ; on y est
+tombé en ajoutant un troisième chemin.
+
+⚠️ **`ELAN` vaut 35 m, pas 20.** Au relâchement la vitesse repart de ZÉRO :
+20 m se faisaient à moitié à l'arrêt, l'obstacle arrivait avant qu'on ait repris
+son élan, et le premier essai était perdu d'avance.
+
+### La fin : une animation, pas un podium
+
+Le tutoriel n'oppose personne — ses deux rivaux donnent le rythme, ils ne sont
+pas là pour être battus. Trois marches diraient le contraire, et **finir 3ᵉ de
+son propre tutoriel** serait un drôle de premier souvenir de jeu.
+
+Le kanji 修 (*shū*, « ce qu'on a travaillé ») se pose, le mot s'écrit, le sceau
+tombe en dernier — le même vocabulaire que l'enseigne du titre, pour que la fin
+du tutoriel appartienne visiblement au même jeu. Puis **rejouer** ou **quitter**.
+
+⚠️ **Rien n'est enregistré** : ni record, ni ligne au tableau, ni monnaie. On
+rejoue son tutoriel autant qu'on veut, et un classement qu'on remplit en
+répétant ses gammes ne classe plus rien.
+
+⚠️ **Le sceau est en HAUT**, contre le caractère. Posé au ras du mot il tombait
+par-dessus « TUTORIEL TERMINÉ » et en mangeait deux lettres — et c'est aussi sa
+vraie place : sur une estampe, le sceau se presse contre le trait, pas sur la
+légende.
+
+```bash
+# Voir la fin sans courir les 1 920 m (développement seulement)
+# dans la console : __sorts.finTuto()
+```
+
 ## 🎮 L'aide, en trois onglets de mode
 
 Un seul mode avait sa section — la course sans fin — et les paragraphes

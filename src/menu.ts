@@ -64,6 +64,8 @@ type ScreenName =
 
 export interface MenuCallbacks {
   onSolo(): void
+  /** 🎓 Le tutoriel : deux temps, la neige puis le pont. */
+  onTuto(): void
   /** ♾️ La course sans fin : pas de rivaux, pas de ligne d’arrivée. */
   onInfini(): void
   onOnline(): void
@@ -248,6 +250,7 @@ export class Menu {
     replay: document.getElementById('btnReplay')!,
     finTitre: document.getElementById('finTitre')!,
     podium: document.getElementById('podium')!,
+    finAnim: document.getElementById('finAnim')!,
     btnLobby: document.getElementById('btnLobby')!,
     // ————— Boutique —————
     bourseRow: document.getElementById('bourseRow')!,
@@ -337,6 +340,13 @@ export class Menu {
      * lira. On ouvre donc la seule qui existe, et on la fait défiler jusqu'au
      * bloc des modes — la question du moment est « lequel je lance ».
      */
+    /*
+     * 🎓 Le tutoriel. Il quitte les menus tout de suite : ce qu'il a à dire, il
+     * le dit SUR LA PISTE, l'obstacle devant les yeux. Une page d'explications
+     * de plus avant de commencer serait exactement ce qu'il remplace.
+     */
+    document.getElementById('btnTuto')?.addEventListener('click', () => cb.onTuto())
+
     document.getElementById('btnAideModes')?.addEventListener('click', () => {
       this.ouvrir('help')
       this.montrerMode('vse')
@@ -777,6 +787,15 @@ export class Menu {
      * précédentes — de quoi voir si l'on progresse.
      */
     resume?: { label: string; valeur: string; fort?: boolean }[]
+    /**
+     * 🎓 Une ANIMATION à la place du podium ET du relevé.
+     *
+     * ⚠️ Le tutoriel n'oppose personne : ses deux rivaux du pont donnent le
+     * rythme, ils ne sont pas là pour être battus. Un podium dirait le
+     * contraire — et finir 3ᵉ de son propre tutoriel serait un drôle de
+     * premier souvenir de jeu.
+     */
+    anim?: boolean
   }) {
     const ecrire = (v: number | null) =>
       v === null ? 'abandon' : (opts.format ?? ((x: number) => `${x.toFixed(2)} s`))(v)
@@ -795,7 +814,21 @@ export class Menu {
      *
      * Si l'on remplace un jour cette ligne, il faut un `remove` en face.
      */
-    this.el.podium.classList.toggle('hidden', !!opts.resume)
+    /*
+     * 🎓 Même règle de `toggle` à deux arguments que le podium, et pour la même
+     * raison : l'animation doit DISPARAÎTRE dès la course suivante. Un
+     * `add('hidden')` laisserait « TUTORIEL TERMINÉ » sur l'écran de fin d'un
+     * entraînement ordinaire.
+     */
+    this.el.finAnim.classList.toggle('hidden', !opts.anim)
+    this.el.podium.classList.toggle('hidden', !!opts.resume || !!opts.anim)
+    if (opts.anim) {
+      this.el.resultsBody.replaceChildren()
+      this.el.replay.classList.toggle('hidden', !opts.canReplay)
+      this.el.btnLobby.classList.toggle('hidden', !opts.canLobby)
+      this.show('results')
+      return
+    }
     if (opts.resume) {
       this.el.resultsBody.replaceChildren(this.blocResume(opts.resume))
       this.el.replay.classList.toggle('hidden', !opts.canReplay)

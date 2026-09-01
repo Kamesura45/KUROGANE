@@ -96,6 +96,27 @@ export interface PlannedObstacle {
 }
 
 /**
+ * ————— 🎓 UNE PISTE ÉCRITE À LA MAIN —————
+ *
+ * Tout le reste du jeu tire sa piste au sort depuis une graine, et c'est ce
+ * qui la rend partageable. Le tutoriel, lui, doit montrer UN obstacle à la
+ * fois, dans un ordre choisi, sur un décor choisi : un tirage ne peut pas
+ * garantir ça, même avec la graine la plus heureuse.
+ *
+ * ⚠️ Ces champs ne servent QUE là. Aucun mode de jeu ne les passe, et le
+ * hasard reste la règle partout ailleurs — sans quoi on aurait deux façons de
+ * bâtir une course à tenir en phase.
+ */
+export interface PisteImposee {
+  /** Le décor, du début à la fin. Index dans `BIOMES`. */
+  biome?: number
+  /** Le parcours exact, à la place du tirage. */
+  plan?: PlannedObstacle[]
+  /** Ni plateformes, ni jarres, ni rouleaux, ni murs latéraux : la piste nue. */
+  nu?: boolean
+}
+
+/**
  * Un rouleau posé sur la piste : juste une POSITION. Son contenu n'est PAS
  * décidé ici — il est tiré au ramassage, propre à chacun (cf. tirerParchemin).
  */
@@ -446,6 +467,14 @@ export class Track {
    * continuer à lire la piste derrière eux.
    */
   private cycle = 0
+  /**
+   * 🎓 Le décor forcé du tutoriel, ou -1 pour le tirage ordinaire.
+   *
+   * ⚠️ -1 et non `undefined` : `biomeDe` est appelée à chaque image, et un test
+   * sur un nombre y est plus franc qu'un test sur l'absence — surtout que le
+   * biome 0 existe, et que `?? -1` sur `0` donnerait 0, ce qui est juste.
+   */
+  private biomeImpose = -1
   /** La graine de la course, gardée pour bâtir les tronçons suivants. */
   private graine = 0
   /** Jusqu'où le plan est bâti, en mètres. */
@@ -674,7 +703,9 @@ export class Track {
    * donnent de la monnaie, et une course qu'on relance seule à volonté ne doit
    * pas en distribuer. Tout le reste de la piste est identique.
    */
-  reset(length: number, seed: number, avecPots = true, infini = false) {
+  reset(length: number, seed: number, avecPots = true, infini = false, impose?: PisteImposee) {
+    // 🎓 Retenu AVANT tout : `biomeDe` s'en sert à chaque image de la course.
+    this.biomeImpose = impose?.biome ?? -1
     for (const o of this.obstacles) {
       o.active = false
       o.mesh.visible = false
@@ -702,20 +733,28 @@ export class Track {
      * traduit en obstacles fictifs (`commeObstacles`) pour réutiliser telles
      * quelles les recherches de ligne libre déjà éprouvées.
      */
-    this.plateformePlan = buildPlateformePlan(length, seed)
+    /*
+     * 🎓 `nu` vide les plans au lieu de les bâtir. On n'appelle donc PAS les
+     * générateurs : leur demander une course puis jeter le résultat coûterait
+     * le même temps, et laisserait croire en lisant le code qu'il se passe
+     * quelque chose.
+     */
+    this.plateformePlan = impose?.nu ? [] : buildPlateformePlan(length, seed)
     this.plateformeIdx = 0
-    this.plan = buildPlan(length, seed, this.plateformePlan)
+    this.plan = impose?.plan ?? buildPlan(length, seed, this.plateformePlan)
     this.planIdx = 0
     const occupe = [...this.plan, ...commeObstacles(this.plateformePlan)]
     this.planBots = occupe
 
     // Les rouleaux sont places APRES les obstacles : ils doivent s'en ecarter
-    this.parcheminPlan = buildParcheminPlan(length, seed, occupe)
+    this.parcheminPlan = impose?.nu ? [] : buildParcheminPlan(length, seed, occupe)
     this.parcheminIdx = 0
     // ♾️ La dorée puise dans la MÊME table restreinte que les rouleaux : sans
     // ça, elle rendait les sorts qu’on venait d’écarter du mode.
     const sorts = infini ? TIRAGE_INFINI : TIRAGE
-    this.jarrePlan = buildJarrePlan(length, seed, occupe, avecPots, undefined, undefined, sorts)
+    this.jarrePlan = impose?.nu
+      ? []
+      : buildJarrePlan(length, seed, occupe, avecPots, undefined, undefined, sorts)
     this.jarreIdx = 0
     for (const p of this.plateformes) {
       p.active = false
@@ -727,7 +766,7 @@ export class Track {
       m.active = false
       m.mesh.visible = false
     }
-    this.murPlan = buildMurPlan(length, seed)
+    this.murPlan = impose?.nu ? [] : buildMurPlan(length, seed)
     this.murIdx = 0
 
     // Le décor : même graine décalée que le reste, donc même paysage pour tous.
@@ -775,6 +814,9 @@ export class Track {
    * flanc du Fuji jusqu'à la fin des temps.
    */
   private biomeDe(d: number): number {
+    // 🎓 Un décor imposé ne change jamais : le tutoriel apprend le geste, pas
+    // le paysage, et un fondu au milieu d'une explication distrait pour rien.
+    if (this.biomeImpose >= 0) return this.biomeImpose
     if (this.cycle <= 0) return indexBiome(d, this.courseLength)
     return this.ordreSlot(Math.max(0, Math.floor(d / (this.cycle / BIOMES.length))))
   }
@@ -1446,10 +1488,24 @@ export class Track {
     // ♾️ En infini, l'ambiance boucle avec les biomes (cf. biomeDe).
     // ♾️ En infini, l'ambiance suit le MÊME tirage que les décors (ordreSlot) :
     // sans ça, on courrait dans la neige sous la lumière orange du village.
+    /*
+     * 🎓 ⚠️ L'AMBIANCE AUSSI SUIT LE DÉCOR IMPOSÉ.
+     *
+     * Le décor lisait déjà `biomeDe`, mais les couleurs — brume, sol, lumière —
+     * passent par `ambianceA`, qui a son propre calcul. Vu à l'écran : le
+     * tutoriel se jouait sur la neige SOUS LA LUMIÈRE ORANGE DU VILLAGE. Le
+     * fichier des biomes met en garde contre exactement ça, et l'on y est tombé
+     * en ajoutant un troisième chemin.
+     *
+     * Le créneau renvoie toujours le même biome : le fondu n'a donc rien à
+     * fondre, et la couleur ne bouge plus de la première à la dernière image.
+     */
     const amb = enCourse
-      ? this.cycle > 0
-        ? ambianceA(distance, this.cycle, (k) => this.ordreSlot(k))
-        : ambianceA(distance, this.courseLength)
+      ? this.biomeImpose >= 0
+        ? ambianceA(distance, this.courseLength, () => this.biomeImpose)
+        : this.cycle > 0
+          ? ambianceA(distance, this.cycle, (k) => this.ordreSlot(k))
+          : ambianceA(distance, this.courseLength)
       : ambianceA(0, 1)
     this.brume.color.copy(amb.brume)
     this.brume.near = amb.brumeNear

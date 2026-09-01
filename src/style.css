@@ -2892,3 +2892,191 @@ body {
 .score.record .scorecorps b {
   color: #ffb9a3;
 }
+
+/* ————————————————————————————————————————————————————————————
+   🎓 LE TUTORIEL
+   ———————————————————————————————————————————————————————————— */
+
+/*
+ * La fiche s'affiche pendant que la course est GELÉE.
+ *
+ * ⚠️ `pointer-events: none` PAR DÉFAUT, et c'est le point délicat. La plupart
+ * des étapes attendent un GESTE — un swipe vers le haut, vers le bas, sur le
+ * côté. Ces gestes sont écoutés sur `document.body` : une fiche qui capte le
+ * doigt les avalerait tous, et le joueur swiperait dans le vide en se croyant
+ * maladroit. Seules les étapes qui attendent un simple tap reprennent la main
+ * (`.tape`), parce que là c'est la fiche elle-même qu'on touche.
+ */
+#tuto {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 16px max(26px, env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+#tuto.tape {
+  pointer-events: auto;
+  cursor: pointer;
+}
+#tuto.hidden {
+  display: none;
+}
+
+/*
+ * En BAS de l'écran, jamais au milieu. Le coureur, l'obstacle qui arrive et les
+ * trois lignes occupent le centre : c'est précisément ce qu'on explique, et le
+ * masquer pour l'expliquer serait absurde.
+ */
+.tutobox {
+  width: min(430px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px 16px 13px;
+  border-radius: 14px;
+  border: 1px solid #3d4560;
+  background: rgba(13, 16, 28, 0.93);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  text-align: left;
+  animation: tutoMonte 0.32s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+@keyframes tutoMonte {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+.tutobox b {
+  font-size: 1.02rem;
+  letter-spacing: 0.04em;
+  color: #f0e8d8;
+}
+.tutobox p {
+  font-size: 0.87rem;
+  line-height: 1.5;
+  color: #c9d0e2;
+}
+.tutobox small {
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9aa4c0;
+}
+
+/* Le geste, en deux langues : le doigt d'abord — c'est le plus courant. */
+.tutogestes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+.tutogeste {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(226, 75, 58, 0.16);
+  border: 1px solid rgba(226, 75, 58, 0.5);
+  color: #f0a89c;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+/*
+ * ⚠️ Le rappel clavier ne s'affiche QUE sur un appareil à pointeur fin — donc
+ * une souris, donc un clavier. Annoncer « ↑ ou Z » sur un téléphone parlerait
+ * de touches qui n'existent pas, juste à côté du geste qui, lui, marche.
+ */
+.tutogeste.clavier {
+  display: none;
+  background: rgba(154, 164, 192, 0.14);
+  border-color: rgba(154, 164, 192, 0.4);
+  color: #c9d0e2;
+}
+@media (pointer: fine) {
+  .tutogeste.clavier {
+    display: inline-block;
+  }
+}
+
+/* ——— La fin du tutoriel : une animation, pas un podium ——— */
+#finAnim {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  padding: 22px 0 26px;
+  width: 100%;
+}
+#finAnim.hidden {
+  display: none;
+}
+/*
+ * Le kanji 修 (shū) — « ce qu'on a travaillé ». Il ARRIVE de loin et se pose,
+ * comme un sceau qu'on presse : le même geste que l'enseigne du titre, pour que
+ * la fin du tutoriel appartienne visiblement au même jeu.
+ */
+.finkanji {
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+  font-size: 4.6rem;
+  line-height: 1;
+  color: #e24b3a;
+  text-shadow: 0 6px 30px rgba(226, 75, 58, 0.5);
+  animation: finKanji 0.72s cubic-bezier(0.25, 1.4, 0.4, 1) both;
+}
+@keyframes finKanji {
+  0% { opacity: 0; transform: scale(2.6) rotate(-9deg); filter: blur(7px); }
+  60% { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: none; }
+}
+.finmot {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  margin-right: -0.3em;
+  color: #f0e8d8;
+  animation: finMot 0.5s ease-out 0.62s both;
+}
+@keyframes finMot {
+  from { opacity: 0; letter-spacing: 0.9em; margin-right: -0.9em; filter: blur(4px); }
+  to { opacity: 1; letter-spacing: 0.3em; margin-right: -0.3em; filter: blur(0); }
+}
+/*
+ * Le sceau tombe en dernier : on ne signe qu'une fois le mot écrit.
+ *
+ * ⚠️ EN HAUT, à côté du caractère — pas en bas. Posé au ras du mot, il tombait
+ * PAR-DESSUS « TUTORIEL TERMINÉ » et en mangeait deux lettres. Et c'est aussi
+ * sa vraie place : sur une estampe, le sceau se presse contre le trait, pas
+ * sur la légende.
+ */
+.finsceau {
+  position: absolute;
+  right: 14%;
+  top: 16px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+  font-size: 1.05rem;
+  color: #f4eedf;
+  background: #c33a2c;
+  border-radius: 5px;
+  transform: rotate(-8deg);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  animation: sceauAppose 0.5s cubic-bezier(0.3, 1.7, 0.5, 1) 1s both;
+}
+
+/*
+ * ⚠️ Rien ne bouge pour qui a demandé que rien ne bouge. Le réglage système
+ * existe pour de vraies raisons — vertiges, migraines — et une animation de
+ * félicitations ne vaut pas qu'on les déclenche.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .tutobox,
+  .finkanji,
+  .finmot,
+  .finsceau {
+    animation: none;
+  }
+}

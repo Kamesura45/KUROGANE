@@ -103,6 +103,30 @@
       obstacles qui arrivent pendant qu'on réfléchit — ce serait un repos gratuit.
       En ligne il ne fige rien (cf. main.ts) et le dit franchement.
     -->
+    <!--
+      ————— 🎓 LA FICHE DU TUTORIEL —————
+
+      Elle s'affiche pendant que la course est GELÉE : on lit à l'arrêt, jamais
+      en courant. Un conseil qui défile en même temps que la piste ne se lit
+      pas — on le devine, on rate l'obstacle, et l'on croit avoir mal joué.
+
+      ⚠️ `pointer-events: none` par défaut (cf. `#tuto` dans la CSS) : les
+      étapes qui attendent un GESTE doivent laisser passer le swipe jusqu'au
+      jeu. Seules celles qui attendent un simple tap reprennent la main, via
+      la classe `.tape`.
+    -->
+    <div id="tuto" class="hidden">
+      <div class="tutobox">
+        <b id="tutoTitre"></b>
+        <p id="tutoTexte"></p>
+        <div class="tutogestes">
+          <span class="tutogeste" id="tutoDoigt"></span>
+          <span class="tutogeste clavier" id="tutoClavier"></span>
+        </div>
+        <small id="tutoEtape"></small>
+      </div>
+    </div>
+
     <div id="pause" class="hidden">
       <div class="pausebox">
         <b id="pauseTitre">⏸ Pause</b>
@@ -776,15 +800,10 @@
             question du moment est « laquelle », pas « comment on saute ».
           -->
           <button id="btnAideModes" class="ghost aidebtn" aria-label="Aide sur les modes">❓</button>
-          <!--
-            🎓 Le tutoriel — ANNONCÉ, pas encore écrit.
-
-            Désactivé tant qu'il n'existe pas, comme la tuile « En cours de
-            Dev… » : un joueur qui voit qu'il en vient un attend ; celui à qui
-            l'on n'a rien dit croit avoir fait le tour. Un bouton qui ouvre le
-            vide serait pire que les deux.
-          -->
-          <button id="btnTuto" class="ghost aidebtn" aria-label="Tutoriel — bientôt" disabled>🎓</button>
+          <!-- 🎓 Le tutoriel : deux temps, la neige pour apprendre et le pont
+               pour courir. Il quitte les menus tout de suite — ce qu'il a à
+               dire, il le dit sur la piste, l'obstacle devant les yeux. -->
+          <button id="btnTuto" class="ghost aidebtn" aria-label="Tutoriel">🎓</button>
         </header>
         <!--
           ————— 🎴 LES MODES EN TUILES : TROIS EN HAUT, DEUX EN BAS —————
@@ -942,6 +961,20 @@
           <div class="marche m2"><div class="pod-nom"></div><div class="pod-temps"></div><div class="pod-bloc">2</div></div>
           <div class="marche m1"><div class="pod-nom"></div><div class="pod-temps"></div><div class="pod-bloc">1</div></div>
           <div class="marche m3"><div class="pod-nom"></div><div class="pod-temps"></div><div class="pod-bloc">3</div></div>
+        </div>
+
+        <!--
+          🎓 LA FIN DU TUTORIEL : une animation, pas un podium.
+
+          On ne vient pas d'affronter qui que ce soit — les deux rivaux du pont
+          sont là pour donner le rythme, pas pour être battus. Trois marches
+          diraient le contraire, et perdre son propre tutoriel serait un drôle
+          de premier souvenir.
+        -->
+        <div id="finAnim" class="hidden">
+          <span class="finkanji">修</span>
+          <span class="finmot">TUTORIEL TERMINÉ</span>
+          <span class="finsceau">鉄</span>
         </div>
 
         <div id="resultsBody"></div>

@@ -14,6 +14,7 @@ import { ajouterScore, ajouterInfini } from './scores'
 import { Input } from './input'
 import { Net, type RemotePlayer, type LobbyView } from './net'
 import { Bot, PROFILS, BOTS_MAX, construireRangees } from './bot'
+import { ETAPES, PLAN_NEIGE, FIN_APPRENTISSAGE, BIOME_NEIGE, BIOME_PONT } from './tuto'
 import { PERSO_ID, cssColor, skinEnTexte } from './roster'
 import {
   PARCHEMINS,
@@ -493,6 +494,31 @@ let enPause = false
  * part ailleurs.
  */
 let modeInfini = false
+/**
+ * ————— 🎓 LE TUTORIEL —————
+ *
+ * Deux temps, et l'état tient en trois variables :
+ *
+ *  · `modeTuto`  — on y est ou non ; il coupe les scores, les pots et le podium ;
+ *  · `phaseTuto` — `neige` (on apprend) puis `pont` (on court) ;
+ *  · `etapeTuto` — quelle fiche vient ensuite, dans `ETAPES`.
+ *
+ * ⚠️ Rien n'est enregistré pendant un tutoriel : ni record, ni ligne au
+ * tableau, ni monnaie. On le rejoue autant qu'on veut, et un classement qu'on
+ * remplit en répétant ses gammes ne classe plus rien.
+ */
+let modeTuto = false
+let phaseTuto: 'neige' | 'pont' = 'neige'
+let etapeTuto = 0
+/**
+ * Le geste que la fiche attend, ou `null` si la course tourne.
+ *
+ * ⚠️ On attend le VRAI geste, pas un « appuyez pour continuer ». Faire le
+ * mouvement à l'arrêt, le voir marcher, puis le refaire trois secondes plus
+ * tard devant l'obstacle : c'est la seule façon d'apprendre un geste. Lire
+ * « swipe vers le haut » et cliquer OK ne fait apprendre que le bouton OK.
+ */
+let tutoAttend: 'saut' | 'glissade' | 'mur' | 'tap' | null = null
 /** Combien de coups encaissés, de 0 à DEGATS_MAX. Ne redescend jamais. */
 let degats = 0
 const DEGATS_MAX = 5
@@ -2534,6 +2560,18 @@ function backToMenu(banner?: string) {
   // brasier resterait allumé derrière le menu, et la course suivante hériterait
   // d'une règle qu'on n'a pas choisie.
   modeInfini = false
+  /*
+   * 🎓 Le tutoriel aussi — y compris la FICHE, qui vit hors de `#overlay` et ne
+   * disparaît donc pas en changeant d'écran. Quitter pendant une explication
+   * l'aurait laissée par-dessus le menu-titre.
+   */
+  modeTuto = false
+  phaseTuto = 'neige'
+  etapeTuto = 0
+  tutoAttend = null
+  tutoEl.classList.add('hidden')
+  tutoEl.classList.remove('tape')
+  gele = false
   // ⏸ On sort de la pause en même temps que de la course, et le bouton s'en va.
   ouvrirPause(false)
   btnPauseEl.classList.add('hidden')
@@ -2716,6 +2754,124 @@ function encaisserCoup() {
  * record vit donc sous sa propre clé : le mêler aux chronos rendrait les deux
  * illisibles, puisqu'ils ne se comparent pas dans le même sens.
  */
+/* ————————————————————————————————————————————————————————————
+   🎓 LE TUTORIEL
+   ———————————————————————————————————————————————————————————— */
+
+/** Les éléments de la fiche, cherchés une fois. */
+const tutoEl = document.getElementById('tuto')!
+const tutoTitreEl = document.getElementById('tutoTitre')!
+const tutoTexteEl = document.getElementById('tutoTexte')!
+const tutoDoigtEl = document.getElementById('tutoDoigt')!
+const tutoClavierEl = document.getElementById('tutoClavier')!
+const tutoEtapeEl = document.getElementById('tutoEtape')!
+
+/** ▶️ On entre dans le tutoriel : la neige, et personne autour. */
+function demarrerTuto() {
+  online = false
+  modeInfini = false
+  modeTuto = true
+  phaseTuto = 'neige'
+  etapeTuto = 0
+  tutoAttend = null
+  nbBots = 2 // 🌉 ils ne courent qu’au second temps (cf. startRace)
+  startRace(Math.floor(Math.random() * 2 ** 31))
+}
+
+/**
+ * ⏸ Fige la course et pose la fiche.
+ *
+ * ⚠️ On réutilise `gele`, écrit pour le banc d'essai des sorts : il met la
+ * vitesse à zéro ET met le coureur au repos, donc la piste ne défile plus et
+ * rien ne vient percuter. Un second mécanisme de gel n'aurait fait que doubler
+ * celui-là — avec ses propres oublis.
+ */
+function figerTuto(i: number) {
+  const e = ETAPES[i]
+  gele = true
+  tutoTitreEl.textContent = e.titre
+  tutoTexteEl.textContent = e.texte
+  tutoDoigtEl.textContent = e.doigt
+  tutoClavierEl.textContent = e.clavier
+  tutoEtapeEl.textContent = `Étape ${i + 1} sur ${ETAPES.length}`
+  tutoAttend = e.obstacle ? e.obstacle.kind : 'tap'
+  /*
+   * ⚠️ La fiche ne capte le doigt QUE si elle attend un tap. Sinon elle
+   * avalerait le swipe qu'elle vient de demander, et le joueur glisserait dans
+   * le vide en se croyant maladroit.
+   */
+  tutoEl.classList.toggle('tape', tutoAttend === 'tap')
+  tutoEl.classList.remove('hidden')
+}
+
+/*
+ * 👆 Les étapes qui n'attendent pas de geste se passent en touchant la fiche.
+ *
+ * ⚠️ L'écouteur est posé UNE FOIS, ici, et non à chaque affichage : en
+ * rattacher un par fiche en aurait empilé cinq par tutoriel, et le second
+ * tutoriel de la session aurait sauté deux étapes d'un seul doigt.
+ */
+tutoEl.addEventListener('click', () => {
+  if (tutoAttend === 'tap') reprendreTuto()
+})
+
+/** ▶️ Le geste est fait : on relâche et on passe à la fiche suivante. */
+function reprendreTuto() {
+  tutoEl.classList.add('hidden')
+  tutoEl.classList.remove('tape')
+  tutoAttend = null
+  gele = false
+  etapeTuto++
+}
+
+/**
+ * Le geste du joueur, pendant une fiche.
+ *
+ * ⚠️ On ne bloque PAS les autres gestes : swiper vers le bas quand la fiche
+ * demande un saut fait bien glisser le coureur, sur place. C'est voulu — on
+ * essaie, on voit ce que ça fait, et rien n'est cassé. Seul le bon geste
+ * relâche la course.
+ */
+function tutoGeste(quoi: 'saut' | 'glissade' | 'mur' | 'tap') {
+  if (!tutoAttend) return
+  if (tutoAttend === quoi || (tutoAttend === 'tap' && quoi !== 'tap')) reprendreTuto()
+}
+
+/**
+ * 🌉 On passe de la neige au pont.
+ *
+ * Une VRAIE course d'entraînement : deux rivaux, une piste tirée au sort, plus
+ * une seule fiche. On vient de dire « à toi de courir » — il faut que ce soit
+ * vrai, sinon la promesse ne vaut rien.
+ */
+function passerAuPont() {
+  phaseTuto = 'pont'
+  tutoAttend = null
+  tutoEl.classList.add('hidden')
+  gele = false
+  startRace(Math.floor(Math.random() * 2 ** 31))
+  toast('🌉 Pont au clair de lune — à toi de courir !')
+}
+
+/**
+ * 🏁 La fin du tutoriel : une animation, pas un podium.
+ *
+ * ⚠️ Et RIEN n'est enregistré : ni record personnel, ni ligne au tableau des
+ * temps. On rejoue son tutoriel autant qu'on veut ; un classement qu'on
+ * remplit en répétant ses gammes ne classe plus rien.
+ */
+function finTuto() {
+  state = 'fini'
+  jouerBruit('victoire')
+  menu.showFin({
+    titre: 'Tu sais courir. Le reste, ça se gagne.',
+    joueurs: [],
+    canReplay: true,
+    canLobby: false,
+    anim: true,
+  })
+}
+
 function finInfini() {
   if (state === 'fini') return // deux obstacles dans la même image ne tuent qu'une fois
   state = 'fini'
@@ -2803,7 +2959,27 @@ function startRace(seed: number) {
    * volonté : on y aurait moissonné en boucle. La course sans fin, elle, se paie
    * en distance — pour toucher le tronçon suivant il faut vraiment y survivre.
    */
-  track.reset(COURSE_LENGTH, seed, online || modeInfini, modeInfini)
+  /*
+   * 🎓 LA NEIGE DU TUTORIEL EST UNE PISTE ÉCRITE À LA MAIN.
+   *
+   * Nue — ni jarres, ni rouleaux, ni plateformes, ni murs latéraux — et son
+   * décor est FORCÉ. Un tirage, même heureux, ne peut pas promettre « un seul
+   * obstacle à la fois, dans cet ordre » ; et un décor qui change au milieu
+   * d'une explication distrait de ce qu'on explique.
+   *
+   * ⚠️ Le second temps, lui, est une VRAIE course : piste tirée au sort comme
+   * partout ailleurs, seul le décor reste choisi. On vient de dire « à toi de
+   * courir » — ce serait mentir que de lui donner un parcours sur mesure.
+   */
+  if (modeTuto) {
+    track.reset(COURSE_LENGTH, seed, false, false, {
+      biome: phaseTuto === 'neige' ? BIOME_NEIGE : BIOME_PONT,
+      plan: phaseTuto === 'neige' ? PLAN_NEIGE : undefined,
+      nu: phaseTuto === 'neige',
+    })
+  } else {
+    track.reset(COURSE_LENGTH, seed, online || modeInfini, modeInfini)
+  }
   time = 0
   distance = 0
   speed = 0
@@ -2922,7 +3098,9 @@ function startRace(seed: number) {
   const rouleaux = track.parcheminsPrevus()
   bots.forEach((b, i) => {
     // ♾️ Pas de rivaux en course sans fin : on court contre les flammes.
-    b.actif = !online && !modeInfini && i < nbBots
+    // 🎓 ❄️ Personne sur la neige : on y apprend seul, sans rien qui double ni
+    // qui distraie. Les deux rivaux n'apparaissent qu'au pont.
+    b.actif = !online && !modeInfini && (!modeTuto || phaseTuto === 'pont') && i < nbBots
     // Graine dérivée : chaque rival tire ses fautes ailleurs dans la suite,
     // sinon les 4 rateraient exactement les mêmes obstacles au même endroit.
     // Le joueur est l'indice 0 de la grille, les bots suivent (voie répartie).
@@ -2983,6 +3161,11 @@ function classement(): string {
 }
 
 function crossFinishLine() {
+  // 🎓 Le tutoriel a sa propre fin : ni podium, ni record, ni ligne au tableau.
+  if (modeTuto) {
+    finTuto()
+    return
+  }
   player.mesh.visible = true // au cas où on franchit la ligne en plein clignotement
   sprintEl.classList.add('hidden')
   gapEl.classList.add('hidden')
@@ -3263,6 +3446,9 @@ const menu = new Menu({
    * joueur devrait refaire à chaque partie — or c'est un mode où l'on
    * recommence beaucoup.
    */
+  onTuto() {
+    demarrerTuto()
+  },
   onInfini() {
     online = false
     modeInfini = true
@@ -3311,6 +3497,17 @@ const menu = new Menu({
    * ferait courir le départ après un salon qui n'existe pas encore.
    */
   onReplay() {
+    /*
+     * 🎓 Rejouer un tutoriel relance le TUTORIEL, depuis la neige.
+     *
+     * ⚠️ Sans ce cas, `startRace` repartait sur la piste du moment — donc au
+     * PONT, sans une seule explication. Le bouton disait « rejouer » et l'on
+     * retombait au milieu de la seconde moitié, sans savoir ce qu'on avait raté.
+     */
+    if (modeTuto) {
+      demarrerTuto()
+      return
+    }
     if (!online) {
       // 🏋️ Une NOUVELLE graine, comme au bouton « EN PISTE » : rejouer la même
       // piste par cœur ne serait plus de l'entraînement. Le nombre de rivaux,
@@ -3579,6 +3776,7 @@ new Input(document.body, {
   // et comme une jarre garantit une ligne sans obstacle, s'y jeter est sûr.
   left: () => {
     if (state !== 'course') return
+    tutoGeste('mur')
     /*
      * ————— Collé à une paroi, aucun swipe ne change de ligne —————
      * Vers la paroi OPPOSÉE (ici : mur à droite, swipe à gauche) on s'en
@@ -3621,6 +3819,7 @@ new Input(document.body, {
   },
   right: () => {
     if (state !== 'course') return
+    tutoGeste('mur')
     // Symétrique de `left` : sur une paroi, on s'en détache ou l'on ne fait
     // rien — jamais de changement de ligne en douce (cf. le commentaire là-haut).
     if (player.surMur !== 0) {
@@ -3640,6 +3839,7 @@ new Input(document.body, {
   },
   jump: () => {
     if (state !== 'course') return
+    tutoGeste('saut')
     // Sur la paroi, sauter c'est s'en détacher — elle nous relance en l'air
     if (player.surMur !== 0) return player.lacheMur()
     // ⛓️ Entravé : les chaînes tombent au sol et t'y retiennent. Le ×0,7 seul
@@ -3663,6 +3863,7 @@ new Input(document.body, {
   },
   slide: () => {
     if (state !== 'course') return
+    tutoGeste('glissade')
     if (player.surMur !== 0) return // on ne s'accroupit pas sur une paroi
     donneCoup()
     const d = player.slide()
@@ -4749,6 +4950,25 @@ function tick(now?: number) {
      * l'erreur : autrement, qui tient un tour ne perdrait jamais, et « cinq
      * obstacles » deviendrait « cinq par carte ».
      */
+    /*
+     * ————— 🎓 LE DÉROULÉ DU TUTORIEL —————
+     *
+     * Deux conditions, dans cet ordre : la fiche suivante si l'on arrive à son
+     * mètre, puis le passage au pont quand il ne reste plus de fiche.
+     *
+     * ⚠️ `!tutoAttend` protège tout : tant qu'une fiche attend son geste, la
+     * course est gelée, `distance` ne bouge plus, et rien ne peut déclencher
+     * l'étape suivante. Sans lui, une fiche posée au mètre 60 se rejouerait à
+     * chaque image tant qu'on n'aurait pas bougé.
+     */
+    if (modeTuto && phaseTuto === 'neige' && !tutoAttend) {
+      if (etapeTuto < ETAPES.length && distance >= ETAPES[etapeTuto].d) {
+        figerTuto(etapeTuto)
+      } else if (etapeTuto >= ETAPES.length && distance >= FIN_APPRENTISSAGE) {
+        passerAuPont()
+      }
+    }
+
     if (modeInfini) {
       const troncon = Math.floor(distance / COURSE_LENGTH)
       if (troncon > dernierTroncon) {
@@ -4899,6 +5119,17 @@ if (import.meta.env.DEV) {
     /** Quitter la course et revenir au menu, sans recharger la page. */
     quitter() {
       backToMenu()
+    },
+    /**
+     * 🎓 La fin du tutoriel, sans courir le pont.
+     *
+     * Même raison que `fin` juste en dessous : il fallait sinon franchir 1 920 m
+     * pour voir l'animation une fois — et autant à chaque retouche de son
+     * rythme. Ce guichet disparaît du build de production avec tout le bloc.
+     */
+    finTuto() {
+      modeTuto = true
+      finTuto()
     },
     /**
      * 🏁 Montre l'écran de fin sans courir les 1 920 m.
