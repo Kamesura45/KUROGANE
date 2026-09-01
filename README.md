@@ -507,10 +507,19 @@ sphère retournée, opaque, plantée dans le décor.
 > l'est. Les minuteurs de sorts l'étaient tous ; ces trois-là avaient été
 > ajoutés plus tard, ailleurs dans le fichier, loin du bloc qui nettoie.
 
-## 🖼️ Les boutons peints
+## 🖼️ Le bouton peint
 
-Quatre boutons portent un **dessin fait à la main** plutôt que du texte : la
-pause (休憩), Jouer (遊ぶ), Course Infinity (無限) et Compte (戦士).
+Un bouton porte un **dessin fait à la main** plutôt que du texte : la pause
+(休憩).
+
+⚠️ **Il y en a eu quatre.** Jouer (遊ぶ), Course Infinity (無限) et Compte (戦士)
+ont été abandonnés et sont revenus au texte. Leurs fichiers ont été retirés de
+`public/ui/`, et leurs entrées de la table `ART` — une entrée sans fichier ne
+« ne fait rien » : elle déclenche une requête, donc un 404 à chaque ouverture du
+jeu, dans la console de quiconque cherchera un vrai problème. Les originaux
+restent dans `image/`.
+
+Ce qui suit vaut pour tout dessin qu'on voudrait poser sur un bouton.
 
 ### Le fond blanc, et pourquoi il fallait le retirer
 
@@ -570,8 +579,15 @@ donnent une taille ABSOLUE à leur `<b>` et leur `<small>` : « Course Infinity 
 Jusqu'aux flammes » restait écrit **par-dessus** le dessin, qui porte déjà 無限.
 Il faut masquer les enfants, pas seulement réduire le texte du parent.
 
-⚠️ **Le nom du bouton vit dans `aria-label`.** Masquer le texte le retirerait
-sinon aux lecteurs d'écran : le dessin dit « 遊ぶ », le code doit le dire aussi.
+⚠️ **Le nom d'un bouton peint vit dans `aria-label`.** Masquer le texte le
+retirerait sinon aux lecteurs d'écran : le dessin dit « 遊ぶ », le code doit le
+dire aussi.
+
+⚠️ **Et il repart avec le dessin.** Les trois boutons revenus au texte ont perdu
+le leur, exprès : un `aria-label` ne complète pas le contenu visible, il le
+REMPLACE. Sur la tuile « Course Infinity », un label laissé là aurait masqué le
+« Jusqu'aux flammes » écrit dessous — le lecteur d'écran en aurait dit moins
+que ce que tout le monde voit.
 
 ## 🎴 Le menu Jouer : trois modes en tuiles
 

@@ -1171,17 +1171,6 @@ body {
   display: none !important;
 }
 
-/* ▶️ Le parchemin de « Jouer » : ses proportions décident de sa taille. */
-#btnJouer.peint {
-  align-self: center;
-  width: min(200px, 60%);
-  aspect-ratio: 342 / 246;
-}
-/* 👤 La bannière du Compte, large et basse : elle reste dans sa demi-rangée. */
-#btnCompte.peint {
-  aspect-ratio: 404 / 151;
-  padding: 0;
-}
 /* ⏸ La pause garde sa taille de pastille — elle vit sur le HUD, pas au menu. */
 .hudbtn.peint {
   width: 42px;

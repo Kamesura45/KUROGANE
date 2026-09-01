@@ -212,15 +212,11 @@
         <!-- L'icône est dans son propre <span> : c'est elle seule qui s'anime au
              survol, jamais le libellé. Un mot qui tourne est illisible. -->
         <div class="stack">
-          <!-- ⚠️ `aria-label` : l'image peinte masque le texte du bouton (voir
-               `.peint`). Sans lui, le bouton n'aurait plus de nom du tout pour
-               un lecteur d'écran — le dessin dit « 遊ぶ », le code doit le dire
-               aussi. Idem pour Compte, la pause et la course sans fin. -->
-          <button id="btnJouer" class="anime" aria-label="Jouer"><span class="ic">▶️</span> JOUER</button>
+          <button id="btnJouer" class="anime"><span class="ic">▶️</span> JOUER</button>
         </div>
         <div class="row">
           <button id="btnScores" class="ghost grow anime"><span class="ic">🏆</span> Scores</button>
-          <button id="btnCompte" class="ghost grow anime" aria-label="Compte"><span class="ic">👤</span> Compte</button>
+          <button id="btnCompte" class="ghost grow anime"><span class="ic">👤</span> Compte</button>
         </div>
         <div class="row">
           <button id="btnOptions" class="ghost grow anime"><span class="ic">⚙️</span> Paramètres</button>
@@ -688,7 +684,7 @@
           </button>
           <!-- ♾️ En vert, comme demandé : sur une tuile qu'on vise du pouce
                sans relire, la couleur dit lequel des modes on va lancer. -->
-          <button id="btnInfini" class="mode vert" aria-label="Course Infinity">
+          <button id="btnInfini" class="mode vert">
             <span class="em">♾️</span>
             <b>Course Infinity</b>
             <small>Jusqu'aux flammes</small>

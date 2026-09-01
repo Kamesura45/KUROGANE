@@ -1328,11 +1328,16 @@ export class Menu {
    * sous-dossier. Un `/ui/…` chercherait à la racine du domaine.
    */
   private peindre() {
+    /*
+     * ⚠️ UN SEUL, et il faut que la table le dise.
+     *
+     * Il y en a eu quatre. Les trois autres dessins ont été abandonnés, et
+     * leurs fichiers retirés. Les laisser ici ne « ne ferait rien » : chaque
+     * entrée déclenche une requête, donc trois 404 à chaque ouverture du jeu —
+     * du bruit dans la console de quiconque cherchera un vrai problème.
+     */
     const ART: Record<string, string> = {
       btnPause: 'pause',
-      btnJouer: 'jouer',
-      btnInfini: 'infini',
-      btnCompte: 'compte',
     }
     for (const [id, nom] of Object.entries(ART)) {
       const b = document.getElementById(id)
