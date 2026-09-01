@@ -12,7 +12,14 @@ import {
   type Head,
 } from './roster'
 import { Anim, animerGuerrier } from './anims'
-import { CIBLAGE, EFFETS, PARCHEMINS, TIRAGE, type ParcheminKind } from './parchemin'
+import {
+  CIBLAGE,
+  EFFETS,
+  PARCHEMINS,
+  TIRAGE,
+  TIRAGE_INFINI,
+  type ParcheminKind,
+} from './parchemin'
 import { cleanName, loadSettings, saveSettings, type Quality, type Settings } from './settings'
 import { montant } from './icones'
 import type { LobbyView, SalonInfo } from './net'
@@ -1820,10 +1827,40 @@ export class Menu {
         const ou = document.createElement('span')
         ou.className = 'sortcible'
         ou.textContent = CIBLAGE[p.cible]
+
+        /*
+         * ————— ♾️ CE QUI NE TOMBE PAS EN COURSE SANS FIN —————
+         *
+         * Cinq des dix n'y apparaissent jamais : `TIRAGE_INFINI` est une table
+         * restreinte. L'aide annonçait « les dix parchemins » sans le dire, et
+         * un joueur pouvait attendre toute une course un rouleau qui ne pouvait
+         * pas venir.
+         *
+         * ⚠️ La pastille se déduit de la TABLE, jamais d'une liste recopiée.
+         * Retirer un sort du tirage le marquerait ici tout seul ; une copie,
+         * elle, mentirait au premier changement — et ce sont les fiches de
+         * règles fausses que les joueurs retiennent le mieux.
+         */
+        /*
+         * ⚠️ Les `' '` ne sont pas décoratifs : ce sont les seuls POINTS DE
+         * COUPURE de la ligne.
+         *
+         * Les pastilles sont en `white-space: nowrap`, et deux éléments collés
+         * sans espace ne peuvent pas passer à la ligne entre eux. Sur un
+         * téléphone étroit, « Kusarigama » suivi de ses DEUX étiquettes
+         * débordait de la carte, la seconde coupée en plein mot.
+         */
+        corps.append(nom, ' ', ou)
+        if (!TIRAGE_INFINI.includes(k)) {
+          const hors = document.createElement('span')
+          hors.className = 'sortcible horsinfini'
+          hors.textContent = 'pas en Infinity'
+          corps.append(' ', hors)
+        }
         const quoi = document.createElement('p')
         quoi.textContent = EFFETS[k]
 
-        corps.append(nom, ou, quoi)
+        corps.append(quoi)
         carte.append(ic, corps)
         hote.append(carte)
       }

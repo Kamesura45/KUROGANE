@@ -595,11 +595,42 @@ Un seul mode avait sa section — la course sans fin — et les paragraphes
 généraux qui la suivaient semblaient lui appartenir. Trois onglets remettent
 chaque règle sous le mode qui la porte :
 
-| Onglet | Ce qui y vit |
-|---|---|
-| ⚔️ **Course VS.E** | Jusqu'à 10 joueurs, les trois portes du salon, les pots verts et le mondial, la pause qui ne fige rien |
-| ♾️ **Course Infinity** | Les cinq obstacles, les jarres qui alourdissent, le thé, le kunai, la carte qui recommence |
-| 🏋️ **Entraînement** | 1 à 4 rivaux, le record local, et **ce qui n'y rapporte rien** |
+| Onglet | Ce qui y vit | Parchemins |
+|---|---|---|
+| ⚔️ **Course VS.E** | Jusqu'à 10 joueurs, les trois portes du salon, les pots verts et le mondial, la pause qui ne fige rien | **10** |
+| ♾️ **Course Infinity** | Les cinq obstacles, les jarres, le thé, le kunai, la carte qui recommence | **5** |
+| 🏋️ **Entraînement** | 1 à 4 rivaux, le record local, et ce qui n'y rapporte rien | **10** |
+| 🚧 **En cours de Dev…** | Rien à expliquer, et il le dit | — |
+
+⚠️ **Le bandeau passe à DEUX colonnes** quand il y a quatre onglets. Quatre
+boutons sur une grille de trois retombent en 3 + 1 — une tuile seule sur sa
+ligne, qu'on lit comme un défaut ; et quatre colonnes sur un téléphone étroit
+laisseraient 80 px chacune, où « Course Infinity » casse en trois lignes.
+
+⚠️ **Pas de nombre dans le titre.** « Les trois façons de courir » est devenu
+faux le jour du quatrième onglet, et un titre qui se dément décrédibilise ce
+qu'il annonce. C'est « 🎮 Les modes de jeu ».
+
+### ♾️ Cinq parchemins sur dix ne tombent pas en Infinity
+
+`TIRAGE_INFINI` est une table restreinte : **Parade Miroir, Kusarigama, Bombe
+Fumigène, Senbon Empoisonné et Onmyōji** ne peuvent pas y apparaître. Ils visent
+un adversaire ou s'en défendent, et la course sans fin n'en a aucun.
+
+L'aide annonçait « les dix parchemins » sans le dire : un joueur pouvait attendre
+toute une course un rouleau qui ne pouvait pas venir. Chaque fiche concernée
+porte maintenant une pastille **« pas en Infinity »**.
+
+⚠️ **La pastille se déduit de la TABLE, jamais d'une liste recopiée.** Retirer un
+sort du tirage le marquera ici tout seul ; une copie mentirait au premier
+changement — et ce sont les fiches de règles fausses qu'on retient le mieux.
+
+⚠️ **Deux détails de mise en page, vus à l'écran.** Les pastilles sont en
+`white-space: nowrap`, et deux éléments collés sans espace **ne peuvent pas**
+passer à la ligne entre eux : « Kusarigama » suivi de ses deux étiquettes
+débordait de la carte, la seconde coupée en plein mot. Il a fallu un vrai espace
+entre chacune, ET un `min-width: 0` sur le corps de la carte — un élément flex
+refuse par défaut de descendre sous sa largeur mini de contenu.
 
 ⚠️ **Les mêmes noms qu'au menu Jouer et qu'au classement.** On choisit son mode
 ici, on le lance là-bas, on lit son score ailleurs : trois vocabulaires pour la

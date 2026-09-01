@@ -503,22 +503,29 @@
         </p>
 
         <!--
-          ————— 🎮 LES TROIS FAÇONS DE COURIR, EN TROIS ONGLETS —————
+          ————— 🎮 UN ONGLET PAR MODE —————
 
           Seul le mode sans fin avait sa section, et les paragraphes généraux qui
-          la suivaient semblaient lui appartenir. Trois onglets remettent chaque
-          règle sous le mode qui la porte, et laissent hors du bloc ce qui vaut
-          pour les trois — les touches, le combat, les parchemins.
+          la suivaient semblaient lui appartenir. Un onglet par mode remet chaque
+          règle sous celui qui la porte, et laisse hors du bloc ce qui vaut
+          partout — les touches, le combat, les parchemins.
 
           ⚠️ Les mêmes noms qu'au menu Jouer et qu'au classement. On choisit son
           mode ici, on le lance là-bas, on lit son score ailleurs : trois
           vocabulaires pour la même chose obligeraient à traduire soi-même.
         -->
-        <h3 id="aideModesTitre">🎮 Les trois façons de courir</h3>
-        <div class="seg" id="aideModes">
+        <!-- ⚠️ Pas de nombre dans le titre. « Les trois façons de courir »
+             devenait faux le jour où l'on a ajouté le quatrième onglet — et un
+             titre qui se dément lui-même décrédibilise ce qu'il annonce. -->
+        <h3 id="aideModesTitre">🎮 Les modes de jeu</h3>
+        <!-- ⚠️ Quatre, donc DEUX colonnes et non trois : à trois par rangée sur
+             un téléphone étroit, « Course Infinity » se casse en trois lignes et
+             la quatrième tuile se retrouve seule en dessous. -->
+        <div class="seg quatre" id="aideModes">
           <button data-m="vse" class="on">⚔️ Course VS.E</button>
           <button data-m="infini">♾️ Course Infinity</button>
           <button data-m="solo">🏋️ Entraînement</button>
+          <button data-m="dev">🚧 En cours de Dev…</button>
         </div>
 
         <div class="aidemode" data-m="vse">
@@ -537,6 +544,10 @@
             la boutique, à l'arrivée. Et seules ces courses entrent au
             <b>classement mondial</b> — ce sont les seules que le serveur
             chronomètre lui-même.
+          </p>
+          <p class="lead">
+            📜 <b>Les dix parchemins</b> y tombent, sabotages compris : c'est le
+            seul mode où l'on a quelqu'un à gêner. Détail de chacun plus bas.
           </p>
           <p class="lead">
             ⏸ <b>La pause ne fige rien en ligne</b> : les autres continuent de
@@ -561,6 +572,13 @@
             en as pris et ce que ça coûte. Le 🍵 <b>thé</b> lave tout d'un coup.
           </p>
           <p class="lead">
+            📜 <b>Cinq parchemins seulement</b> y tombent : 🛡️ Armure de Fer,
+            🕊️ Saut de la Grue, 🍵 Thé Purificateur, 🎯 Kunai Explosif et
+            🌀 Vent du Nord. Les cinq autres visent un <b>adversaire</b>, ou s'en
+            défendent — et ici il n'y en a pas. Ils sont marqués « pas en
+            Infinity » dans la liste plus bas.
+          </p>
+          <p class="lead">
             🎯 Le <b>kunai</b> y fait sauter le prochain <b>mur</b> droit devant toi
             — celui-là seulement, et pas les barrières qui se sautent. 🗺️ Les décors
             se suivent au hasard, et tous les 1 920 m la carte recommence : c'est là
@@ -580,6 +598,11 @@
             ligne. Ton <b>meilleur temps</b> est gardé sur cet appareil.
           </p>
           <p class="lead">
+            📜 <b>Les dix parchemins</b> y tombent, comme en ligne : les rivaux de
+            la machine se sabotent et se font saboter. C'est l'endroit pour
+            apprendre à quoi sert chacun sans y perdre une vraie course.
+          </p>
+          <p class="lead">
             ⚠️ Rien n'y rapporte : ni 🟢 pot vert, ni monnaie, ni place au
             <b>classement mondial</b>. Une course qu'on relance à volonté ne peut
             pas remplir un classement — sinon le premier serait celui qui a le plus
@@ -589,12 +612,28 @@
             ⏸ Ici la pause <b>arrête vraiment tout</b>, chrono compris.
           </p>
         </div>
+
+        <!-- 🚧 Annoncé plutôt que caché, comme au menu Jouer et au classement.
+             Un onglet vide serait une déception ; un onglet qui dit franchement
+             où en est le mode est une attente. -->
+        <div class="aidemode hidden" data-m="dev">
+          <p class="lead">
+            🚧 <b>Un troisième mode est en chantier.</b> Sa place est déjà là — au
+            menu, au classement et ici — parce qu'un joueur qui voit qu'il en
+            vient un autre attend, tandis que celui à qui l'on n'a rien dit croit
+            avoir fait le tour.
+          </p>
+          <p class="lead">
+            Il n'y a rien à expliquer pour l'instant : ses règles s'écriront ici
+            le jour où il se jouera.
+          </p>
+        </div>
         <!--
           ⚠️ Il FAUT une rupture ici. Sans titre, ces paragraphes enchaînent sur
           le panneau du mode affiché et l'on croit qu'ils lui appartiennent —
           c'est exactement le défaut qu'on vient de corriger, un cran plus bas.
         -->
-        <h3>🥷 Ce qui vaut pour les trois</h3>
+        <h3>🥷 Ce qui vaut dans tous les modes</h3>
         <p class="lead">
           ⚔️ Le même geste sert à bouger et à frapper : s'il y a une <b>jarre</b>
           ou un <b>rival</b> dans cette direction, tu attaques ; sinon tu te
@@ -628,6 +667,11 @@
           ressemblent : on ne sait ce qu'on a décroché qu'une fois dans la main.
           On en porte <b>deux</b> au maximum, et le <b>plus ancien part
           d'abord</b>.
+        </p>
+        <p class="lead">
+          ♾️ Cinq portent la mention <b>« pas en Infinity »</b> : ils visent un
+          adversaire ou s'en défendent, et la course sans fin n'en a aucun. Là-bas,
+          seuls les cinq qui agissent <b>sur toi</b> peuvent tomber.
         </p>
         <!-- La liste est construite en JS depuis parchemin.ts : les chiffres
              affichés sont ceux du calibrage, jamais une copie qui vieillit. -->

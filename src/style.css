@@ -1584,6 +1584,17 @@ body {
 }
 
 /* Le sélecteur à 3 positions (qualité graphique) */
+/*
+ * ⚠️ Trois colonnes par défaut, DEUX quand il y a quatre onglets.
+ *
+ * Quatre boutons sur une grille de trois retomberaient en 3 + 1 : une
+ * quatrième tuile seule sur sa ligne, qu'on lit comme un défaut. Et quatre
+ * colonnes sur un téléphone étroit laisseraient 80 px chacune — « Course
+ * Infinity » y casserait en trois lignes.
+ */
+.seg.quatre {
+  grid-template-columns: repeat(2, 1fr);
+}
 .seg {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1711,6 +1722,15 @@ body {
   border-radius: 9px;
   background: rgba(20, 25, 42, 0.5);
 }
+/*
+ * ⚠️ Le corps de la carte doit pouvoir RÉTRÉCIR. Un élément flex refuse par
+ * défaut de descendre sous sa largeur mini de contenu — et avec des pastilles
+ * en `nowrap`, cette largeur mini dépasse la carte. Sans ce `min-width: 0`,
+ * elles sortent du cadre au lieu de passer à la ligne.
+ */
+.sort > div {
+  min-width: 0;
+}
 /* L'icône ne doit ni rétrécir ni bouger quand le texte passe à la ligne */
 .sortic {
   flex: none;
@@ -1724,6 +1744,15 @@ body {
   font-size: 0.9rem;
 }
 /* Le ciblage : une étiquette discrète collée au nom */
+/*
+ * ♾️ La pastille des absents de la course sans fin. Même forme que le ciblage
+ * — c'est le même genre d'information, « où ça vaut » — mais en gris : l'or est
+ * réservé à ce qu'un sort FAIT, pas à ce qu'il ne fait pas.
+ */
+.sortcible.horsinfini {
+  background: rgba(154, 164, 192, 0.14);
+  color: #9aa4c0;
+}
 .sortcible {
   margin-left: 7px;
   padding: 1px 6px;
