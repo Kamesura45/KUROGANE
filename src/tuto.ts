@@ -37,11 +37,28 @@ export const BIOME_PONT = 1
 /**
  * Combien de mètres séparent l'explication de ce qu'elle annonce.
  *
- * ⚠️ 35 m et non 20. Au relâchement, la vitesse repart de ZÉRO et met une
- * seconde à revenir : 20 m se faisaient à moitié à l'arrêt, l'obstacle arrivait
- * avant qu'on ait repris son élan, et le premier essai était perdu d'avance.
+ * ————— DEUX ÉLANS, PAS UN —————
+ *
+ * ⚠️ `ELAN_GESTE` — court, et calculé pour que LE GESTE ESQUIVE VRAIMENT.
+ *
+ * Le geste qui relâche la fiche est joué pour de bon : swiper vers le haut fait
+ * sauter le coureur. Il faut donc que ce saut-là passe l'obstacle, sinon on
+ * aurait appris un mouvement sans effet — et il faudrait le refaire trente
+ * mètres plus loin, ce qui est exactement ce que le tutoriel doit éviter.
+ *
+ * Les chiffres du jeu : un saut vole 0,63 s, une glissade dure 0,55 s. À
+ * 22 m/s, cela couvre 13,8 m et 12,1 m. Poser la barrière à 8 m la place donc
+ * en plein vol, à peu près à l'apex — le geste porte, avec de la marge des deux
+ * côtés.
+ *
+ * ⚠️ `ELAN_LIBRE` — long, pour ce qui ne se règle PAS par un geste unique.
+ *
+ * Une plateforme, une paroi, une jarre : là on ne demande rien de précis, on
+ * montre. Il faut le temps de voir arriver la chose et de décider, et l'on n'a
+ * rien enclenché en fermant la fiche.
  */
-const ELAN = 35
+const ELAN_GESTE = 8
+const ELAN_LIBRE = 35
 
 /** Le geste qui relâche la course. */
 export type GesteTuto = 'saut' | 'glissade' | 'ligne' | 'tap'
@@ -207,10 +224,20 @@ export const FIN_APPRENTISSAGE = 780
  */
 const pose = (quoi: PoseTuto) => ETAPES.filter((e) => e.pose === quoi)
 
+/**
+ * Le décalage propre à une étape : court si son geste doit esquiver.
+ *
+ * ⚠️ 10 m pour la ligne et non 8 : le changement de voie couvre 95 % de l'écart
+ * en 0,25 s, soit 5,5 m à pleine vitesse. À 8 m on arriverait TOUT JUSTE, le
+ * corps encore entre deux lignes — et le bloc fait 2,15 m de large.
+ */
+const elanDe = (e: EtapeTuto) =>
+  e.attend === 'tap' ? ELAN_LIBRE : e.attend === 'ligne' ? 10 : ELAN_GESTE
+
 /** Les obstacles ordinaires : barrière, barre haute, bloc. */
 export const PLAN_NEIGE: PlannedObstacle[] = ETAPES.filter(
   (e) => e.pose === 'saut' || e.pose === 'glissade' || e.pose === 'mur'
-).map((e) => ({ d: e.d + ELAN, lane: 1, kind: e.pose as Kind }))
+).map((e) => ({ d: e.d + elanDe(e), lane: 1, kind: e.pose as Kind }))
 
 /**
  * La plateforme, AVEC sa rampe.
@@ -221,7 +248,7 @@ export const PLAN_NEIGE: PlannedObstacle[] = ETAPES.filter(
  * texte de la fiche prévient qu'elle existe.
  */
 export const PLATEFORMES_NEIGE: PlannedPlateforme[] = pose('plateforme').map((e) => ({
-  d: e.d + ELAN,
+  d: e.d + elanDe(e),
   longueur: 16,
   lane: 1,
   hauteur: PLATEFORME_H,
@@ -230,7 +257,7 @@ export const PLATEFORMES_NEIGE: PlannedPlateforme[] = pose('plateforme').map((e)
 
 /** La paroi, à DROITE — la fiche dit « swipe vers la droite », il faut que ce soit vrai. */
 export const MURS_NEIGE: PlannedMur[] = pose('paroi').map((e) => ({
-  d: e.d + ELAN,
+  d: e.d + elanDe(e),
   longueur: 34,
   cote: 1 as const,
 }))
@@ -243,7 +270,7 @@ export const MURS_NEIGE: PlannedMur[] = pose('paroi').map((e) => ({
  * expliquer un adversaire qui n'existe pas encore — on est seul sur la neige.
  */
 export const JARRES_NEIGE: PlannedJarre[] = pose('jarre').map((e) => ({
-  d: e.d + ELAN,
+  d: e.d + elanDe(e),
   lane: 1,
   kind: 'doree' as const,
   parchemin: 'vent' as const,

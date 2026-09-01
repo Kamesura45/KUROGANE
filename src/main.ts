@@ -541,6 +541,19 @@ let tutoAttend: 'saut' | 'glissade' | 'ligne' | 'tap' | null = null
 let tutoLignes = false
 /** 🚀 La fiche du départ canon a-t-elle été montrée pour cette course ? */
 let tutoDepartVu = false
+/**
+ * 🏃 La vitesse d'avant le gel, rendue au relâchement.
+ *
+ * ⚠️ SANS ELLE, LE GESTE NE PORTAIT PAS. Le gel met la vitesse à zéro, et la
+ * reprise la ramène doucement (un lerp à 1,2 par seconde) : un saut lâché juste
+ * après ne couvrait que ~4 m au lieu de 13,8, et retombait bien avant la
+ * barrière. On aurait appris un mouvement sans effet — le contraire de ce qu'un
+ * tutoriel doit faire.
+ *
+ * On rend donc l'élan qu'on avait pris. Le monde s'est arrêté le temps de lire,
+ * puis repart exactement où il en était, avec le geste déjà en cours.
+ */
+let tutoVitesse = 0
 /** Combien de coups encaissés, de 0 à DEGATS_MAX. Ne redescend jamais. */
 let degats = 0
 const DEGATS_MAX = 5
@@ -2811,6 +2824,7 @@ function demarrerTuto() {
  * celui-là — avec ses propres oublis.
  */
 function figerTuto(e: EtapeTuto, rang: string) {
+  tutoVitesse = speed
   gele = true
   tutoTitreEl.textContent = e.titre
   tutoTexteEl.textContent = e.texte
@@ -2846,6 +2860,8 @@ function reprendreTuto() {
   tutoEl.classList.remove('tape')
   tutoAttend = null
   gele = false
+  // 🏃 On rend l’élan : le geste qui vient de relâcher la fiche doit PORTER.
+  speed = tutoVitesse
   /*
    * ⚠️ La fiche du départ n'est PAS une étape du parcours : elle vit dans
    * l'état « départ », avant le premier mètre. L'incrémenter ici ferait sauter
@@ -3924,7 +3940,21 @@ new Input(document.body, {
   // On horodate chaque coup : la boucle de jeu en déduit la cadence.
   // Horloge de la page (pas le chrono de course) : le chrono est figé à 0
   // pendant le décompte, or le DÉPART CANON se martèle pendant le décompte !
-  sprint: () => sprintTaps.push(performance.now() / 1000),
+  sprint: () => {
+    /*
+     * ————— 🎓 🚀 LA FICHE DU DÉPART SE FERME AUSSI PAR ICI —————
+     *
+     * ⚠️ Et il le FAUT : pendant le décompte, `isSprint()` est vrai, donc
+     * `input.ts` détourne Espace, Entrée, le clic et le tap vers CE guichet et
+     * s'arrête là. Le saut n'est jamais atteint, donc `tutoGeste` non plus.
+     *
+     * Mesuré : la fiche « Le départ canon » annonçait « Espace ou clic » et
+     * Espace ne faisait rien. Une fiche qui ment sur sa propre touche est pire
+     * qu'une fiche muette — on croit le jeu cassé, pas soi.
+     */
+    tutoGeste('tap')
+    sprintTaps.push(performance.now() / 1000)
+  },
   isSprint: inSprintZone,
   // ⏸ Le verrou unique : tant qu'il est levé, aucun geste ne parvient au jeu.
   bloque: () => enPause,

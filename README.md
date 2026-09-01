@@ -634,18 +634,60 @@ gauche à droite, et le tutoriel annonce deux rivaux dès son premier temps :
 obstacles sont au centre et qu'il ne peut pas encore changer de ligne. Il
 regardait passer la leçon à côté de lui.
 
+### 🏃 Le geste esquive VRAIMENT
+
+Le mouvement qui referme la fiche est joué pour de bon : swiper vers le haut
+fait sauter le coureur, et **ce saut-là passe la barrière**. Sans cela on aurait
+appris un mouvement sans effet, à refaire trente mètres plus loin — exactement
+ce que le tutoriel doit éviter.
+
+Deux choses ont dû être réglées pour que ce soit vrai.
+
+⚠️ **L'élan est RENDU au relâchement.** Le gel met la vitesse à zéro, et la
+reprise la ramène doucement (un lerp à 1,2 par seconde) : un saut lâché juste
+après ne couvrait que **~4 m au lieu de 13,8**, et retombait bien avant la
+barrière. Le monde s'arrête le temps de lire, puis repart exactement où il en
+était — avec le geste déjà en cours.
+
+⚠️ **Deux élans, pas un.** Les chiffres du jeu : un saut vole 0,63 s, une
+glissade dure 0,55 s ; à 22 m/s cela couvre 13,8 m et 12,1 m.
+
+| | Élan | Pourquoi |
+|---|---|---|
+| Saut, glissade | **8 m** | L'obstacle tombe en plein vol, à peu près à l'apex |
+| Changer de ligne | **10 m** | La voie se change en 0,25 s (5,5 m) ; à 8 m on arriverait le corps encore entre deux lignes |
+| Plateforme, paroi, jarre | **35 m** | Rien de précis à faire : il faut le temps de voir et de décider |
+
+Mesuré à la manette, en **tactile** : swipe vers le haut sur « Sauter » → la
+barrière posée à 98 m passe avec `stumble = 0`, et la distance avance de 9 m par
+relevé dès la première image — la vitesse est bien rendue. Idem pour la barre
+haute à 193 m.
+
 ### Les distances
 
 | | |
 |---|---|
-| Fiche → ce qu'elle annonce | **35 m** |
-| Objet → fiche suivante | **60 à 95 m** |
+| Fiche → fiche suivante | **40 à 130 m** |
 | Longueur de la neige | **780 m** |
 
-⚠️ Au relâchement la vitesse repart de **zéro**. Les 20 m d'origine se faisaient
-à moitié à l'arrêt : l'obstacle arrivait avant qu'on ait repris son élan, et le
-premier essai était perdu d'avance. Et le mètre qui suit une plateforme ou une
-paroi est plus large que les autres — on en sort ralenti, ou en l'air.
+Le mètre qui suit une plateforme ou une paroi est plus large que les autres — on
+en sort ralenti, ou en l'air.
+
+### 📱 Et au doigt, pas seulement au clavier
+
+⚠️ **La fiche du départ mentait sur sa propre touche.** Elle annonçait « Espace
+ou clic », et Espace ne faisait rien : pendant le décompte, `isSprint()` est
+vrai, donc `input.ts` détourne Espace, Entrée, le clic **et le tap** vers le
+martèlement du départ canon et s'arrête là — le saut n'est jamais atteint, donc
+`tutoGeste` non plus.
+
+Le guichet du martèlement ferme donc la fiche lui aussi. Une fiche qui ment sur
+sa touche est pire qu'une fiche muette : on croit le jeu cassé, pas soi.
+
+⚠️ **La fiche ne capte le doigt que si elle attend un tap.** Sinon elle avalerait
+le swipe qu'elle vient de demander, et le joueur glisserait dans le vide en se
+croyant maladroit. Vérifié avec de VRAIS événements tactiles : le mauvais swipe
+ne relâche rien, le bon relâche et agit.
 
 ### La partition est de la donnée
 
