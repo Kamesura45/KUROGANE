@@ -14,7 +14,18 @@ import { ajouterScore, ajouterInfini } from './scores'
 import { Input } from './input'
 import { Net, type RemotePlayer, type LobbyView } from './net'
 import { Bot, PROFILS, BOTS_MAX, construireRangees } from './bot'
-import { ETAPES, PLAN_NEIGE, FIN_APPRENTISSAGE, BIOME_NEIGE, BIOME_PONT } from './tuto'
+import {
+  DEPART,
+  ETAPES,
+  PLAN_NEIGE,
+  PLATEFORMES_NEIGE,
+  MURS_NEIGE,
+  JARRES_NEIGE,
+  FIN_APPRENTISSAGE,
+  BIOME_NEIGE,
+  BIOME_PONT,
+  type EtapeTuto,
+} from './tuto'
 import { PERSO_ID, cssColor, skinEnTexte } from './roster'
 import {
   PARCHEMINS,
@@ -518,7 +529,18 @@ let etapeTuto = 0
  * tard devant l'obstacle : c'est la seule façon d'apprendre un geste. Lire
  * « swipe vers le haut » et cliquer OK ne fait apprendre que le bouton OK.
  */
-let tutoAttend: 'saut' | 'glissade' | 'mur' | 'tap' | null = null
+let tutoAttend: 'saut' | 'glissade' | 'ligne' | 'tap' | null = null
+/**
+ * 🔒 Les changements de ligne sont-ils permis ?
+ *
+ * ⚠️ Faux au début du tutoriel, et c'est délibéré. Un débutant qui dérive sur
+ * le côté rate l'obstacle qu'on vient de lui expliquer et ne comprend pas
+ * pourquoi : la leçon portait sur le saut, elle s'est jouée sur la ligne. Les
+ * lignes s'ouvrent à l'étape qui les enseigne, et ne se referment plus.
+ */
+let tutoLignes = false
+/** 🚀 La fiche du départ canon a-t-elle été montrée pour cette course ? */
+let tutoDepartVu = false
 /** Combien de coups encaissés, de 0 à DEGATS_MAX. Ne redescend jamais. */
 let degats = 0
 const DEGATS_MAX = 5
@@ -2774,6 +2796,8 @@ function demarrerTuto() {
   phaseTuto = 'neige'
   etapeTuto = 0
   tutoAttend = null
+  tutoLignes = false
+  tutoDepartVu = false
   nbBots = 2 // 🌉 ils ne courent qu’au second temps (cf. startRace)
   startRace(Math.floor(Math.random() * 2 ** 31))
 }
@@ -2786,15 +2810,16 @@ function demarrerTuto() {
  * rien ne vient percuter. Un second mécanisme de gel n'aurait fait que doubler
  * celui-là — avec ses propres oublis.
  */
-function figerTuto(i: number) {
-  const e = ETAPES[i]
+function figerTuto(e: EtapeTuto, rang: string) {
   gele = true
   tutoTitreEl.textContent = e.titre
   tutoTexteEl.textContent = e.texte
   tutoDoigtEl.textContent = e.doigt
   tutoClavierEl.textContent = e.clavier
-  tutoEtapeEl.textContent = `Étape ${i + 1} sur ${ETAPES.length}`
-  tutoAttend = e.obstacle ? e.obstacle.kind : 'tap'
+  tutoEtapeEl.textContent = rang
+  tutoAttend = e.attend
+  // 🔒 Les lignes s'ouvrent à l'étape qui les enseigne, et ne se referment plus.
+  if (e.ouvreLesLignes) tutoLignes = true
   /*
    * ⚠️ La fiche ne capte le doigt QUE si elle attend un tap. Sinon elle
    * avalerait le swipe qu'elle vient de demander, et le joueur glisserait dans
@@ -2821,6 +2846,15 @@ function reprendreTuto() {
   tutoEl.classList.remove('tape')
   tutoAttend = null
   gele = false
+  /*
+   * ⚠️ La fiche du départ n'est PAS une étape du parcours : elle vit dans
+   * l'état « départ », avant le premier mètre. L'incrémenter ici ferait sauter
+   * « ⛩️ Bienvenue », et le tutoriel commencerait par sa deuxième page.
+   */
+  if (!tutoDepartVu) {
+    tutoDepartVu = true
+    return
+  }
   etapeTuto++
 }
 
@@ -2832,7 +2866,7 @@ function reprendreTuto() {
  * essaie, on voit ce que ça fait, et rien n'est cassé. Seul le bon geste
  * relâche la course.
  */
-function tutoGeste(quoi: 'saut' | 'glissade' | 'mur' | 'tap') {
+function tutoGeste(quoi: 'saut' | 'glissade' | 'ligne' | 'tap') {
   if (!tutoAttend) return
   if (tutoAttend === quoi || (tutoAttend === 'tap' && quoi !== 'tap')) reprendreTuto()
 }
@@ -2942,7 +2976,16 @@ function startRace(seed: number) {
   // ♾️ Seul sur la piste en infini : la grille n'a qu'un coureur, donc le milieu.
   const nbCoureurs = modeInfini ? 1 : 1 + nbBots
   const voieDe = (k: number) => (nbCoureurs === 1 ? 1 : Math.round((k / (nbCoureurs - 1)) * 2))
-  player.reset(online ? net.myStartLane : voieDe(0))
+  /*
+   * 🎓 AU MILIEU, TOUJOURS, pendant le tutoriel.
+   *
+   * ⚠️ La grille répartit les coureurs de gauche à droite, et le tutoriel
+   * annonce deux rivaux dès son premier temps : `voieDe(0)` plaçait donc le
+   * joueur SUR LA LIGNE DE GAUCHE, alors qu'on lui pose ses obstacles au
+   * centre et qu'on lui interdit encore de changer de ligne. Il regardait
+   * passer la leçon à côté de lui.
+   */
+  player.reset(modeTuto ? 1 : online ? net.myStartLane : voieDe(0))
   // Les avatars des rivaux sont (re)placés par syncRivals dès la 1re position
   // reçue ; ici on repart d'une table propre en solo, et on garde les rivaux
   // déjà connus du lobby en ligne.
@@ -2972,10 +3015,14 @@ function startRace(seed: number) {
    * courir » — ce serait mentir que de lui donner un parcours sur mesure.
    */
   if (modeTuto) {
+    const neige = phaseTuto === 'neige'
     track.reset(COURSE_LENGTH, seed, false, false, {
-      biome: phaseTuto === 'neige' ? BIOME_NEIGE : BIOME_PONT,
-      plan: phaseTuto === 'neige' ? PLAN_NEIGE : undefined,
-      nu: phaseTuto === 'neige',
+      biome: neige ? BIOME_NEIGE : BIOME_PONT,
+      plan: neige ? PLAN_NEIGE : undefined,
+      plateformes: neige ? PLATEFORMES_NEIGE : undefined,
+      murs: neige ? MURS_NEIGE : undefined,
+      jarres: neige ? JARRES_NEIGE : undefined,
+      nu: neige,
     })
   } else {
     track.reset(COURSE_LENGTH, seed, online || modeInfini, modeInfini)
@@ -3776,7 +3823,9 @@ new Input(document.body, {
   // et comme une jarre garantit une ligne sans obstacle, s'y jeter est sûr.
   left: () => {
     if (state !== 'course') return
-    tutoGeste('mur')
+    tutoGeste('ligne')
+    // 🔒 Avant la leçon des lignes, on ne dérive pas : voir `tutoLignes`.
+    if (modeTuto && phaseTuto === 'neige' && !tutoLignes) return
     /*
      * ————— Collé à une paroi, aucun swipe ne change de ligne —————
      * Vers la paroi OPPOSÉE (ici : mur à droite, swipe à gauche) on s'en
@@ -3819,7 +3868,8 @@ new Input(document.body, {
   },
   right: () => {
     if (state !== 'course') return
-    tutoGeste('mur')
+    tutoGeste('ligne')
+    if (modeTuto && phaseTuto === 'neige' && !tutoLignes) return
     // Symétrique de `left` : sur une paroi, on s'en détache ou l'on ne fait
     // rien — jamais de changement de ligne en douce (cf. le commentaire là-haut).
     if (player.surMur !== 0) {
@@ -3964,6 +4014,25 @@ function tick(now?: number) {
   }
 
   if (state === 'depart') {
+    /*
+     * ————— 🎓 🚀 LA FICHE DU DÉPART CANON —————
+     *
+     * C'est le SEUL moment où l'on peut l'expliquer. Le départ canon se joue
+     * pendant le 3-2-1 : dit après, il est déjà passé ; dit en pleine course,
+     * il parle d'un instant qu'on ne reverra qu'à la partie suivante.
+     *
+     * ⚠️ Le décompte ATTEND. Sans le `return`, il s'écoulerait derrière la
+     * fiche : on lirait « martèle pendant le décompte » et l'on relèverait la
+     * tête sur un GO déjà parti.
+     */
+    if (modeTuto && !tutoDepartVu) {
+      if (!tutoAttend) {
+        figerTuto(DEPART, 'Avant de partir')
+        return
+      }
+      return // la fiche est là : le décompte ne bouge pas
+    }
+
     // 3… 2… 1… GO ! En duel, le départ est PROGRAMMÉ à une heure serveur
     // précise (startAt) : les deux téléphones tirent au même instant absolu,
     // quel que soit leur ping. (Avant, chacun partait à la réception du
@@ -4963,7 +5032,7 @@ function tick(now?: number) {
      */
     if (modeTuto && phaseTuto === 'neige' && !tutoAttend) {
       if (etapeTuto < ETAPES.length && distance >= ETAPES[etapeTuto].d) {
-        figerTuto(etapeTuto)
+        figerTuto(ETAPES[etapeTuto], `Étape ${etapeTuto + 1} sur ${ETAPES.length}`)
       } else if (etapeTuto >= ETAPES.length && distance >= FIN_APPRENTISSAGE) {
         passerAuPont()
       }
@@ -5176,6 +5245,8 @@ if (import.meta.env.DEV) {
         treve: Math.max(0, FANTOME_DUREE - time),
         enCourse: state === 'course',
         gele,
+        // 🎓 La ligne : le tutoriel la verrouille au début, et cela se vérifie.
+        ligne: player.currentLane,
       }
     },
   }

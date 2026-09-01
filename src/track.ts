@@ -112,7 +112,19 @@ export interface PisteImposee {
   biome?: number
   /** Le parcours exact, à la place du tirage. */
   plan?: PlannedObstacle[]
-  /** Ni plateformes, ni jarres, ni rouleaux, ni murs latéraux : la piste nue. */
+  /** Les plateformes exactes. */
+  plateformes?: PlannedPlateforme[]
+  /** Les jarres exactes — dorées comprises, avec leur parchemin choisi. */
+  jarres?: PlannedJarre[]
+  /** Les pans de mur exacts. */
+  murs?: PlannedMur[]
+  /**
+   * Tout ce qui n'est pas imposé ci-dessus est VIDE.
+   *
+   * ⚠️ Sans ce drapeau, il faudrait passer un tableau vide pour chacun des cinq
+   * plans — et l'on en oublierait un, qui se remplirait alors au hasard au
+   * milieu d'une explication.
+   */
   nu?: boolean
 }
 
@@ -739,7 +751,8 @@ export class Track {
      * le même temps, et laisserait croire en lisant le code qu'il se passe
      * quelque chose.
      */
-    this.plateformePlan = impose?.nu ? [] : buildPlateformePlan(length, seed)
+    this.plateformePlan =
+      impose?.plateformes ?? (impose?.nu ? [] : buildPlateformePlan(length, seed))
     this.plateformeIdx = 0
     this.plan = impose?.plan ?? buildPlan(length, seed, this.plateformePlan)
     this.planIdx = 0
@@ -752,9 +765,11 @@ export class Track {
     // ♾️ La dorée puise dans la MÊME table restreinte que les rouleaux : sans
     // ça, elle rendait les sorts qu’on venait d’écarter du mode.
     const sorts = infini ? TIRAGE_INFINI : TIRAGE
-    this.jarrePlan = impose?.nu
-      ? []
-      : buildJarrePlan(length, seed, occupe, avecPots, undefined, undefined, sorts)
+    this.jarrePlan =
+      impose?.jarres ??
+      (impose?.nu
+        ? []
+        : buildJarrePlan(length, seed, occupe, avecPots, undefined, undefined, sorts))
     this.jarreIdx = 0
     for (const p of this.plateformes) {
       p.active = false
@@ -766,7 +781,7 @@ export class Track {
       m.active = false
       m.mesh.visible = false
     }
-    this.murPlan = impose?.nu ? [] : buildMurPlan(length, seed)
+    this.murPlan = impose?.murs ?? (impose?.nu ? [] : buildMurPlan(length, seed))
     this.murIdx = 0
 
     // Le décor : même graine décalée que le reste, donc même paysage pour tous.
@@ -1500,13 +1515,23 @@ export class Track {
      * Le créneau renvoie toujours le même biome : le fondu n'a donc rien à
      * fondre, et la couleur ne bouge plus de la première à la dernière image.
      */
-    const amb = enCourse
-      ? this.biomeImpose >= 0
-        ? ambianceA(distance, this.courseLength, () => this.biomeImpose)
-        : this.cycle > 0
-          ? ambianceA(distance, this.cycle, (k) => this.ordreSlot(k))
-          : ambianceA(distance, this.courseLength)
-      : ambianceA(0, 1)
+    /*
+     * ⚠️ Le décor imposé vaut AUSSI hors course.
+     *
+     * Sur la grille de départ, l'ambiance retombait sur `ambianceA(0, 1)` —
+     * donc sur le premier biome, le village en flammes. Vu à l'écran : le
+     * tutoriel expliquait le départ canon devant un village orange, puis
+     * basculait sur la neige au premier mètre. Un décor qui change au moment
+     * où l'on part se lit comme un défaut d'affichage.
+     */
+    const amb =
+      this.biomeImpose >= 0
+        ? ambianceA(0, 1, () => this.biomeImpose)
+        : enCourse
+          ? this.cycle > 0
+            ? ambianceA(distance, this.cycle, (k) => this.ordreSlot(k))
+            : ambianceA(distance, this.courseLength)
+          : ambianceA(0, 1)
     this.brume.color.copy(amb.brume)
     this.brume.near = amb.brumeNear
     this.brume.far = amb.brumeFar

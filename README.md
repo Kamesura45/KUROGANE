@@ -596,8 +596,56 @@ Le bouton 🎓 de l'écran Jouer. Deux temps, et le décor change entre les deux
 
 | | Décor | Ce qui se passe |
 |---|---|---|
-| ❄️ **Apprendre** | Flancs du Fuji (雪) | La piste est **nue**. Chaque obstacle arrive seul, la course se **fige** devant, le geste s'affiche. |
+| ❄️ **Apprendre** | Flancs du Fuji (雪) | La piste est **nue**. Chaque chose arrive seule, la course se **fige** devant, le geste s'affiche. |
 | 🌉 **Courir** | Pont au clair de lune | Une vraie course, deux rivaux, plus une seule explication. |
+
+### Ce que la neige enseigne, dans cet ordre
+
+| | |
+|---|---|
+| 🚀 **Le départ canon** | **Avant le décompte**, et le décompte ATTEND |
+| ⛩️ La course, le torii | |
+| 🔥 **Le sprint final** | Les 120 derniers mètres |
+| ⬆️ Sauter | barrière basse |
+| ⬇️ Glisser | barre haute |
+| ↔️ Changer de ligne | bloc plein — **et les lignes s'ouvrent ici** |
+| 🚃 Les plateformes | une, avec sa rampe |
+| 🧱 Les pans de mur | une paroi à droite |
+| 📜 Les parchemins | une jarre dorée, Vent du Nord dedans |
+
+⚠️ **Le départ canon ne peut se dire QUE là.** Il se joue pendant le 3-2-1 :
+dit après, il est déjà passé ; dit en pleine course, il parle d'un instant
+qu'on ne reverra qu'à la partie suivante. La fiche s'affiche donc dans l'état
+« départ », et le décompte **ne s'écoule pas** tant qu'elle est là — sinon on
+lirait « martèle pendant le décompte » et l'on relèverait la tête sur un GO
+déjà parti.
+
+### 🔒 Les lignes sont verrouillées au début
+
+Gauche et droite sont **refusées** jusqu'à l'étape qui les enseigne. Un débutant
+qui dérive sur le côté rate l'obstacle qu'on vient de lui expliquer et ne
+comprend pas pourquoi : la leçon portait sur le saut, elle s'est jouée sur la
+ligne. Elles s'ouvrent à « ↔️ Changer de ligne » et ne se referment plus — la
+plateforme et la paroi en ont besoin.
+
+⚠️ **Et le coureur part TOUJOURS au milieu.** La grille répartit les coureurs de
+gauche à droite, et le tutoriel annonce deux rivaux dès son premier temps :
+`voieDe(0)` plaçait donc le joueur **sur la ligne de gauche**, alors que ses
+obstacles sont au centre et qu'il ne peut pas encore changer de ligne. Il
+regardait passer la leçon à côté de lui.
+
+### Les distances
+
+| | |
+|---|---|
+| Fiche → ce qu'elle annonce | **35 m** |
+| Objet → fiche suivante | **60 à 95 m** |
+| Longueur de la neige | **780 m** |
+
+⚠️ Au relâchement la vitesse repart de **zéro**. Les 20 m d'origine se faisaient
+à moitié à l'arrêt : l'obstacle arrivait avant qu'on ait repris son élan, et le
+premier essai était perdu d'avance. Et le mètre qui suit une plateforme ou une
+paroi est plus large que les autres — on en sort ralenti, ou en l'air.
 
 ### La partition est de la donnée
 
@@ -634,11 +682,15 @@ dans le vide en se croyant maladroit.
 
 ### Deux pièges trouvés à l'écran
 
-⚠️ **L'ambiance ne suivait pas le décor imposé.** Le décor lit `biomeDe`, mais
-les couleurs — brume, sol, lumière — passent par `ambianceA`, qui a son propre
-calcul. Le tutoriel se jouait donc **sur la neige sous la lumière orange du
-village**. Le fichier des biomes met en garde contre exactement ça ; on y est
-tombé en ajoutant un troisième chemin.
+⚠️ **L'ambiance ne suivait pas le décor imposé — deux fois.** Le décor lit
+`biomeDe`, mais les couleurs — brume, sol, lumière — passent par `ambianceA`,
+qui a son propre calcul : le tutoriel se jouait **sur la neige sous la lumière
+orange du village**. Corrigé en course… puis retrouvé **sur la grille de
+départ**, où l'ambiance retombe sur le premier biome. Un décor qui change au
+moment où l'on part se lit comme un défaut d'affichage.
+
+Le fichier des biomes met en garde contre exactement ça. On y est tombé en
+ajoutant un troisième chemin, puis un quatrième.
 
 ⚠️ **`ELAN` vaut 35 m, pas 20.** Au relâchement la vitesse repart de ZÉRO :
 20 m se faisaient à moitié à l'arrêt, l'obstacle arrivait avant qu'on ait repris
