@@ -126,7 +126,28 @@ export const MUR_PENCHE = 0.18
  * voulait forcer. Le reste du vol se pilote normalement.
  */
 const MUR_RETOUR_X = 0.25
-const SLIDE_TIME = 0.55 // durée d'une glissade (secondes)
+const SLIDE_TIME = 0.55 // durée d'une glissade AU SOL (secondes)
+/**
+ * ————— 🪂 La glissade en l'air : 5 secondes —————
+ *
+ * Appuyer sur « glisser » pendant un saut ne faisait que PLONGER : on
+ * retombait vite, et debout. Désormais le plongeon s'achève en glissade, et
+ * elle dure cinq secondes — presque dix fois la glissade au sol.
+ *
+ * ⚠️ C'est un choix de jeu, pas un réglage à équilibrer discrètement. À
+ * pleine vitesse, cinq secondes font une centaine de mètres couché : tout ce
+ * qui se passe DESSOUS passe. Ce n'est pas gratuit pour autant — couché, on
+ * ne saute plus, et tout ce qui se franchit PAR-DESSUS devient un mur. La
+ * manœuvre échange une catégorie d'obstacles contre l'autre.
+ *
+ * ⚠️ Et elle est PLATE : pas de `* this.fighter.slide`, contrairement à la
+ * glissade au sol. Ce multiplicateur porterait Sasuke (1,6) à huit secondes,
+ * là où la règle demandée dit cinq. Un chiffre annoncé au joueur ne doit pas
+ * dépendre du guerrier qu'il a pris.
+ *
+ * On en sort quand on veut : `jump()` remet `sliding` à zéro au sol.
+ */
+export const SLIDE_AIR = 5
 /**
  * Durée de la montée quand on escalade une plateforme sans rampe.
  *
@@ -481,14 +502,29 @@ export class Player {
     this.retour = true
   }
 
-  /** Glisse au sol (renvoie la durée) ou plonge en l'air (renvoie 0). */
+  /** Glisse au sol, ou plonge en glissade longue en l'air. Renvoie la durée. */
   slide(): number {
     if (this.onGround) {
       this.sliding = SLIDE_TIME * this.fighter.slide
       return this.sliding
     }
-    this.vy = -18 // en l'air : plonge vite vers le sol
-    return 0
+    /*
+     * 🪂 En l'air : on plonge ET l'on part en glissade (cf. `SLIDE_AIR`).
+     *
+     * Le plongeon reste : sans lui, on flotterait cinq secondes en position
+     * couchée avant de toucher le sol, et la manœuvre servirait à esquiver EN
+     * L'AIR au lieu de plaquer au sol. Il faut retomber vite pour que la
+     * glissade se joue là où elle a un sens.
+     *
+     * ⚠️ La glissade démarre TOUT DE SUITE, pas à l'atterrissage. `action()`
+     * fait passer « glissade » avant « saut », donc le corps s'aplatit dès
+     * l'appui : le joueur voit son geste pris en compte au lieu d'attendre le
+     * contact du sol sans savoir s'il a été entendu. Et la boîte de collision
+     * rétrécit avec lui, pendant la descente déjà.
+     */
+    this.vy = -18
+    this.sliding = SLIDE_AIR
+    return this.sliding
   }
 
   update(dt: number) {

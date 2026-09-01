@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { LANES, MUR_DUREE, MUR_PENCHE, VIRAGE_TEMPS } from './player'
+import { LANES, MUR_DUREE, MUR_PENCHE, SLIDE_AIR, VIRAGE_TEMPS } from './player'
 import { NameTag } from './nametag'
 import { PERSO_ID, buildFighter, clearFighter, cssColor, customFighter, fighterById, skinDepuisTexte, type Fighter } from './roster'
 import { Anim, MUR_COTE_NATIF, animerGuerrier, type Action } from './anims'
@@ -198,7 +198,16 @@ export class Opponent {
       // On rejoue son saut en physique locale : mêmes règles que player.ts
       this.vy = Math.min(20, Math.max(5, a.v))
     } else if (a.t === 'slide') {
-      this.slideTimer = Math.min(1.5, Math.max(0, a.d))
+      /*
+       * 🪂 Le plafond suit la glissade en l'air (5 s) et non plus la glissade
+       * au sol (1,5 s suffisaient alors).
+       *
+       * ⚠️ Il ne protège pas contre un joueur maladroit mais contre un client
+       * TRUQUÉ : une durée envoyée à 9 999 laisserait un adversaire couché —
+       * donc dans une boîte de collision réduite — pour le reste de la course.
+       * On borne à ce que le jeu peut légitimement produire, pas plus.
+       */
+      this.slideTimer = Math.min(SLIDE_AIR, Math.max(0, a.d))
     } else if (a.t === 'stumble') {
       // Il trébuche : sa vitesse chute TOUT DE SUITE dans notre extrapolation
       // (au lieu d'attendre de la mesurer sur ses prochaines positions)…

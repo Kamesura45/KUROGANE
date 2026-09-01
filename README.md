@@ -72,8 +72,61 @@
 | Changer de ligne | Swipe ⬅️ ➡️ | ← → ou Q D |
 | Sauter | Swipe ⬆️ | ↑, Z ou Espace |
 | Glisser | Swipe ⬇️ | ↓ ou S |
+| 🪂 Plonger en glissade | En l'air, swipe ⬇️ | En l'air, ↓ ou S |
 | Lancer le sort | Double-tap | E |
 | 🔥 Sprint final | Martèle l'écran | Espace ou clic |
+
+### 🪂 La glissade en plein saut
+
+Le même geste, en l'air, n'est plus le même mouvement : on **plonge**, et la
+chute se termine en **glissade de 5 secondes**.
+
+| | au sol | en plein saut |
+|---|---|---|
+| Durée | 0,55 s × le style du guerrier | **5 s**, pour tout le monde |
+| Retombée | — | **63 % plus rapide** qu'une chute libre (mesuré : 0,32 s → 0,12 s depuis 2,18 m) |
+| Boîte de collision | réduite | réduite (1,45 m → **0,63 m**) |
+
+**Ce n'est pas une esquive gratuite, c'est un échange.** Couché, tout ce qui
+se passe au-dessus de toi te rate — et tout ce qui se franchit par-dessus
+devient un mur, puisque tu ne sautes plus. Cinq secondes à pleine vitesse font
+une centaine de mètres dans cette posture. **Sauter** te relève avant la fin :
+c'est la sortie de secours, et elle est immédiate.
+
+Trois décisions valent d'être dites, parce qu'elles se voient à la manette :
+
+- **La glissade démarre à l'appui, pas à l'atterrissage.** `action()` fait
+  passer « glissade » avant « saut », donc le corps s'aplatit dès la touche
+  enfoncée. L'armer au contact du sol aurait laissé une demi-seconde sans le
+  moindre signe que le geste avait été entendu.
+- **Le plongeon reste.** Sans lui, on flotterait cinq secondes en position
+  couchée : la manœuvre servirait à esquiver *en l'air* au lieu de plaquer au
+  sol. Il faut retomber vite pour que la glissade se joue là où elle a un sens.
+- **La durée est PLATE**, sans `fighter.slide`. Ce multiplicateur porterait
+  Sasuke (1,6) à huit secondes. Un chiffre annoncé au joueur ne doit pas
+  dépendre du guerrier qu'il a pris.
+
+⚠️ **En ligne, le plafond de durée a suivi.** `opponent.ts` bornait une
+glissade reçue à 1,5 s — assez pour la glissade au sol, plus pour celle-ci :
+un adversaire se serait relevé sous nos yeux pendant qu'il glissait encore chez
+lui. Le plafond vaut désormais `SLIDE_AIR`. Il ne protège pas d'un joueur
+maladroit mais d'un **client truqué** : une durée envoyée à 9 999 laisserait un
+concurrent couché — donc dans une boîte réduite — pour le reste de la course.
+
+#### Le banc
+
+```bash
+npm run glissade:test
+```
+
+Rien de tout cela ne se vérifie à l'œil : cinq secondes passent vite, la boîte
+de collision est invisible, et un corps aplati ne se chronomètre pas en le
+regardant. Le banc rejoue les séquences image par image avec le vrai `Player`.
+
+⚠️ Sa première version mesurait le plongeon **dès la deuxième image du saut** :
+on était encore à 22 cm du sol, la chute prenait 0,02 s, et le contrôle passait
+sans rien prouver — n'importe quoi serait tombé aussi vite de si bas. Il monte
+maintenant jusqu'au sommet et compare à une chute libre depuis la même hauteur.
 
 ## 🚀 Lancer le jeu
 
@@ -251,6 +304,7 @@ Six défauts réparés, tous invisibles au typage :
 npm run plateformes:test   # 27 plateformes sur une vraie course : 21 arrêtent,
                            # 6 laissent passer dessous, 27 portent sur le dessus
 npm run mur:test           # le flanc bloque de côté, la voie est libre au nez
+npm run glissade:test      # la glissade au sol (0,55 s) et celle en vol (5 s)
 ```
 
 ## ⛩️ Le portique et sa forme creuse
