@@ -62,10 +62,30 @@ export class Input {
 
       if (h.bloque?.()) return // ⏸ en pause, le clavier ne commande plus rien
 
-      if (h.isSprint() && (k === ' ' || k === 'enter')) {
-        // e.repeat : maintenir la touche enfoncée ne donne RIEN. Sans ça, la
-        // répétition automatique du clavier martèlerait toute seule à ~30/s.
-        if (!e.repeat) h.sprint()
+      /*
+       * ————— 🔥 LE SPRINT FINAL : ON MARTÈLE, ET RIEN D'AUTRE —————
+       *
+       * ⚠️ Le `return` couvre TOUTES les touches, pas seulement la barre
+       * d'espace. C'est la correction d'une injustice entre les deux
+       * plateformes : le tactile sortait déjà d'ici sans rien faire (voir
+       * `touchend`), pendant que les flèches, elles, continuaient de changer
+       * de ligne. Un joueur au clavier pouvait donc esquiver dans les derniers
+       * mètres, un joueur au pouce non — sur une course qui se joue au dixième,
+       * ce n'était pas un détail.
+       *
+       * Rien n'est perdu au passage : la piste est VIDE sur ces mètres-là
+       * (`garde = SPRINT_ZONE` côté track.ts). Il n'y a rien à esquiver, donc
+       * rien à regretter — seulement une cadence à tenir.
+       *
+       * ⚠️ Vaut aussi pour le DÉPART CANON, l'autre moment où `isSprint()` est
+       * vrai : on est sur la grille, on martèle, on ne se déplace pas.
+       */
+      if (h.isSprint()) {
+        if (k === ' ' || k === 'enter') {
+          // e.repeat : maintenir la touche enfoncée ne donne RIEN. Sans ça, la
+          // répétition automatique du clavier martèlerait toute seule à ~30/s.
+          if (!e.repeat) h.sprint()
+        }
         return
       }
 

@@ -305,6 +305,8 @@ npm run plateformes:test   # 27 plateformes sur une vraie course : 21 arrêtent,
                            # 6 laissent passer dessous, 27 portent sur le dessus
 npm run mur:test           # le flanc bloque de côté, la voie est libre au nez
 npm run glissade:test      # la glissade au sol (0,55 s) et celle en vol (5 s)
+npm run sprint:test        # pendant le sprint, clavier et tactile se taisent
+                           # pareil — et la zone est bien vide d'obstacles
 ```
 
 ## ⛩️ Le portique et sa forme creuse
@@ -1878,8 +1880,42 @@ les gains (ligne, sillage, sprint, chaîne) sans rien donner à lire.
 ## 🔥 Le sprint final : départager sans refaire la course
 
 Sur les **120 derniers mètres**, marteler l'écran fait accélérer. La zone est
-volontairement **vidée d'obstacles** : sur mobile, on ne peut pas swiper pour
-esquiver ET marteler en même temps.
+volontairement **vidée d'obstacles** : on ne peut pas swiper pour esquiver ET
+marteler en même temps.
+
+### ⚖️ Personne ne se déplace pendant le sprint
+
+Ni changement de ligne, ni saut, ni glissade, ni sort — **au clavier comme au
+pouce**. Seul le martèlement passe.
+
+⚠️ **Ça n'a pas toujours été vrai, et c'était une injustice entre plateformes.**
+Le tactile respectait déjà la règle : `touchend` sortait sans rien faire dès que
+`isSprint()`. Le clavier, lui, n'interceptait QUE la barre d'espace — les
+flèches continuaient de changer de ligne. Un joueur au clavier pouvait donc
+esquiver dans la dernière ligne droite, un joueur au pouce non. Sur une course
+qui se départage au dixième de seconde, l'avantage était décisif, et invisible
+des deux côtés.
+
+⚠️ **Rien n'est perdu au passage**, et c'est ce qui rend la coupure acceptable :
+la piste est **vide** sur ces mètres-là. Mesuré par le banc sur une vraie course
+— 281 obstacles semés, **0 après 1 800 m**. Il n'y a rien à esquiver, donc rien
+à regretter ; seulement une cadence à tenir.
+
+⚠️ La règle vaut aussi pour le **départ canon**, l'autre moment où `isSprint()`
+est vrai : on est sur la grille, on martèle, on ne se déplace pas.
+
+```bash
+npm run sprint:test
+```
+
+Le banc ne vérifie pas seulement que chaque plateforme se tait : il vérifie
+qu'elles se taisent **de la même façon**, geste par geste. Une parité qu'on ne
+mesure pas se réécarte à la première retouche — celle-ci avait tenu des mois.
+
+⚠️ Sa première version exigeait un silence COMPLET côté tactile, et échouait sur
+un comportement correct : pendant le sprint, un doigt qui se pose **est** un coup
+de martèlement, swipe ou pas. Il mesure maintenant l'absence de *déplacement*,
+pas l'absence de réaction.
 
 Le réglage devait tenir deux promesses contradictoires — récompenser le skill,
 sans que le spam ne remplace le pilotage. On l'a donc calibré par simulation
