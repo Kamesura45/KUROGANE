@@ -677,6 +677,21 @@ d'un mètre.*
 Pas de ligne d'arrivée, pas de rivaux, pas de chrono : on court jusqu'à ce que
 les flammes vous rattrapent, et l'on marque en **mètres**.
 
+### 🟩 Un bouton plein, en jade
+
+Dans le menu **Jouer**, « Course sans fin » est un bouton **plein**, comme
+« Partie rapide » — mais vert au lieu de vermillon.
+
+Il était en contour discret, ce qui le rangeait visuellement avec les écrans de
+réglage alors qu'il **lance une course**. Ce sont les deux seuls boutons de cet
+écran qui font partir tout de suite ; ils doivent se ressembler.
+
+Et deux teintes plutôt qu'une, parce qu'ils sont voisins : sur un bouton qu'on
+vise du pouce sans relire, la **couleur** dit lequel des deux on va lancer.
+
+⚠️ Le jade `#3fa673` n'est pas le `#2f6050` du bouton « prêt » du salon. Ce
+dernier est plus sombre et dit un **état** — « je suis prêt » — pas une action.
+
 ### La règle tient en une phrase
 
 **Cinq obstacles encaissés, et c'est fini.** Chacun rapproche le feu d'un
@@ -1100,12 +1115,20 @@ dans l'état synchronisé : les autres joueurs n'ont rien à en faire.
 
 ⚠️ **Le pays et la région sont DÉCLARATIFS.** Rien ne les vérifie et rien ne le
 peut : le drapeau est une façon de se présenter, pas un recensement.
-### 🔎 Chercher un pseudo
+### 🔎 Chercher un pseudo — mais pas dans « Récentes »
 
-Les trois onglets portent un champ de recherche, à la place du bouton
-« Effacer » qui l'occupait. Un classement mondial sans recherche ne sert qu'à
-ceux du haut : au-delà de la première page, on ne peut plus se trouver soi-même
-ni suivre un camarade.
+Le champ de recherche a pris la place du bouton « Effacer ». Un classement
+mondial sans recherche ne sert qu'à ceux du haut : au-delà de la première page,
+on ne peut plus se trouver soi-même ni suivre un camarade.
+
+⚠️ **Sous « Récentes », il disparaît.** Cet onglet ne contient que **tes**
+courses : le seul pseudo qu'on puisse y trouver est le sien. Au mieux le champ
+ne faisait rien ; au pire une lettre de trop vidait l'écran et l'on croyait
+avoir perdu ses scores.
+
+Et le champ est **vidé** en même temps qu'il est masqué. Cacher un filtre
+encore actif serait le pire des deux mondes : la liste resterait amputée, et
+la cause aurait disparu de l'écran.
 
 Deux détails qui décident si elle sert vraiment :
 
@@ -1119,6 +1142,50 @@ Deux détails qui décident si elle sert vraiment :
 Aucun appel réseau de plus : les onglets ont déjà en mémoire la liste qu'ils
 viennent d'afficher. Interroger le serveur à chaque lettre aurait fait **une
 requête par frappe** pour filtrer des données déjà sous la main.
+
+### 📏 La liste écrasée à sept pixels
+
+Sur une fenêtre basse, le classement ne montrait **plus rien** : un mince trait
+entre le texte et le bouton OK, avec un bout de ligne coupé dedans.
+
+Mesuré sur une fenêtre de 420 px de haut :
+
+| | |
+|---|---|
+| Hauteur visible de la liste | **7 px** |
+| Hauteur réelle du contenu | 763 px |
+| Lignes lisibles | **0,13** |
+| L'écran défilait-il ? | **non** |
+
+Cette dernière ligne est la clé. L'écran **ne débordait pas**, donc n'offrait
+aucune barre de défilement : la liste avait absorbé à elle seule tout ce qui
+manquait, et il ne restait plus rien qui dépasse.
+
+Un écran de menu est une **colonne flex**. L'en-tête, les deux rangées
+d'onglets, la recherche et le bouton OK ont tous une taille dictée par leur
+contenu : ils ne peuvent pas rétrécir sous elle. La liste, elle, **peut** — un
+conteneur qui défile a un `min-height` implicite de **zéro**, puisque son
+contenu est déjà réputé ne pas y tenir. Le navigateur fait donc la seule chose
+possible : il prend tout le déficit sur le seul élément qui accepte de le
+prendre. Plus la fenêtre est basse, plus la liste maigrit — jusqu'à disparaître.
+
+La correction tient en un mot : `flex: none`. La liste **refuse de rétrécir**,
+garde `min(son contenu, 52vh)`, et c'est désormais l'écran qui déborde — donc
+qui défile, ce qu'il sait faire depuis toujours.
+
+| | avant | après |
+|---|---|---|
+| Liste visible (fenêtre 420 px) | 7 px | **219 px** (≈ 4 lignes) |
+| Bouton OK atteignable | oui | oui |
+| Liste visible (téléphone 812 px) | 422 px | 422 px |
+
+⚠️ **Rien ne bouge sur un téléphone normal.** Le `flex: none` ne se voit que
+là où la place manquait vraiment ; ailleurs la liste faisait déjà sa taille.
+
+⚠️ **Trois autres listes avaient le même défaut** et sont corrigées de la même
+façon : celle des salons, celle des joueurs du lobby et le podium de fin de
+course. Le défaut ne venait pas du classement mais du **motif** — une liste qui
+défile, seule élastique au milieu d'éléments rigides.
 
 ### 🌍 Les couleurs qu'on porte
 

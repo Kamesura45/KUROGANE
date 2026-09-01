@@ -1277,7 +1277,23 @@ export class Menu {
     // 🚧 Le mode à venir n'a ni onglets, ni recherche : il n'a rien à montrer.
     // On ne laisse pas des commandes qui ne commandent rien.
     document.getElementById('scoresOnglets')?.classList.toggle('hidden', dev)
-    this.el.scoresRech.parentElement?.classList.toggle('hidden', dev)
+
+    /*
+     * 🔎 LA RECHERCHE DISPARAÎT SOUS « RÉCENTES ».
+     *
+     * Elle sert à retrouver QUELQU'UN dans une longue liste. Mais « Récentes »
+     * ne contient que TES propres courses : le seul pseudo qu'on puisse y
+     * trouver est le sien. Au mieux le champ ne fait rien, au pire une lettre
+     * de trop vide l'écran et l'on croit avoir perdu ses scores.
+     *
+     * ⚠️ On efface aussi ce qui était tapé. Masquer un filtre encore actif
+     * cacherait la CAUSE d'une liste incomplète tout en la laissant agir —
+     * le pire des deux mondes, car il ne resterait plus rien à l'écran pour
+     * expliquer le trou.
+     */
+    const cherchable = !dev && this.ongletScore !== 'recentes'
+    if (!cherchable) this.el.scoresRech.value = ''
+    this.el.scoresRech.parentElement?.classList.toggle('hidden', !cherchable)
 
     /*
      * 🗺️ Le filtre n'apparaît QUE sous « Géo », et c'est tout le sens de cet

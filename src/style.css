@@ -1049,6 +1049,19 @@ body {
   box-shadow: none;
   color: #f0e8d8;
 }
+/*
+ * ♾️ Le jade de la course sans fin — le même bouton plein que « Partie
+ * rapide », dans une autre couleur.
+ *
+ * Un vert de bambou plutôt qu'un vert vif : il tient dans la palette de
+ * l'estampe (vermillon, or, encre) au lieu de la trouer. Et il se distingue
+ * du #2f6050 du bouton « prêt », plus sombre, qui dit un ÉTAT et non une
+ * action.
+ */
+#overlay button.vert {
+  background: #3fa673;
+  box-shadow: 0 6px 22px rgba(63, 166, 115, 0.35);
+}
 /* Discret : réglages, choix du guerrier, retour */
 #overlay button.ghost {
   display: flex;
@@ -1657,6 +1670,9 @@ body {
   gap: 6px;
   max-height: 30vh;
   overflow-y: auto;
+  /* Ne rétrécit jamais : sur une fenêtre basse, une liste qui défile se
+     laisse réduire à zéro. Voir `.scores` pour le détail. */
+  flex: none;
 }
 .salonempty {
   font-size: 0.85rem;
@@ -1734,6 +1750,9 @@ body {
   max-height: 26vh;
   overflow-y: auto;
   width: 100%;
+  /* Ne rétrécit jamais : sur une fenêtre basse, une liste qui défile se
+     laisse réduire à zéro. Voir `.scores` pour le détail. */
+  flex: none;
 }
 .lobbyrow {
   display: flex;
@@ -1829,6 +1848,9 @@ body {
   margin: 16px 0 4px;
   max-height: 46vh;
   overflow-y: auto;
+  /* Ne rétrécit jamais : sur une fenêtre basse, une liste qui défile se
+     laisse réduire à zéro. Voir `.scores` pour le détail. */
+  flex: none;
 }
 .resrow {
   display: flex;
@@ -2003,10 +2025,26 @@ body {
   gap: 6px;
   width: 100%;
   margin: 4px 0 14px;
-  /* Dix lignes ne tiennent pas sur un écran de téléphone : on fait défiler
-     la LISTE, pas la page — le bouton « Effacer » doit rester atteignable. */
+  /* Dix lignes ne tiennent pas sur un téléphone : on fait défiler la LISTE
+     plutôt que la page, pour garder les onglets sous le pouce. */
   max-height: 52vh;
   overflow-y: auto;
+  /*
+   * ⚠️ `flex: none` — LA LIGNE QUI EMPÊCHE LA LISTE DE DISPARAÎTRE.
+   *
+   * L'écran est une colonne flex, et la liste en était le seul élément
+   * élastique : sur une fenêtre basse, elle encaissait À ELLE SEULE tout ce
+   * qui manquait. Mesuré sur une fenêtre de 420 px de haut : 7 px de liste
+   * pour 763 px de contenu — un huitième de ligne — pendant que l'en-tête,
+   * les deux rangées d’onglets et le bouton OK gardaient leur pleine taille.
+   * Et l'écran ne défilait même pas : plus rien ne dépassait de lui.
+   *
+   * Un conteneur qui défile a un `min-height` implicite de ZÉRO — rien ne
+   * l'empêche d'être réduit à néant. En refusant de rétrécir, la liste garde
+   * min(son contenu, 52vh), et c'est l'ÉCRAN qui déborde donc qui défile —
+   * ce qu'il sait faire depuis toujours.
+   */
+  flex: none;
 }
 .score {
   display: flex;
