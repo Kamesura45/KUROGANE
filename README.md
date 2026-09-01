@@ -1512,6 +1512,14 @@ toutes dans [src/net.ts](src/net.ts) et [server/src/RaceRoom.ts](server/src/Race
 | 📋 **Liste publique** | Les salons publics ouverts, listés en temps réel. |
 | ⚡ **Partie rapide** | Remplit un salon public partagé (`joinOrCreate` sur le code `PUBLIC`) — l'auto-remplissage jusqu'à 10. |
 
+⚠️ **La partie rapide est en tête de l'écran, et en vermillon.** C'est le geste
+par défaut : on vient ici pour COURIR, et c'est la seule des deux qui parte
+tout de suite — créer un salon demande ensuite d'attendre quelqu'un, et n'a de
+sens qu'entre gens qui se connaissent. Le vermillon dit « c'est par là », le
+contour dit « et sinon, il y a ça ». Les deux inversés faisaient du cas
+particulier la porte principale, et l'on créait un salon vide en croyant lancer
+une partie.
+
 Le routage repose sur `filterBy(['code'])` : `joinOrCreate('race', { code })`
 tombe sur le salon qui porte ce code, ou en crée un. La **liste publique**
 passe par la salle `LobbyRoom` de Colyseus, tenue à jour en temps réel

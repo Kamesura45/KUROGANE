@@ -721,9 +721,22 @@
           <button class="back" data-back aria-label="Retour">‹</button>
           <h2>Jouer en ligne</h2>
         </header>
+        <!--
+          ⚡ LA PARTIE RAPIDE EN PREMIER, ET EN ROUGE.
+
+          C'est le geste par défaut : on arrive ici pour COURIR, et la partie
+          rapide est la seule des deux qui parte tout de suite. Créer un salon
+          demande ensuite d'attendre quelqu'un, et n'a de sens que si l'on
+          joue avec des gens qu'on connaît.
+
+          Le vermillon dit « c'est par là » ; le contour dit « et sinon, il y
+          a ça ». Les deux inversés faisaient du cas particulier la porte
+          principale, et l'on créait un salon vide en croyant lancer une
+          partie.
+        -->
         <div class="stack">
-          <button id="btnCreate" class="primary">🏮 CRÉER UN SALON</button>
-          <button id="btnQuick" class="secondary">⚡ PARTIE RAPIDE</button>
+          <button id="btnQuick" class="primary">⚡ PARTIE RAPIDE</button>
+          <button id="btnCreate" class="secondary">🏮 CRÉER UN SALON</button>
         </div>
         <div class="field">
           <label for="joinCode">Rejoindre par code</label>
