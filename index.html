@@ -131,8 +131,8 @@
       <div class="pausebox">
         <b id="pauseTitre">⏸ Pause</b>
         <small id="pauseMot"></small>
-        <button id="btnReprendre" class="primary">▶ REPRENDRE</button>
-        <button id="btnQuitterPartie" class="secondary">✕ QUITTER</button>
+        <button id="btnReprendre" class="primary"><span class="ic">▶</span> REPRENDRE</button>
+        <button id="btnQuitterPartie" class="secondary"><span class="ic">✕</span> QUITTER</button>
       </div>
     </div>
     <!-- La progression, en colonne à gauche : le départ en bas, le torii en
@@ -782,7 +782,7 @@
         <div id="botpicklabel">Combien de rivaux ?</div>
         <div id="botrow"></div>
         <div id="botnames"></div>
-        <button id="btnGo" class="primary">⛩️ EN PISTE</button>
+        <button id="btnGo" class="primary"><span class="ic">⛩️</span> EN PISTE</button>
       </section>
 
       <!-- ▶️ JOUER : les quatre façons d'entrer en piste, plus le vestiaire.
@@ -799,11 +799,11 @@
             mais AU BLOC DES MODES. On est venu choisir entre trois tuiles, la
             question du moment est « laquelle », pas « comment on saute ».
           -->
-          <button id="btnAideModes" class="ghost aidebtn" aria-label="Aide sur les modes">❓</button>
+          <button id="btnAideModes" class="ghost aidebtn" aria-label="Aide sur les modes"><span class="ic">❓</span></button>
           <!-- 🎓 Le tutoriel : deux temps, la neige pour apprendre et le pont
                pour courir. Il quitte les menus tout de suite — ce qu'il a à
                dire, il le dit sur la piste, l'obstacle devant les yeux. -->
-          <button id="btnTuto" class="ghost aidebtn" aria-label="Tutoriel">🎓</button>
+          <button id="btnTuto" class="ghost aidebtn" aria-label="Tutoriel"><span class="ic">🎓</span></button>
         </header>
         <!--
           ————— 🎴 LES MODES EN TUILES : TROIS EN HAUT, DEUX EN BAS —————
@@ -883,8 +883,8 @@
           partie.
         -->
         <div class="stack">
-          <button id="btnQuick" class="primary">⚡ PARTIE RAPIDE</button>
-          <button id="btnCreate" class="secondary">🏮 CRÉER UN SALON</button>
+          <button id="btnQuick" class="primary"><span class="ic">⚡</span> PARTIE RAPIDE</button>
+          <button id="btnCreate" class="secondary"><span class="ic">🏮</span> CRÉER UN SALON</button>
         </div>
         <div class="field">
           <label for="joinCode">Rejoindre par code</label>
@@ -904,7 +904,7 @@
         <div class="field">
           <div class="row spread">
             <label>Salons ouverts</label>
-            <button id="btnRefresh" class="ghost" aria-label="Rafraîchir">↻</button>
+            <button id="btnRefresh" class="ghost" aria-label="Rafraîchir"><span class="ic">↻</span></button>
           </div>
           <div id="salonList" class="salonlist"></div>
         </div>
@@ -918,8 +918,8 @@
           <!-- Le vestiaire et l'aide depuis le salon : on y revient en
                refermant, on ne quitte pas la partie pour changer de guerrier
                ou lire une fiche. -->
-          <button id="btnLobbyRoster" class="ghost aidebtn" aria-label="Changer de guerrier">🥷</button>
-          <button id="btnLobbyHelp" class="ghost aidebtn" aria-label="Voir les sorts">📜</button>
+          <button id="btnLobbyRoster" class="ghost aidebtn" aria-label="Changer de guerrier"><span class="ic">🥷</span></button>
+          <button id="btnLobbyHelp" class="ghost aidebtn" aria-label="Voir les sorts"><span class="ic">📜</span></button>
         </header>
         <div id="lobbyHint" class="lobbyhint"></div>
         <div id="lobbyList" class="lobbylist"></div>
@@ -933,12 +933,12 @@
               placeholder="Message…"
               autocomplete="off"
             />
-            <button id="btnChatSend" class="ghost" aria-label="Envoyer">➤</button>
+            <button id="btnChatSend" class="ghost" aria-label="Envoyer"><span class="ic">➤</span></button>
           </div>
         </div>
         <div class="row">
           <button id="btnReady" class="primary grow">JE SUIS PRÊT</button>
-          <button id="btnStart" class="primary grow hidden">⛩️ LANCER</button>
+          <button id="btnStart" class="primary grow hidden"><span class="ic">⛩️</span> LANCER</button>
         </div>
       </section>
 
@@ -979,7 +979,7 @@
 
         <div id="resultsBody"></div>
         <div class="row fin-row">
-          <button id="btnReplay" class="primary hidden">🔄 REJOUER</button>
+          <button id="btnReplay" class="primary hidden"><span class="ic">🔄</span> REJOUER</button>
           <button id="btnLobby" class="lobby hidden">RETOUR AU LOBBY</button>
           <button id="btnQuitResults" class="secondary">QUITTER</button>
         </div>

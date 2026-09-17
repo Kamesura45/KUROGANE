@@ -886,6 +886,61 @@ hauteur. Une rangée en dents de scie se lit comme un défaut.
 qui arrive, et un sigle qu'il faut deviner fait hésiter devant le bouton — c'est
 là qu'on repart au menu au lieu de lancer une course.
 
+## 🎬 Les boutons répondent
+
+Deux registres, et ils ne parlent pas au même joueur.
+
+**Le pressage vaut partout, doigt compris.** C'est le seul retour dont dispose
+un téléphone — pas de survol, pas de curseur — et il n'en avait aucun qui DURE :
+`scale(0.97)` sans transition, c'est un saut, pas un geste. Descente sèche
+(0,07 s), remontée qui rebondit (0,22 s, courbe qui dépasse) : c'est l'asymétrie
+qui donne la matière. La pause du HUD s'enfonce aussi — c'est le bouton le plus
+touché du jeu, et toujours en pleine course.
+
+**Le survol reste sous `hover: hover` et `pointer: fine`.** Sur un écran
+tactile, `:hover` reste COLLÉ après le tap : le bouton qu'on vient de toucher
+garderait son engrenage en rotation jusqu'au tap suivant. *Vérifié en fenêtre
+mobile émulée : la requête média répond faux, et le pressage, lui, reste.*
+
+| | Au survol |
+|---|---|
+| Plein | il se soulève de 2 px, son ombre se creuse |
+| Discret (`.ghost`, `.secondary`) | sa bordure s'allume dans l'or de l'estampe |
+| Onglet (`.seg`) | il s'éclaire **sans se soulever** — il vit dans une rainure |
+| Retour `‹` | il part vers la GAUCHE : la direction dit la fonction |
+| Mort (`:disabled`) | **rien** |
+
+⚠️ **Un bouton mort ne bouge pas.** « En cours de dev… » qui se soulève promet
+qu'il répond, et l'on tape dessus trois fois avant de comprendre : tout le
+travail du liséré tireté serait défait par deux pixels.
+
+⚠️ **L'icône vit dans son propre `<span class="ic">`.** Un nœud de texte ne se
+transforme pas : dans « ⚡ PARTIE RAPIDE » d'un seul bloc, c'est l'étiquette
+ENTIÈRE qui partirait avec l'éclair. Dix-huit boutons portent ce span, et chacun
+a son geste — l'engrenage tourne, la coupe se soulève, l'éclair frappe, la
+lanterne se balance, le torii grandit, le rouleau se déroule, le message part.
+Une icône qui bouge dit ce que fait le bouton avant qu'on ait lu le mot.
+
+⚠️ **Le bleu du lobby garde sa propre lueur.** Le survol général creuse une ombre
+VERMILLON, et un bouton bleu posé sur un halo rouge a l'air d'une erreur de
+rendu. La feuille balayée n'avait que deux cas : le retour au lobby, et le vert
+du « prêt ».
+
+⚠️ **Les tuiles de Jouer arrivent en `backwards`, jamais en `forwards`.** Une
+animation en `forwards` garde la main sur `transform` APRÈS la fin : elle
+écraserait le `translateY(-2px)` du survol, et les tuiles seraient les seuls
+boutons du jeu à ne pas se soulever. `backwards` évite aussi de poser
+`opacity: 0` sur la tuile elle-même — donc rien ne reste invisible quand le
+mouvement est coupé. *Vérifié : animation coupée, les cinq tuiles restent à
+opacité 1.*
+
+⚠️ **Le bloc « mouvement réduit » ne nomme plus les boutons un par un.** Ils
+étaient cinq, ils sont dix-huit : une liste nominative se serait désynchronisée
+au premier bouton ajouté, et personne ne s'en serait aperçu — un défaut
+d'accessibilité ne se voit pas sur l'écran de celui qui l'écrit. Le PRESSAGE, en
+revanche, reste : il devient instantané, sans rebond. On coupe le mouvement
+décoratif, pas le retour.
+
 ## 🧭 Le chemin de retour dans les menus
 
 Les écrans retiennent **d'où l'on vient** dans une **pile**, pas dans un repère
