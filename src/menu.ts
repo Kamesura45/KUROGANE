@@ -1495,7 +1495,27 @@ export class Menu {
     for (const [id, nom] of Object.entries(ART)) {
       const b = document.getElementById(id)
       if (!b) continue
-      const src = `ui/${nom}.png`
+      /*
+       * ⚠️ L'ADRESSE EST RENDUE ABSOLUE AVANT D'ENTRER DANS LA VARIABLE CSS.
+       *
+       * Un `url()` relatif glissé dans une propriété personnalisée n'est pas
+       * résolu là où on l'écrit, mais là où la variable est UTILISÉE : dans la
+       * feuille de style. En dev, Vite l'injecte dans la page et tout va bien ;
+       * en production elle vit dans `/assets/`, et `ui/pause.png` y devenait
+       * `/assets/ui/pause.png` — un 404.
+       *
+       * Mesuré sur kurogane-alpha.vercel.app : `Image()` chargeait le bon
+       * fichier (200), la classe `peint` était donc posée, `font-size: 0`
+       * effaçait le ⏸… et le fond pointait sur le 404. Un bouton INVISIBLE qui
+       * répondait quand même — exactement ce que voyaient les autres appareils.
+       * La garantie du commentaire ci-dessus (« chargée avant d'être posée »)
+       * ne valait rien tant que le script et la feuille ne demandaient pas la
+       * même adresse.
+       *
+       * Résolue contre `document.baseURI`, elle reste relative à la PAGE : le
+       * jeu peut toujours vivre dans un sous-dossier.
+       */
+      const src = new URL(`ui/${nom}.png`, document.baseURI).href
       const img = new Image()
       img.onload = () => {
         b.style.setProperty('--art', `url("${src}")`)

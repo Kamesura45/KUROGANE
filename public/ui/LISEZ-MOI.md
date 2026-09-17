@@ -37,6 +37,17 @@ liseré pâle tout autour.
 une entrée orpheline, c'est un 404 à chaque ouverture du jeu, dans la console de
 quiconque cherchera un vrai problème.
 
+## ⚠️ Chargée ne veut pas dire affichée
+
+`peindre()` rend l'adresse **absolue** avant de la glisser dans `--art`. Un
+`url()` relatif dans une variable CSS se résout contre la feuille de style qui
+l'utilise — et en production, elle vit dans `/assets/`.
+
+C'est arrivé : sur le site en ligne, l'image chargeait (`ui/pause.png`, 200), la
+classe `peint` était posée, et le fond pointait sur `/assets/ui/pause.png`
+(404). Le bouton pause était invisible sur les autres appareils, et répondait
+quand même. En dev, rien ne se voyait : Vite injecte la feuille dans la page.
+
 ## Ce qui se passe si le fichier manque
 
 **Rien de cassé.** `menu.ts` charge l'image AVANT de la poser ; sans elle, le

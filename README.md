@@ -565,6 +565,25 @@ texte** — donc invisible. On ne pourrait plus ni lancer une partie, ni sortir
 d'une pause. Tant que le fichier ne répond pas, le bouton garde exactement
 l'apparence qu'il avait.
 
+### Chargée ne veut pas dire affichée
+
+⚠️ **Le bouton pause était invisible en production — et il répondait quand même.**
+`menu.ts` pose l'adresse de l'image dans une variable CSS (`--art`) ; or un
+`url()` relatif dans une propriété personnalisée n'est pas résolu là où on
+l'écrit, mais **là où la variable est UTILISÉE** : dans la feuille de style. En
+développement, Vite l'injecte dans la page et tout va bien ; en production elle
+vit dans `/assets/`, et `ui/pause.png` y devenait `/assets/ui/pause.png`.
+
+Mesuré sur le site en ligne : `ui/pause.png` répondait **200**, la classe `peint`
+était donc posée, `font-size: 0` effaçait le ⏸… et le fond pointait sur un **404**.
+La garantie de la section précédente ne valait rien tant que le script et la
+feuille ne demandaient pas la même adresse.
+
+L'adresse est donc rendue absolue (`new URL(src, document.baseURI)`) avant
+d'entrer dans la variable. Elle reste relative à la PAGE : le jeu peut toujours
+vivre dans un sous-dossier. *Vérifié sur la vraie feuille de production : avec
+l'ancienne adresse, rien en haut à droite ; avec la nouvelle, le 休憩 apparaît.*
+
 ### Deux pièges de cascade, tous deux mesurés
 
 ⚠️ **`.ghost` gagnait sur `.peint`.** Même spécificité (`#overlay button.ghost`
@@ -1303,6 +1322,7 @@ le dit franchement au lieu de laisser croire à un répit.
 |---|---|---|
 | Le jeu | **arrêté** | continue |
 | Le bouton | ▶ REPRENDRE | ↩ RETOUR À LA COURSE |
+| La reprise | **3, 2, 1** | immédiate |
 | Quitter | retour au menu | `net.leave()` **puis** retour au menu |
 
 Le `leave` n'est pas une politesse : sans lui, le salon nous garderait en course
@@ -1321,6 +1341,34 @@ reprise l'avalerait d'un coup — le coureur ferait un bond de plusieurs mètres
 travers les obstacles. *Vérifié : 62 m avant la pause, 79 m une seconde et demie
 après la reprise. Aucun saut.*
 
+
+### ⏳ La reprise en 3, 2, 1
+
+Reprendre ne relance plus la course à l'instant du clic. Le doigt qui vient de
+toucher « Reprendre » est encore en l'air, loin de la piste : repartir tout de
+suite, c'est se prendre l'obstacle qu'on avait devant soi avant d'avoir reposé les
+yeux dessus. Trois secondes, et le **même 3-2-1 qu'au départ** — un décompte qu'on
+connaît déjà n'a pas besoin d'être expliqué.
+
+⚠️ **Le monde reste figé pendant le décompte, et le verrou des gestes reste mis.**
+Un swipe nerveux pendant le « 2 » ne doit pas faire sauter le coureur avant le GO.
+
+⚠️ **Pas de décompte là où rien n'était figé** : en ligne (la course a continué
+sans nous — décompter ferait perdre trois secondes de plus à celui qui revient),
+pendant le 3-2-1 du départ (qui est déjà un décompte, et qui repart tout seul là
+où il s'était arrêté), et sur une fiche du tutoriel (la piste est gelée de toute
+façon).
+
+⚠️ **Il avance au temps BORNÉ de la boucle**, pas à l'horloge murale. Un onglet mis
+en arrière-plan pendant le « 2 » ne reçoit plus d'images : à l'horloge murale, le
+décompte expirerait sans témoin et la course repartirait pendant qu'on regarde
+ailleurs.
+
+Remettre en pause pendant le décompte l'annule et fige de nouveau.
+
+*Vérifié dans une vraie course : 3 à 0 ms, 2 à 1 010 ms, 1 à 2 010 ms, GO à
+3 010 ms. Le chrono reste à 29,0 s jusqu'au GO, puis repart. Une pause pendant le
+décompte : le chiffre disparaît, et le chrono ne bouge plus.*
 
 ### ⌨️ La touche T, et le bouton discret
 

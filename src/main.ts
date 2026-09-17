@@ -489,6 +489,25 @@ let gele = false
  * coin du code.
  */
 let enPause = false
+/*
+ * ————— ⏳ LA REPRISE EN 3, 2, 1 —————
+ *
+ * « Reprendre » ne relance plus la course à l'instant du clic. Le doigt qui
+ * vient de toucher le bouton est encore en l'air, loin de la piste : repartir
+ * tout de suite, c'est se prendre l'obstacle qu'on avait devant soi avant
+ * d'avoir reposé les yeux dessus. Trois secondes, et le même 3-2-1 qu'au
+ * départ — un décompte qu'on connaît déjà n'a pas besoin d'être expliqué.
+ *
+ * ⚠️ Pendant ce temps `enPause` RESTE levé : le monde est figé ET le verrou
+ * des gestes reste mis. Un swipe nerveux pendant le « 2 » ne doit pas faire
+ * sauter le coureur avant le GO.
+ */
+const REPRISE_S = 3
+/** Le « GO ! » reste affiché un instant après la reprise : on le lit en repartant. */
+const REPRISE_GO_S = 0.5
+let repriseActive = false
+let reprise = 0
+let repriseChiffre = 0
 
 /*
  * ————— ♾️ LE MODE INFINI —————
@@ -2694,6 +2713,12 @@ function ouvrirPause(ouvert: boolean) {
   // Le bouton ne répond qu'en course : au menu ou sur l'écran de fin, il n'y a
   // rien à mettre en pause, et le voile masquerait ce qu'on est en train de lire.
   if (ouvert && state !== 'course' && state !== 'depart') return
+  /*
+   * ⏳ Ouvrir OU fermer le voile coupe une reprise en cours. Rouvrir la pause
+   * pendant le « 2 » doit figer de nouveau, et quitter ne doit rien laisser
+   * décompter derrière le menu. `reprendre()` relance le sien juste après.
+   */
+  arreterReprise()
   enPause = ouvert && !online
   pauseEl.classList.toggle('hidden', !ouvert)
   pauseTitreEl.textContent = online ? '⚔️ Course en ligne' : '⏸ Pause'
@@ -2706,11 +2731,66 @@ function ouvrirPause(ouvert: boolean) {
   const clavier = matchMedia('(pointer: fine)').matches ? ' (ou la touche T)' : ''
   pauseMotEl.textContent = online
     ? 'La course CONTINUE — on ne met pas les autres en attente. Tu peux la quitter, mais tu ne la reprendras pas.'
-    : `La course est arrêtée. Reprends quand tu veux${clavier}.`
+    : `La course est arrêtée. Reprends quand tu veux${clavier} — un 3, 2, 1 te laissera le temps de te replacer.`
   // « Reprendre » ne promet pas la même chose des deux côtés : hors ligne on
   // repart où l'on s'est arrêté, en ligne on retourne à une course qui a
   // continué sans nous.
-  btnReprendreEl.textContent = online ? '↩ RETOUR À LA COURSE' : '▶ REPRENDRE'
+  /*
+   * ⚠️ L'icône garde son <span class="ic"> : un `textContent` l'écrasait dès la
+   * première pause, et la flèche perdait son geste au survol.
+   */
+  const ic = document.createElement('span')
+  ic.className = 'ic'
+  ic.textContent = online ? '↩' : '▶'
+  btnReprendreEl.replaceChildren(ic, online ? ' RETOUR À LA COURSE' : ' REPRENDRE')
+}
+
+/** ▶ Reprendre depuis le voile : on le ferme, puis 3, 2, 1 si la course était figée. */
+function reprendre() {
+  ouvrirPause(false)
+  /*
+   * Pas de décompte quand rien n'était figé, ou quand il y en a déjà un :
+   * · EN LIGNE, la course a continué sans nous — décompter ferait perdre trois
+   *   secondes de plus à celui qui revient ;
+   * · pendant le 3-2-1 du DÉPART, qui est déjà un décompte et repart tout seul
+   *   là où il s'était arrêté ;
+   * · sur une FICHE du tuto, où la piste est gelée de toute façon.
+   */
+  if (online || state !== 'course' || gele) return
+  enPause = true // cf. l'en-tête de REPRISE_S : le monde reste figé
+  repriseActive = true
+  reprise = REPRISE_S
+  repriseChiffre = 0 // la première image annoncera le 3, avec son bip
+  countEl.textContent = String(REPRISE_S)
+  countEl.classList.add('show')
+}
+
+/** ⏳ Coupe le décompte de reprise, s'il y en a un. */
+function arreterReprise() {
+  if (!repriseActive) return
+  repriseActive = false
+  countEl.classList.remove('show')
+}
+
+/**
+ * ⏳ Fait avancer la reprise d'une image.
+ *
+ * ⚠️ Avec le temps BORNÉ de la boucle (`ecoule`, 0,05 s au plus), pas avec
+ * l'horloge murale. Un onglet mis en arrière-plan pendant le « 2 » ne reçoit
+ * plus d'images : à l'horloge murale, le décompte expirerait sans témoin et
+ * la course repartirait pendant qu'on regarde ailleurs.
+ */
+function avancerReprise(ecoule: number) {
+  reprise -= ecoule
+  const chiffre = reprise > 0 ? Math.ceil(reprise) : 0
+  if (chiffre !== repriseChiffre) {
+    repriseChiffre = chiffre
+    countEl.textContent = chiffre > 0 ? String(chiffre) : 'GO !'
+    jouerBruit(chiffre > 0 ? 'bip' : 'go')
+    // GO : le monde repart. Le mot reste un instant, la course n'attend pas.
+    if (chiffre === 0) enPause = false
+  }
+  if (reprise <= -REPRISE_GO_S) arreterReprise()
 }
 
 function majJarres() {
@@ -2871,6 +2951,12 @@ function reprendreTuto() {
     tutoDepartVu = true
     return
   }
+  /*
+   * ⚔️ La riposte part À LA REPRISE, pas à l'ouverture : encaissée sous la
+   * fiche, à l'arrêt, elle ne se sentirait pas. On la prend en courant.
+   */
+  const e = ETAPES[etapeTuto]
+  if (e?.riposte && bots[0].actif) subirSort(e.riposte, bots[0])
   etapeTuto++
 }
 
@@ -3789,7 +3875,7 @@ btnPauseEl.addEventListener('click', () => {
 })
 btnReprendreEl.addEventListener('click', () => {
   jouerBruit('clic')
-  ouvrirPause(false)
+  reprendre()
 })
 btnQuitterPartieEl.addEventListener('click', () => {
   jouerBruit('clic')
@@ -3972,7 +4058,8 @@ new Input(document.body, {
    * chaque appui au lieu de le refermer — la touche ne servirait à rien
    * précisément là où la souris est la plus loin.
    */
-  pause: () => ouvrirPause(pauseEl.classList.contains('hidden')),
+  // Refermer le voile au clavier, c'est REPRENDRE : même décompte qu'au bouton.
+  pause: () => (pauseEl.classList.contains('hidden') ? ouvrirPause(true) : reprendre()),
 })
 
 /*
@@ -4020,6 +4107,7 @@ function tick(now?: number) {
    * bond de plusieurs mètres à travers les obstacles.
    */
   const ecoule = Math.min(timer.getDelta(), 0.05) // temps écoulé depuis la dernière image
+  if (repriseActive) avancerReprise(ecoule) // ⏳ peut lever la pause à cette image même
   const dt = enPause ? 0 : ecoule
 
   /*
