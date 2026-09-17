@@ -12,7 +12,8 @@
  *  1. ❄️ SUR LA NEIGE (Flancs du Fuji, 雪). La piste est NUE : rien qu'on n'ait
  *     posé soi-même. On explique le départ, puis chaque chose arrive SEULE —
  *     l'écran se fige devant, le geste s'affiche, et il repart quand on l'a
- *     fait.
+ *     fait. On finit par les SORTS : on en lance un sur soi, un rival entre en
+ *     scène pour en recevoir un, il répond, et l'on se soigne.
  *
  *  2. 🌉 SUR LE PONT (Pont au clair de lune). Plus d'explications : une vraie
  *     course d'entraînement contre deux rivaux.
@@ -29,6 +30,7 @@ import type {
   PlannedMur,
 } from './track'
 import { PLATEFORME_H } from './track'
+import type { ParcheminKind } from './parchemin'
 
 /** L'index des décors dans `BIOMES` (village, pont, Fuji). */
 export const BIOME_NEIGE = 2
@@ -60,8 +62,14 @@ export const BIOME_PONT = 1
 const ELAN_GESTE = 8
 const ELAN_LIBRE = 35
 
-/** Le geste qui relâche la course. */
-export type GesteTuto = 'saut' | 'glissade' | 'ligne' | 'tap'
+/**
+ * Le geste qui relâche la course.
+ *
+ * `sort` : un parchemin est VRAIMENT parti de la main. Pas « le double-tap a
+ * été fait » — un sort refusé (trêve, sprint final) ne relâche rien, sinon la
+ * fiche passerait alors qu'on n'a rien vu se produire.
+ */
+export type GesteTuto = 'saut' | 'glissade' | 'ligne' | 'tap' | 'sort'
 
 /** Ce qu'une étape pose sur la piste, `ELAN` mètres plus loin. */
 export type PoseTuto = Kind | 'plateforme' | 'paroi' | 'jarre'
@@ -88,6 +96,30 @@ export interface EtapeTuto {
    * pourquoi : la leçon portait sur le saut, elle s'est jouée sur la ligne.
    */
   ouvreLesLignes?: boolean
+  /**
+   * 📜 Le parchemin mis EN MAIN à l'ouverture de la fiche — sauf s'il y est déjà.
+   *
+   * « Sauf s'il y est déjà » : c'est ce qui rend la jarre sans échec. Brisée ou
+   * percutée, elle a déjà donné le rouleau et la fiche n'en ajoute pas un
+   * second ; esquivée, c'est la fiche qui le donne. Dans tous les cas on repart
+   * avec, et la leçon qui suit a de quoi se jouer.
+   */
+  donne?: ParcheminKind
+  /**
+   * ⚔️ Un rival entre en scène à l'ouverture de la fiche, tant de mètres DEVANT.
+   *
+   * ⚠️ Devant, jamais derrière : un sort d'attaque vise le rival le plus proche
+   * DEVANT. Posé derrière, le kunai de la leçon partirait dans le vide.
+   */
+  rival?: number
+  /**
+   * ⚔️ À la reprise, le rival lance CE sort sur le joueur.
+   *
+   * À la reprise et pas à l'ouverture : un effet encaissé à l'arrêt, sous une
+   * fiche, ne se sent pas. Il faut le prendre en courant pour comprendre ce
+   * qu'il coûte.
+   */
+  riposte?: ParcheminKind
 }
 
 /**
@@ -120,6 +152,11 @@ export const DEPART: EtapeTuto = {
  * Viennent ensuite les trois choses qu'on ne SUBIT pas mais qu'on UTILISE : la
  * plateforme, la paroi, le parchemin. Elles arrivent après les obstacles parce
  * qu'elles n'ont de sens qu'une fois qu'on sait ce qu'on évite.
+ *
+ * Et les SORTS en dernier, dans l'ordre où ils se comprennent : sur soi d'abord
+ * (rien à viser, l'effet se sent tout de suite), puis sur un rival, puis celui
+ * qu'on reçoit — et le soin qui le lave. Recevoir un kunai AVANT d'en avoir
+ * lancé un se lirait comme une punition ; après, c'est la même arme qui revient.
  */
 export const ETAPES: readonly EtapeTuto[] = [
   {
@@ -195,14 +232,60 @@ export const ETAPES: readonly EtapeTuto[] = [
     d: 630,
     titre: '📜 Les parchemins',
     texte:
-      "Une jarre DORÉE en cache un. Le même geste sert à bouger et à frapper : s'il y a une jarre dans cette direction, tu attaques. Le sort part quand tu le décides.",
-    doigt: 'Swipe vers la jarre · double-tap pour lancer',
-    clavier: 'Flèche vers la jarre · E pour lancer',
+      "Une jarre DORÉE en cache un. Brise-la d'un coup de lame en sautant juste avant — ou fonce dedans : tu l'auras aussi, mais en trébuchant.",
+    doigt: 'Swipe vers le haut juste avant la jarre',
+    clavier: '↑ juste avant la jarre',
     attend: 'tap',
     pose: 'jarre',
   },
+  /*
+   * ⚠️ JUSTE APRÈS la jarre (665 m) : le rouleau vient d'apparaître dans la
+   * main, on l'explique pendant qu'il brille encore. Plus loin, on aurait
+   * oublié d'où il venait.
+   */
   {
-    d: 725,
+    d: 680,
+    titre: '🌀 Un sort sur toi',
+    texte:
+      'Ton parchemin est rangé en haut à droite. Celui-ci agit sur TOI : le Vent du Nord te propulse. Lance-le, et sens la poussée.',
+    doigt: 'Double-tap',
+    clavier: 'E',
+    attend: 'sort',
+    donne: 'vent',
+  },
+  {
+    d: 760,
+    titre: '🎯 Un sort sur un rival',
+    texte:
+      "Un rival te double. Un sort d'attaque part tout seul sur le plus proche DEVANT toi — en tête, il se perd. Lance ce kunai : regarde-le trébucher.",
+    doigt: 'Double-tap',
+    clavier: 'E',
+    attend: 'sort',
+    donne: 'kunai',
+    rival: 30,
+  },
+  {
+    d: 840,
+    titre: '⚔️ Les mêmes armes',
+    texte:
+      'Les rivaux ramassent les mêmes parchemins que toi, et visent celui qui les précède. Celui-là va te rendre ton kunai : sens ce que ça fait.',
+    doigt: 'Touche l’écran pour encaisser',
+    clavier: 'Espace ou clic',
+    attend: 'tap',
+    riposte: 'kunai',
+  },
+  {
+    d: 885,
+    titre: '🍵 Se soigner',
+    texte:
+      "La terre te colle aux yeux, et elle y restera. Le Thé Purificateur lave tout d'un coup : terre, fumée, poison, chaînes. Lance-le.",
+    doigt: 'Double-tap',
+    clavier: 'E',
+    attend: 'sort',
+    donne: 'the',
+  },
+  {
+    d: 940,
     titre: '🌉 À toi de courir',
     texte:
       "C'est tout ce qu'il fallait savoir. On passe au pont : une vraie course contre deux rivaux, sans explications cette fois.",
@@ -213,7 +296,7 @@ export const ETAPES: readonly EtapeTuto[] = [
 ]
 
 /** Le mètre où la neige s'arrête et où la vraie course commence. */
-export const FIN_APPRENTISSAGE = 780
+export const FIN_APPRENTISSAGE = 995
 
 /**
  * ————— Les quatre plans, DÉDUITS des étapes —————
@@ -267,7 +350,8 @@ export const MURS_NEIGE: PlannedMur[] = pose('paroi').map((e) => ({
  *
  * ⚠️ Le Vent du Nord, pas un tirage. Un dash qui accélère se comprend en une
  * seconde, sans cible ni minuteur ; tomber sur un sabotage obligerait à
- * expliquer un adversaire qui n'existe pas encore — on est seul sur la neige.
+ * expliquer un adversaire qui n'est pas encore là — le rival n'entre en scène
+ * qu'à la leçon suivante.
  */
 export const JARRES_NEIGE: PlannedJarre[] = pose('jarre').map((e) => ({
   d: e.d + elanDe(e),

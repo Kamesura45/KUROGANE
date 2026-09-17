@@ -1968,7 +1968,7 @@ export class Track {
    * la contourner, ou payer. Et en vol on passe au-dessus : une chaîne bien
    * menée traverse tout sans jamais toucher une seule jarre.
    */
-  heurteJarre(playerBox: THREE.Box3): boolean {
+  heurteJarre(playerBox: THREE.Box3): { parchemin: ParcheminKind | null } | null {
     const box = new THREE.Box3()
     for (const j of this.jarres) {
       if (!j.active) continue
@@ -1978,10 +1978,15 @@ export class Track {
       if (box.intersectsBox(playerBox)) {
         j.active = false
         j.mesh.visible = false
-        return true
+        /*
+         * On dit ce qu'elle cachait, et c'est à l'appelant d'en décider. En
+         * course, percuter une dorée ne rapporte rien — c'est la lame qui
+         * paie ; le tutoriel, lui, donne le rouleau quand même (cf. main.ts).
+         */
+        return { parchemin: j.kind === 'doree' ? j.parchemin : null }
       }
     }
-    return false
+    return null
   }
 
   private spawnRouleau(lane: number, z: number) {

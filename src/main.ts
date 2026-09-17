@@ -25,6 +25,7 @@ import {
   BIOME_NEIGE,
   BIOME_PONT,
   type EtapeTuto,
+  type GesteTuto,
 } from './tuto'
 import { PERSO_ID, cssColor, skinEnTexte } from './roster'
 import {
@@ -548,7 +549,7 @@ let etapeTuto = 0
  * tard devant l'obstacle : c'est la seule façon d'apprendre un geste. Lire
  * « swipe vers le haut » et cliquer OK ne fait apprendre que le bouton OK.
  */
-let tutoAttend: 'saut' | 'glissade' | 'ligne' | 'tap' | null = null
+let tutoAttend: GesteTuto | null = null
 /**
  * 🔒 Les changements de ligne sont-ils permis ?
  *
@@ -2915,6 +2916,15 @@ function figerTuto(e: EtapeTuto, rang: string) {
   // 🔒 Les lignes s'ouvrent à l'étape qui les enseigne, et ne se referment plus.
   if (e.ouvreLesLignes) tutoLignes = true
   /*
+   * 📜 Le rouleau de l'étape arrive EN MAIN avec la fiche — sauf s'il y est
+   * déjà. C'est ce qui rend la jarre sans échec : brisée ou percutée, elle l'a
+   * donné ; esquivée, c'est ici qu'on le reçoit. Le déroulé « machine à sous »
+   * joue sous la fiche : on voit le parchemin apparaître pendant qu'on lit.
+   */
+  if (e.donne && !slots.includes(e.donne)) gagneParchemin(e.donne)
+  // ⚔️ Un rival entre en scène, devant. Il est figé avec le monde (cf. la boucle).
+  if (e.rival !== undefined) poserRivalTuto(e.rival)
+  /*
    * ⚠️ La fiche ne capte le doigt QUE si elle attend un tap. Sinon elle
    * avalerait le swipe qu'elle vient de demander, et le joueur glisserait dans
    * le vide en se croyant maladroit.
@@ -2968,9 +2978,35 @@ function reprendreTuto() {
  * essaie, on voit ce que ça fait, et rien n'est cassé. Seul le bon geste
  * relâche la course.
  */
-function tutoGeste(quoi: 'saut' | 'glissade' | 'ligne' | 'tap') {
+function tutoGeste(quoi: GesteTuto) {
   if (!tutoAttend) return
   if (tutoAttend === quoi || (tutoAttend === 'tap' && quoi !== 'tap')) reprendreTuto()
+}
+
+/**
+ * ⚔️ Le rival de la leçon des sorts entre en scène, `ecart` mètres devant.
+ *
+ * Un bot ordinaire, pas un mannequin : il court, il trébuche sous le kunai, il
+ * répond avec les mêmes armes — exactement ce que feront les deux du pont. Un
+ * pantin immobile apprendrait des effets qu'on ne reverra jamais en course.
+ *
+ * ⚠️ Sur la ligne du MILIEU, quelle que soit la nôtre. Vu dans une fenêtre
+ * étroite : posé sur la ligne voisine, il courait au ras du bord droit de
+ * l'écran, à moitié coupé — on lisait « Hana +14 m » en haut sans voir Hana.
+ * Au milieu, il reste dans l'axe de la piste sur tous les écrans.
+ *
+ * On ne le rattrape pas pour autant avant sa riposte : mesuré en partant à
+ * 25 m, l'écart ne tombait qu'à 6 m au plus près — d'où les 30 m de la fiche.
+ */
+function poserRivalTuto(ecart: number) {
+  const b = bots[0]
+  b.reset([], [], 1, 1)
+  b.distance = distance + ecart
+  // À NOTRE allure d'avant le gel : plus lent, on le rattraperait avant d'avoir
+  // lancé ; plus vif, il sortirait du champ avant la riposte.
+  b.speed = tutoVitesse
+  b.actif = true
+  majTetes()
 }
 
 /**
@@ -3247,8 +3283,9 @@ function startRace(seed: number) {
   const rouleaux = track.parcheminsPrevus()
   bots.forEach((b, i) => {
     // ♾️ Pas de rivaux en course sans fin : on court contre les flammes.
-    // 🎓 ❄️ Personne sur la neige : on y apprend seul, sans rien qui double ni
-    // qui distraie. Les deux rivaux n'apparaissent qu'au pont.
+    // 🎓 ❄️ Personne au départ sur la neige : on y apprend seul, sans rien qui
+    // double ni qui distraie. Un seul rival y entre, pour la leçon des sorts
+    // (cf. poserRivalTuto) ; les deux de la course n'apparaissent qu'au pont.
     b.actif = !online && !modeInfini && (!modeTuto || phaseTuto === 'pont') && i < nbBots
     // Graine dérivée : chaque rival tire ses fautes ailleurs dans la suite,
     // sinon les 4 rateraient exactement les mêmes obstacles au même endroit.
@@ -4028,7 +4065,20 @@ new Input(document.body, {
     if (d > 0) jouerBruit('glissade')
     if (online && d > 0) net.sendAction({ t: 'slide', d })
   },
-  spell: () => state === 'course' && lancerParchemin(),
+  spell: () => {
+    if (state !== 'course') return
+    /*
+     * 🎓 Une fiche « sort » ne se relâche que si un rouleau est VRAIMENT parti.
+     *
+     * On compte la main avant et après plutôt que de faire rendre un booléen à
+     * `lancerParchemin` : chacune de ses sorties (trêve, sprint, rouleau rendu
+     * faute de mur…) aurait dû dire vrai ou faux, et la première oubliée aurait
+     * menti. La main, elle, ne ment pas — un rouleau rendu y revient.
+     */
+    const enMain = slots.length
+    lancerParchemin()
+    if (slots.length < enMain) tutoGeste('sort')
+  },
   // On horodate chaque coup : la boucle de jeu en déduit la cadence.
   // Horloge de la page (pas le chrono de course) : le chrono est figé à 0
   // pendant le décompte, or le DÉPART CANON se martèle pendant le décompte !
@@ -4387,7 +4437,9 @@ function tick(now?: number) {
     // Chaque rival court sa propre course, sans jamais toucher à la nôtre
     bots.forEach((b) => {
       if (!b.actif) return
-      if (b.avance(dt, time, COURSE_LENGTH)) toast(`⛩️ ${b.profil.nom} a franchi le torii !`)
+      // 🧪🎓 Figé avec le monde. Sans ça, le rival d'une fiche du tuto filerait
+      // pendant qu'on lit, et le kunai de la leçon partirait vers l'horizon.
+      if (b.avance(gele ? 0 : dt, time, COURSE_LENGTH)) toast(`⛩️ ${b.profil.nom} a franchi le torii !`)
       b.placer(dt, distance)
 
       // Ses parchemins. Un sort offensif part sur celui qui le précède — le
@@ -4924,7 +4976,10 @@ function tick(now?: number) {
     // 🏺 Percuter une jarre : la poterie éclate et on accuse le choc. En vol
     // on passe au-dessus — une chaîne bien menée traverse la grappe sans
     // jamais rien percuter, c'est là sa récompense.
-    if (stumble <= 0 && player.surMur === 0 && track.heurteJarre(player.hitbox())) {
+    // ⚠️ Le test garde son court-circuit : `heurteJarre` BRISE la jarre qu'il
+    // touche, il ne doit donc pas être appelé quand on ne peut pas la heurter.
+    const heurt = stumble <= 0 && player.surMur === 0 ? track.heurteJarre(player.hitbox()) : null
+    if (heurt) {
       if (armure > 0) {
         armure = Math.max(0, armure - ARMURE_COUT_PETIT)
         stumble = 0.6
@@ -4952,6 +5007,15 @@ function tick(now?: number) {
         } else toast('🏺 Jarre percutée !')
         if (online) net.sendAction({ t: 'stumble', keep: JARRE_FREIN })
       }
+      /*
+       * 🎓 📜 Dans le tutoriel, la dorée donne son parchemin même PERCUTÉE.
+       *
+       * En course, c'est la lame qui paie : foncer dedans n'apporte que le choc.
+       * Mais la leçon qui suit a besoin d'un rouleau en main — et un débutant qui
+       * a raté son coup ne doit pas repartir les mains vides d'une leçon qui
+       * s'appelle « les parchemins ».
+       */
+      if (modeTuto && heurt.parchemin) gagneParchemin(heurt.parchemin)
     }
 
     // Le perso clignote tant qu'il se relève
@@ -5371,6 +5435,11 @@ if (import.meta.env.DEV) {
         gele,
         // 🎓 La ligne : le tutoriel la verrouille au début, et cela se vérifie.
         ligne: player.currentLane,
+        // 🎓📜 La main, la fiche en cours et le rival de la leçon des sorts.
+        slots: [...slots],
+        etapeTuto,
+        tutoAttend,
+        rival: bots[0].actif ? { ecart: bots[0].distance - distance, vitesse: bots[0].speed } : null,
       }
     },
   }

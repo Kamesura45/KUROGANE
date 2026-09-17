@@ -630,7 +630,11 @@ Le bouton 🎓 de l'écran Jouer. Deux temps, et le décor change entre les deux
 | ↔️ Changer de ligne | bloc plein — **et les lignes s'ouvrent ici** |
 | 🚃 Les plateformes | une, avec sa rampe |
 | 🧱 Les pans de mur | une paroi à droite |
-| 📜 Les parchemins | une jarre dorée, Vent du Nord dedans |
+| 📜 Les parchemins | une jarre dorée — **brisée, percutée ou évitée, on repart avec** |
+| 🌀 Un sort sur soi | le Vent du Nord, lancé pour de bon |
+| 🎯 Un sort sur un rival | un rival entre en scène 30 m devant ; le kunai le fait trébucher |
+| ⚔️ Les mêmes armes | il te rend ton kunai |
+| 🍵 Se soigner | le thé lave la terre qu'il t'a collée aux yeux |
 
 ⚠️ **Le départ canon ne peut se dire QUE là.** Il se joue pendant le 3-2-1 :
 dit après, il est déjà passé ; dit en pleine course, il parle d'un instant
@@ -687,7 +691,7 @@ haute à 193 m.
 | | |
 |---|---|
 | Fiche → fiche suivante | **40 à 130 m** |
-| Longueur de la neige | **780 m** |
+| Longueur de la neige | **995 m** |
 
 Le mètre qui suit une plateforme ou une paroi est plus large que les autres — on
 en sort ralenti, ou en l'air.
@@ -707,6 +711,59 @@ sa touche est pire qu'une fiche muette : on croit le jeu cassé, pas soi.
 le swipe qu'elle vient de demander, et le joueur glisserait dans le vide en se
 croyant maladroit. Vérifié avec de VRAIS événements tactiles : le mauvais swipe
 ne relâche rien, le bon relâche et agit.
+
+### 📜 La jarre ne peut pas rater
+
+On repart avec le parchemin **dans tous les cas** :
+
+| | |
+|---|---|
+| Brisée d'un coup de lame | le rouleau tombe, et l'on rebondit dessus |
+| **Percutée** | le rouleau tombe quand même — on trébuche, c'est tout |
+| Évitée | la fiche suivante le met en main |
+
+⚠️ **Percuter une dorée ne rapporte toujours rien en course**, et cela ne change
+pas : c'est la lame qui paie. Mais la leçon qui suit a besoin d'un rouleau en
+main, et un débutant qui a raté son coup ne doit pas repartir les mains vides
+d'une leçon qui s'appelle « les parchemins ». `heurteJarre` dit désormais ce que
+la jarre cachait ; c'est l'appelant qui décide, et seul le tutoriel donne.
+
+⚠️ **La fiche ne donne que si la main est vide.** Sinon la jarre brisée en
+donnerait un, et la fiche un second.
+
+### ⚔️ Les sorts, avant le pont
+
+Quatre fiches, dans l'ordre où les sorts se comprennent : sur SOI d'abord (rien à
+viser, l'effet se sent tout de suite), puis sur un RIVAL, puis celui qu'on REÇOIT
+— et le soin qui le lave. Recevoir un kunai avant d'en avoir lancé un se lirait
+comme une punition ; après, c'est la même arme qui revient.
+
+⚠️ **Le rival est un vrai bot**, pas un mannequin : il court, il trébuche sous le
+kunai, il répond avec les mêmes armes — exactement ce que feront les deux du pont.
+Un pantin immobile apprendrait des effets qu'on ne reverrait jamais en course.
+
+⚠️ **Il court sur la ligne du MILIEU**, quelle que soit la nôtre. Vu dans une
+fenêtre étroite : posé sur la ligne voisine, il courait au ras du bord droit de
+l'écran, à moitié coupé — on lisait « Hana +14 m » en haut sans voir Hana.
+
+⚠️ **Les rivaux se figent avec le monde.** Une fiche arrête le coureur, mais les
+bots, eux, continuaient : le rival aurait filé pendant qu'on lit, et le kunai de la
+leçon serait parti vers l'horizon.
+
+⚠️ **La riposte part à la REPRISE**, pas à l'ouverture de la fiche : un effet
+encaissé à l'arrêt, sous une fiche, ne se sent pas. On le prend en courant.
+
+⚠️ **Une fiche « sort » n'est relâchée que si un rouleau est VRAIMENT parti.** On
+compte la main avant et après plutôt que de faire rendre un booléen à
+`lancerParchemin` : chacune de ses sorties — trêve, sprint final, rouleau rendu
+faute de cible — aurait dû dire vrai ou faux, et la première oubliée aurait menti.
+La main, elle, ne ment pas : un rouleau rendu y revient.
+
+*Mesuré d'un bout à l'autre, au pilote automatique : le kunai fait tomber Hana de
+27,2 à 14,5 m/s ; l'écart passe de +30 m à +11 m au plus près, jamais négatif avant
+sa riposte ; sa riposte fait trébucher 0,82 s et colle la terre à l'écran ; le thé
+l'efface. Et les trois chemins de la jarre — brisée, percutée, évitée — donnent
+tous le rouleau, sans jamais en donner deux.*
 
 ### La partition est de la donnée
 
