@@ -842,6 +842,56 @@ Un émoji a ses propres couleurs, et 🎓 est sombre : sur un fond sombre,
 l'affaiblir le fait disparaître au lieu de le calmer. C'est le liséré tireté qui
 porte le message ; l'opacité ne fait plus qu'adoucir.
 
+## 👋 « Première fois ? » — le premier écran
+
+Au lancement, le jeu ne s'ouvre plus sur le menu : il demande. **Oui** part droit
+au tutoriel ; **non** ouvre le menu-titre, enseigne peinte comprise.
+
+⚠️ **La question n'est posée qu'une fois par appareil.** La réponse est retenue
+(`kurogane-accueilli`), quelle qu'elle soit — la reposer à chaque lancement
+obligerait un habitué à répondre « non » avant chaque partie. Et elle est retenue
+à la RÉPONSE, pas à la fin du tutoriel : celui qui le quitte en route a répondu,
+et il sait où est le 🎓.
+
+⚠️ **`localStorage` peut LEVER une exception**, pas seulement rendre `null`
+(navigation privée stricte, cookies bloqués). Sans le `try`, le lancement
+s'arrêterait net sur cette ligne — musique, contrôles et tout ce qui suit dans
+`main.ts` compris. On répond « jamais » : la question revient à chaque lancement,
+ce qui est le bon défaut pour une fenêtre qui oublie tout de toute façon.
+
+⚠️ **L'écran-titre est `hidden` d'entrée dans le HTML.** Visible par défaut, il
+s'affichait le temps que le script charge, puis cédait la place à la question : le
+nouveau venu voyait passer le menu qu'on voulait justement lui éviter. C'est
+`menu.ts` qui choisit le premier écran.
+
+⚠️ **L'enseigne se peint au PREMIER affichage du titre**, et non plus à la
+création du menu. Lancée à la création, elle se jouait derrière l'accueil, dans un
+écran caché : ou bien son minuteur la terminait sans témoin, ou bien le tap sur
+« non » — un `pointerdown`, précisément ce qui la saute — la coupait au passage.
+Dans les deux cas l'habitué arrivait sur un titre déjà peint. *Vérifié avec un
+vrai tap : après « non », la classe `joue` est bien là.*
+
+Et la question ne peut pas revenir par un « retour » : le titre est une RACINE, y
+arriver efface le chemin parcouru.
+
+## 🏪 La boutique ne disparaît plus
+
+Elle était masquée tant que le serveur n'avait pas rendu de profil. La base des
+comptes tombée, elle a donc disparu **pour tout le monde** — au point qu'on la
+croyait retirée du jeu.
+
+Un bouton qui s'efface sans un mot se lit comme une fonction supprimée ; un bouton
+qui dit « fermée » se lit comme une fonction qui reviendra. Il reste donc toujours
+là, et affiche **« Fermée pour l'instant »** à la place du solde.
+
+⚠️ **Et surtout pas 0.** Un joueur qui a 300 mon et lit « 0 » croit qu'on l'a volé.
+Les deux soldes de l'en-tête retombent sur « — » pour la même raison : un chiffre
+d'avant la panne, resté affiché, mentirait autant qu'un zéro.
+
+⚠️ **Le message de la boutique vide ne dit plus « hors ligne ».** On peut très bien
+courir en ligne pendant que les comptes, eux, sont en panne : le joueur lirait
+« hors ligne » en sortant d'une partie en ligne, et ne croirait plus rien d'autre.
+
 ## 🎴 Le menu Jouer : trois modes en tuiles
 
 ```

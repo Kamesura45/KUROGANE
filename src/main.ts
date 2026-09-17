@@ -3821,7 +3821,13 @@ document.getElementById('overlay')?.addEventListener('click', (e) => {
 
 applyQuality(menu.settings.quality)
 updateMeLabel()
-menu.showTitle()
+/*
+ * 👋 Le premier écran : « première fois ? » pour qui n'y a jamais répondu sur
+ * cet appareil, le titre pour les autres. Le nouveau venu qui dit « oui » part
+ * droit au tutoriel — sans passer par un menu de cinq portes dont il ne sait
+ * encore rien.
+ */
+menu.accueillir()
 
 // La musique des menus attend le premier geste du joueur : les navigateurs
 // interdisent le son avant. Elle démarrera donc à son premier clic (cf. audio.ts).

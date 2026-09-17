@@ -15,7 +15,7 @@
 type Ecran = string
 
 /** Les ecrans ou l'on ARRIVE : y entrer efface le chemin parcouru. */
-const RACINES = new Set<Ecran>(['title', 'salon', 'lobby', 'results', 'status'])
+const RACINES = new Set<Ecran>(['title', 'salon', 'lobby', 'results', 'status', 'accueil'])
 
 /** La navigation de menu.ts, reduite a son mecanisme. */
 class Navigation {

@@ -1159,6 +1159,40 @@ body {
   letter-spacing: 0.35em;
   margin-right: -0.35em; /* compense la dernière lettre */
 }
+
+/* ——— 👋 L'accueil : « première fois ? » ——— */
+.accueil-question {
+  margin-top: 8px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+/* Centré ici : c'est une phrase qu'on lit d'un bloc, pas une notice. */
+#scr-accueil .lead {
+  max-width: 34ch;
+  text-align: center;
+}
+.accueil-note {
+  font-size: 0.72rem;
+  color: #9aa4c0;
+}
+/*
+ * 🎬 L'accueil entre de haut en bas : le nom, la question, puis les réponses.
+ * On ne propose pas de répondre avant d'avoir posé la question.
+ *
+ * ⚠️ `backwards`, pour les mêmes raisons que les tuiles de Jouer : en
+ * `forwards`, l'animation garderait la main sur `transform` et les boutons
+ * ne se soulèveraient plus au survol ; et sans `opacity: 0` posé sur les
+ * éléments eux-mêmes, rien ne reste invisible quand le mouvement est coupé.
+ */
+#scr-accueil > * {
+  animation: monteDoux 0.5s ease-out backwards;
+}
+#scr-accueil > :nth-child(2) { animation-delay: 0.08s; }
+#scr-accueil > :nth-child(3) { animation-delay: 0.22s; }
+#scr-accueil > :nth-child(4) { animation-delay: 0.3s; }
+#scr-accueil > :nth-child(5) { animation-delay: 0.42s; }
+#scr-accueil > :nth-child(6) { animation-delay: 0.55s; }
 .tagline {
   font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
   font-style: italic;
@@ -2555,6 +2589,12 @@ body {
 .chev {
   font-size: 1.2rem;
   opacity: 0.85;
+}
+/* 🏪 Fermée : le mot se lit, mais en retrait — ce n'est pas un solde, et il
+   ne doit pas en avoir l'éclat. */
+#bourseRow.ferme #bourse {
+  font-weight: 600;
+  color: #9aa4c0;
 }
 
 /* Les deux soldes, en tête de boutique */

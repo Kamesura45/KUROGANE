@@ -168,7 +168,41 @@
 
     <!-- Un seul écran est visible à la fois ; c'est menu.ts qui aiguille. -->
     <div id="overlay">
-      <section id="scr-title" class="screen">
+      <!--
+        ————— 👋 L'ACCUEIL : « PREMIÈRE FOIS ? » —————
+
+        Montré AU LANCEMENT, à la place du titre, tant qu'on n'y a pas répondu
+        sur cet appareil. Une fois répondu, on ne le revoit plus : un joueur qui
+        revient n'a pas à redire « non, je connais » avant chaque partie.
+
+        ⚠️ Pas l'enseigne peinte ici. Elle est gardée pour le PREMIER titre :
+        le nouveau venu la découvre en sortant du tuto, l'habitué en répondant
+        « non ». Chacun la voit une fois, et au moment où elle ouvre le jeu.
+      -->
+      <section id="scr-accueil" class="screen hidden">
+        <div class="jp">黒鉄</div>
+        <h1>KUROGANE</h1>
+        <p class="accueil-question">Première fois sur le Tournoi des Voies ?</p>
+        <p class="lead">
+          Le tutoriel te montre tout, un obstacle à la fois : la course
+          s'arrête, tu fais le geste, elle repart.
+        </p>
+        <div class="stack">
+          <button id="btnNouveauOui" class="primary"><span class="ic">🎓</span> OUI, JE DÉCOUVRE</button>
+          <button id="btnNouveauNon" class="secondary">NON, J'AI DÉJÀ COURU</button>
+        </div>
+        <!-- Pour qui répond « non » trop vite : la porte ne se referme pas. -->
+        <small class="accueil-note">Le tutoriel reste dans Jouer → 🎓</small>
+      </section>
+
+      <!--
+        ⚠️ `hidden` d'entrée, comme tous les autres écrans : c'est menu.ts qui
+        choisit le PREMIER — l'accueil ou le titre. Visible par défaut, le titre
+        s'affichait le temps que le script charge, puis cédait la place à la
+        question : le nouveau venu voyait passer le menu qu'on voulait
+        justement lui éviter.
+      -->
+      <section id="scr-title" class="screen hidden">
         <!-- ————— L'enseigne : shuriken, encre, pinceau —————
              Le titre n'est pas écrit, il est PEINT à l'ouverture. Tout est
              piloté par la classe `joue` posée par menu.ts : sans elle, rien ne
@@ -233,25 +267,37 @@
 
         <!-- Cinq portes, et une seule mène au jeu : le reste est du réglage.
              « JOUER » est donc seul en primaire, les autres en rang. -->
-        <!-- L'icône est dans son propre <span> : c'est elle seule qui s'anime au
-             survol, jamais le libellé. Un mot qui tourne est illisible. -->
+        <!-- L'icône est dans son propre <span class="ic"> : c'est elle seule
+             qui s'anime au survol, jamais le libellé. Un mot qui tourne est
+             illisible. La convention vaut pour TOUS les boutons du jeu — ⚡, ⛩️,
+             ↻, ➤ portent le même <span>, et le style les prend tous d'un coup.
+             La classe `anime` qui traînait ici n'existe plus : le survol n'est
+             plus réservé à cinq boutons, il est acquis à tous. -->
         <div class="stack">
-          <button id="btnJouer" class="anime"><span class="ic">▶️</span> JOUER</button>
+          <button id="btnJouer"><span class="ic">▶️</span> JOUER</button>
         </div>
         <div class="row">
-          <button id="btnScores" class="ghost grow anime"><span class="ic">🏆</span> Scores</button>
-          <button id="btnCompte" class="ghost grow anime"><span class="ic">👤</span> Compte</button>
+          <button id="btnScores" class="ghost grow"><span class="ic">🏆</span> Scores</button>
+          <button id="btnCompte" class="ghost grow"><span class="ic">👤</span> Compte</button>
         </div>
         <div class="row">
-          <button id="btnOptions" class="ghost grow anime"><span class="ic">⚙️</span> Paramètres</button>
-          <button id="btnHelp" class="ghost grow anime"><span class="ic">❓</span> Aide</button>
+          <button id="btnOptions" class="ghost grow"><span class="ic">⚙️</span> Paramètres</button>
+          <button id="btnHelp" class="ghost grow"><span class="ic">❓</span> Aide</button>
         </div>
 
-        <!-- La bourse : masquée tant qu'on n'a pas joint le serveur -->
-        <div class="row hidden" id="bourseRow">
+        <!--
+          🏪 La boutique : TOUJOURS là, même quand les comptes ne répondent pas.
+
+          ⚠️ Elle était masquée tant que le serveur n'avait pas rendu de profil.
+          La base des comptes tombée, elle avait disparu pour tout le monde — au
+          point qu'on la croyait retirée du jeu. Un bouton qui s'efface sans un
+          mot se lit comme une fonction supprimée ; un bouton qui dit « fermée »
+          se lit comme une fonction qui reviendra.
+        -->
+        <div class="row" id="bourseRow">
           <button id="btnBoutique" class="ghost grow">
             <span class="lines">
-              <small>La bourse</small>
+              <small>Boutique</small>
               <b id="bourse">—</b>
             </span>
             <span class="chev">🏪</span>
@@ -367,7 +413,10 @@
         </p>
 
         <div id="boutiqueListe" class="boutique"></div>
-        <p id="boutiqueVide" class="lead hidden">Boutique indisponible hors ligne.</p>
+        <!-- ⚠️ Pas « hors ligne » : on peut très bien courir en ligne pendant que
+             les comptes, eux, sont en panne. Le joueur lirait « hors ligne » en
+             sortant d'une partie en ligne, et ne croirait plus rien d'autre. -->
+        <p id="boutiqueVide" class="lead hidden">La boutique est fermée pour l'instant — reviens un peu plus tard.</p>
 
         <button class="primary" data-back>OK</button>
       </section>

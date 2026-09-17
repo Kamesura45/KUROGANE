@@ -61,6 +61,7 @@ type ScreenName =
   | 'jouer'
   | 'boutique'
   | 'compte'
+  | 'accueil'
 
 export interface MenuCallbacks {
   onSolo(): void
@@ -156,7 +157,35 @@ interface Preview {
  * Les écrans où l'on ARRIVE, par opposition à ceux dans lesquels on descend.
  * Y entrer efface le chemin parcouru : on n'a plus rien derrière soi.
  */
-const RACINES = new Set<ScreenName>(['title', 'salon', 'lobby', 'results', 'status'])
+const RACINES = new Set<ScreenName>(['title', 'salon', 'lobby', 'results', 'status', 'accueil'])
+
+/**
+ * 👋 A-t-on déjà répondu à « première fois ? » sur CET appareil ?
+ *
+ * ⚠️ `localStorage` peut être interdit (navigation privée stricte, cookies
+ * bloqués) : la lecture LÈVE alors une exception, elle ne rend pas `null`. Sans
+ * le `try`, le lancement s'arrêterait net sur cette ligne — musique, contrôles
+ * et tout ce qui suit dans main.ts compris. On répond donc « jamais » : la
+ * question revient à chaque lancement, ce qui est le bon défaut pour une
+ * fenêtre qui oublie tout de toute façon.
+ */
+const CLE_ACCUEIL = 'kurogane-accueilli'
+
+function dejaAccueilli(): boolean {
+  try {
+    return localStorage.getItem(CLE_ACCUEIL) === '1'
+  } catch {
+    return false
+  }
+}
+
+function marquerAccueilli() {
+  try {
+    localStorage.setItem(CLE_ACCUEIL, '1')
+  } catch {
+    // Rien à retenir : on redemandera au prochain lancement.
+  }
+}
 
 export class Menu {
   readonly settings: Settings
@@ -164,6 +193,8 @@ export class Menu {
   private cb: MenuCallbacks
   private screens: Record<ScreenName, HTMLElement>
   private current: ScreenName = 'title'
+  /** 🌀 L'enseigne a-t-elle déjà été peinte ? Elle ne l'est qu'une fois. */
+  private enseigneJouee = false
   private preview: Preview | null = null
   private spin = 0
   /** La dernière vue du salon reçue — pour savoir qui je suis, si je suis prêt… */
@@ -293,9 +324,29 @@ export class Menu {
       jouer: document.getElementById('scr-jouer')!,
       boutique: document.getElementById('scr-boutique')!,
       compte: document.getElementById('scr-compte')!,
+      accueil: document.getElementById('scr-accueil')!,
     }
 
     this.peindre()
+
+    /*
+     * — 👋 L'accueil : « première fois ? » —
+     *
+     * ⚠️ On retient la réponse AVANT d'agir, et quelle qu'elle soit. Retenue
+     * seulement à la fin du tuto, la question reviendrait chez celui qui l'a
+     * quitté en route — alors qu'il a répondu, et qu'il sait où est le 🎓.
+     *
+     * Et elle ne peut pas revenir par un « retour » : le titre est une RACINE,
+     * y arriver efface le chemin parcouru. L'accueil ne reste derrière personne.
+     */
+    document.getElementById('btnNouveauOui')!.addEventListener('click', () => {
+      marquerAccueilli()
+      cb.onTuto()
+    })
+    document.getElementById('btnNouveauNon')!.addEventListener('click', () => {
+      marquerAccueilli()
+      this.showTitle()
+    })
 
     // — Écran-titre —
     document.getElementById('btnJouer')!.addEventListener('click', () => this.ouvrir('jouer'))
@@ -484,7 +535,7 @@ export class Menu {
     this.buildOptions()
     this.buildSalon()
     this.applyFighter(this.settings.fighter)
-    this.jouerEnseigne()
+    // 🌀 L'enseigne n'est plus lancée ici : cf. showTitle().
   }
 
   get fighter(): Fighter {
@@ -908,11 +959,34 @@ export class Menu {
     if (name === 'roster') this.resizePreview()
   }
 
+  /**
+   * 👋 Le premier écran du lancement : « première fois ? » tant qu'on n'y a
+   * pas répondu sur cet appareil, le titre ensuite.
+   */
+  accueillir() {
+    if (dejaAccueilli()) this.showTitle()
+    else this.show('accueil')
+  }
+
   /** L'écran-titre. `banner` : le mot de la fin de la course précédente. */
   showTitle(banner?: string) {
     this.el.banner.innerHTML = banner ?? ''
     this.el.banner.classList.toggle('hidden', !banner)
     this.show('title')
+    /*
+     * 🌀 L'enseigne se peint au PREMIER affichage du titre — et non plus à la
+     * création du menu.
+     *
+     * ⚠️ Lancée à la création, elle se jouait DERRIÈRE l'accueil, dans un
+     * écran caché : ou bien son minuteur la terminait sans témoin, ou bien le
+     * tap sur « non » — un `pointerdown`, précisément ce qui la saute — la
+     * coupait au passage. Dans les deux cas, l'habitué arrivait sur un titre
+     * déjà peint sans avoir vu passer le pinceau.
+     */
+    if (!this.enseigneJouee) {
+      this.enseigneJouee = true
+      this.jouerEnseigne()
+    }
   }
 
   /**
@@ -1072,13 +1146,26 @@ export class Menu {
 
   /**
    * Affiche la bourse partout où elle se montre : le bouton de l'écran-titre et
-   * l'en-tête de la boutique. `null` = on n'a pas joint le serveur ; on cache
-   * alors la ligne plutôt que d'afficher un faux zéro.
+   * l'en-tête de la boutique.
+   *
+   * `null` = pas de profil : serveur injoignable, OU base des comptes en panne
+   * alors que les courses, elles, tournent. Deux choses à ne PAS faire :
+   * · afficher 0 — un joueur qui a 300 mon et lit « 0 » croit qu'on l'a volé ;
+   * · cacher le bouton — c'est ce qu'on faisait, et la boutique a disparu pour
+   *   tout le monde le jour où la base est tombée. On la croyait retirée du jeu.
+   * On dit donc « fermée », sans chiffre.
    */
   setBourse(mon: number | null, hisui: number | null) {
     const dispo = mon !== null && hisui !== null
-    this.el.bourseRow.classList.toggle('hidden', !dispo)
-    if (!dispo) return
+    this.el.bourseRow.classList.toggle('ferme', !dispo)
+    if (!dispo) {
+      this.el.bourse.textContent = 'Fermée pour l’instant'
+      // L'en-tête de la boutique perd ses soldes aussi : un chiffre d'avant la
+      // panne, resté affiché, mentirait autant qu'un zéro.
+      this.el.bourseMon.textContent = '—'
+      this.el.bourseHisui.textContent = '—'
+      return
+    }
 
     // Le bouton du titre : les deux monnaies côte à côte, en petit
     this.el.bourse.replaceChildren(
