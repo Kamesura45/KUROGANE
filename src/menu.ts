@@ -334,7 +334,7 @@ export class Menu {
      *
      * ⚠️ On retient la réponse AVANT d'agir, et quelle qu'elle soit. Retenue
      * seulement à la fin du tuto, la question reviendrait chez celui qui l'a
-     * quitté en route — alors qu'il a répondu, et qu'il sait où est le 🎓.
+     * quitté en route — alors qu'il a répondu, et qu'il sait où est le TUTO.
      *
      * Et elle ne peut pas revenir par un « retour » : le titre est une RACINE,
      * y arriver efface le chemin parcouru. L'accueil ne reste derrière personne.

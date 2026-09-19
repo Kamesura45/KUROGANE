@@ -192,7 +192,7 @@
           <button id="btnNouveauNon" class="secondary">NON, J'AI DÉJÀ COURU</button>
         </div>
         <!-- Pour qui répond « non » trop vite : la porte ne se referme pas. -->
-        <small class="accueil-note">Le tutoriel reste dans Jouer → 🎓</small>
+        <small class="accueil-note">Le tutoriel reste dans Jouer → TUTO</small>
       </section>
 
       <!--
@@ -851,8 +851,13 @@
           <button id="btnAideModes" class="ghost aidebtn" aria-label="Aide sur les modes"><span class="ic">❓</span></button>
           <!-- 🎓 Le tutoriel : deux temps, la neige pour apprendre et le pont
                pour courir. Il quitte les menus tout de suite — ce qu'il a à
-               dire, il le dit sur la piste, l'obstacle devant les yeux. -->
-          <button id="btnTuto" class="ghost aidebtn" aria-label="Tutoriel"><span class="ic">🎓</span></button>
+               dire, il le dit sur la piste, l'obstacle devant les yeux.
+
+               ⚠️ Un MOT et non un émoji : 🎓 ne se lit « tutoriel » que pour
+               qui connaît déjà le jeu, et ce bouton parle justement à celui
+               qui ne le connaît pas. Il bouge au repos pour qu'on le remarque
+               avant d'en avoir besoin (cf. `.tutobtn` dans style.css). -->
+          <button id="btnTuto" class="ghost aidebtn tutobtn" aria-label="Tutoriel">TUTO</button>
         </header>
         <!--
           ————— 🎴 LES MODES EN TUILES : TROIS EN HAUT, DEUX EN BAS —————

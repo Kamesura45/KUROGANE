@@ -1026,8 +1026,8 @@ body {
     75% { transform: rotate(14deg) scale(1.12); }
   }
 
-  /* 🎓 La toque qu'on incline : le tuto invite, il n'insiste pas */
-  #btnTuto:hover .ic,
+  /* 🎓 La toque qu'on incline : le tuto invite, il n'insiste pas. (Le TUTO de
+     Jouer, lui, n'a plus d'émoji : il s'anime au repos, cf. `.tutobtn`.) */
   #btnNouveauOui:hover .ic { animation: salut 1.2s ease-in-out infinite; }
 
   /* 📜 Le rouleau se déroule */
@@ -1133,6 +1133,11 @@ body {
      ne les attrape donc pas. */
   #scr-accueil > * {
     animation: none;
+  }
+  /* 🎓 Le reflet du TUTO vit dans `::after` : un pseudo-élément, que
+     `#overlay button *` n'attrape pas. Sa lueur, elle, est déjà coupée. */
+  #overlay button.tutobtn::after {
+    display: none;
   }
   .joue #encre g { transform: scale(1); }
   .joue #coulures g { transform: scaleY(1); }
@@ -2048,6 +2053,57 @@ body {
  */
 .aidebtn + .aidebtn {
   margin-left: 0;
+}
+
+/*
+ * ————— 🎓 « TUTO » : un mot qui appelle —————
+ *
+ * Un MOT, pas un émoji. 🎓 ne se lit « tutoriel » que pour qui connaît déjà le
+ * jeu — et ce bouton parle justement à celui qui ne le connaît pas.
+ *
+ * Et il BOUGE AU REPOS, sans attendre qu'on le survole. Sous le pouce, le
+ * survol n'existe pas : ne l'animer qu'au passage de la souris, ce serait ne
+ * jamais l'animer pour le joueur mobile — celui qui a le plus de chances
+ * d'arriver sans rien savoir. Deux mouvements, lents et décalés :
+ *  · une LUEUR qui respire autour du cadre, toutes les 2,8 s ;
+ *  · un REFLET qui traverse le mot, toutes les 4,2 s.
+ * Ni clignotement ni saut : il doit attirer l'œil sans voler la vedette aux
+ * trois tuiles juste en dessous, qui sont ce qu'on est venu choisir.
+ *
+ * ⚠️ Le reflet vit dans `::after`, d'où sa ligne à lui dans le bloc « mouvement
+ * réduit » : la règle qui ratisse `#overlay button *` n'attrape pas les
+ * pseudo-éléments.
+ */
+#overlay button.tutobtn {
+  position: relative;
+  overflow: hidden; /* le reflet ne déborde pas du cadre */
+  width: auto;
+  /* À gauche, un cran de plus : l'espacement des lettres laisse un vide APRÈS
+     la dernière, et le mot paraîtrait poussé vers la gauche. */
+  padding: 0 11px 0 calc(11px + 0.16em);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #e6c66a;
+  border-color: rgba(214, 172, 90, 0.6);
+  animation: tutoRespire 2.8s ease-in-out infinite;
+}
+@keyframes tutoRespire {
+  0%, 100% { box-shadow: 0 0 0 rgba(214, 172, 90, 0); }
+  50% { box-shadow: 0 0 14px rgba(214, 172, 90, 0.5); }
+}
+#overlay button.tutobtn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 238, 190, 0.55) 50%, transparent 70%);
+  transform: translateX(-110%);
+  animation: tutoReflet 4.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes tutoReflet {
+  0%, 62% { transform: translateX(-110%); }
+  88%, 100% { transform: translateX(110%); }
 }
 
 /* ——— Attente / verdict ——— */

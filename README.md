@@ -610,7 +610,7 @@ que ce que tout le monde voit.
 
 ## 🎓 Le tutoriel
 
-Le bouton 🎓 de l'écran Jouer. Deux temps, et le décor change entre les deux —
+Le bouton TUTO de l'écran Jouer. Deux temps, et le décor change entre les deux —
 « on recommence » doit se **voir** sans avoir à le lire.
 
 | | Décor | Ce qui se passe |
@@ -894,7 +894,7 @@ le défaut corrigé, un cran plus bas.
 s'y relit et s'y corrige ; le sortir en JavaScript ferait de chaque virgule une
 chaîne de caractères.
 
-### ❓ et 🎓 dans l'en-tête de Jouer
+### ❓ et TUTO dans l'en-tête de Jouer
 
 Deux boutons à droite du titre, au format des autres boutons d'en-tête
 (`.aidebtn`, comme le vestiaire et les sorts du salon).
@@ -904,19 +904,34 @@ deux aides à tenir à jour finissent toujours par se contredire, et c'est celle
 qu'on a oubliée que le joueur lira. On est venu choisir entre trois tuiles — la
 question du moment est « laquelle », pas « comment on saute ».
 
-**🎓 est le tutoriel, annoncé et pas encore écrit.** Désactivé, liséré tireté,
-comme la tuile « En cours de Dev… » : un joueur qui voit qu'il en vient un
-attend ; celui à qui l'on n'a rien dit croit avoir fait le tour.
+**TUTO est un MOT, pas un émoji.** Le bouton portait 🎓, qui ne se lit
+« tutoriel » que pour qui connaît déjà le jeu — et ce bouton parle justement à
+celui qui ne le connaît pas. Doré, et plus large que ses voisins : il est le seul
+des deux qu'un nouveau venu doit trouver sans qu'on le lui montre.
+
+⚠️ **Il s'anime AU REPOS**, pas au survol. Sous le pouce le survol n'existe pas :
+ne l'animer qu'au passage de la souris, ce serait ne jamais l'animer pour le
+joueur mobile, celui qui a le plus de chances d'arriver sans rien savoir. Une
+lueur qui respire autour du cadre (2,8 s) et un reflet qui traverse le mot
+(4,2 s) — lents et décalés, sans clignotement : il attire l'œil sans voler la
+vedette aux trois tuiles en dessous, qui sont ce qu'on est venu choisir.
+
+⚠️ **Le reflet vit dans `::after`, d'où sa ligne à lui dans le bloc « mouvement
+réduit ».** La règle qui y ratisse `#overlay button *` n'attrape pas les
+pseudo-éléments : sans elle, le reflet passerait encore chez qui a demandé le
+calme.
 
 ⚠️ **`margin-left: auto` ne va que sur le PREMIER des deux.** Sur deux voisins,
 les marges automatiques se PARTAGENT l'espace libre et il s'ouvre un trou entre
 eux — mesuré : 26 px au lieu des 10 px de la rangée. Le second n'a rien à
 pousser, le premier l'a déjà fait.
 
-⚠️ **L'opacité du bouton désactivé est montée deux fois** (0,35 → 0,55 → 0,75).
-Un émoji a ses propres couleurs, et 🎓 est sombre : sur un fond sombre,
-l'affaiblir le fait disparaître au lieu de le calmer. C'est le liséré tireté qui
-porte le message ; l'opacité ne fait plus qu'adoucir.
+⚠️ **L'opacité d'un bouton d'en-tête désactivé est montée deux fois** (0,35 →
+0,55 → 0,75), du temps où le tutoriel était annoncé sans être écrit. Un émoji a
+ses propres couleurs, et 🎓 était sombre : sur un fond sombre, l'affaiblir le
+faisait disparaître au lieu de le calmer. C'est le liséré tireté qui porte le
+message ; l'opacité ne fait plus qu'adoucir. La règle reste pour le prochain
+bouton annoncé.
 
 ## 👋 « Première fois ? » — le premier écran
 
@@ -927,7 +942,7 @@ au tutoriel ; **non** ouvre le menu-titre, enseigne peinte comprise.
 (`kurogane-accueilli`), quelle qu'elle soit — la reposer à chaque lancement
 obligerait un habitué à répondre « non » avant chaque partie. Et elle est retenue
 à la RÉPONSE, pas à la fin du tutoriel : celui qui le quitte en route a répondu,
-et il sait où est le 🎓.
+et il sait où est le TUTO.
 
 ⚠️ **`localStorage` peut LEVER une exception**, pas seulement rendre `null`
 (navigation privée stricte, cookies bloqués). Sans le `try`, le lancement
