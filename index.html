@@ -879,41 +879,29 @@
           rejoint le seul écran qui les rassemble tous.
         -->
         <div class="modes">
-          <button id="btnVSE" class="mode">
-            <span class="em">⚔️</span>
-            <b>Course VS.E</b>
-            <small>Contre de vrais joueurs</small>
+          <!-- ⚠️ Le seul des trois dessins qui ne porte pas son nom : c'est une
+               scène, pas une pancarte. On l'écrit donc par-dessus, au pinceau. -->
+          <button id="btnVSE" class="mode dessine" aria-label="Course VS.E, contre de vrais joueurs">
+            <b class="pinceau nom">Course VS.E</b>
           </button>
           <!-- ♾️ En vert, comme demandé : sur une tuile qu'on vise du pouce
                sans relire, la couleur dit lequel des modes on va lancer. -->
-          <button id="btnInfini" class="mode vert">
-            <span class="em">♾️</span>
-            <b>Course Infinity</b>
-            <small>Jusqu'aux flammes</small>
-          </button>
+          <!-- Le dessin porte déjà son nom et son ruban NEW : rien à écrire
+               par-dessus. Le libellé vit dans `aria-label`. -->
+          <button id="btnInfini" class="mode dessine" aria-label="Course Infinity, jusqu'aux flammes"></button>
           <!-- 🚧 Annoncé plutôt que caché, exactement comme au classement : un
                joueur qui voit qu'il en vient un autre attend ; celui à qui
                l'on n'a rien dit croit avoir fait le tour. -->
-          <button id="btnDev" class="mode" disabled>
-            <span class="em">🚧</span>
-            <b>En cours de Dev…</b>
-            <small>Le troisième mode</small>
-          </button>
+          <button id="btnDev" class="mode dessine" disabled aria-label="Le troisième mode, en cours de développement"></button>
           <!-- 🥷 Le vestiaire est ICI, et en grand : on change de guerrier en
                pensant à la course qui vient, jamais en passant. -->
-          <button id="btnRoster" class="large ghost">
+          <!-- ⚠️ L'avis de recherche a une place VIDE à gauche : c'est là que va
+               le nom du guerrier choisi. Le dessin a été fait pour ça. -->
+          <button id="btnRoster" class="large dessine" aria-label="Changer de guerrier">
             <span class="jp-mini" id="pickJp">弥助</span>
-            <span class="lines">
-              <small>Ton guerrier</small>
-              <b id="pickName">Yasuke</b>
-            </span>
-            <span class="chev">🥷</span>
+            <b class="pinceau nom" id="pickName">Yasuke</b>
           </button>
-          <button id="btnSolo" class="mode large secondary">
-            <span class="em">🏋️</span>
-            <b>Entraînement</b>
-            <small>Seul, contre des rivaux</small>
-          </button>
+          <button id="btnSolo" class="mode large dessine" aria-label="Entraînement, seul contre des rivaux"></button>
         </div>
       </section>
 
@@ -940,11 +928,20 @@
           <button id="btnQuick" class="primary"><span class="ic">⚡</span> PARTIE RAPIDE</button>
           <button id="btnCreate" class="secondary"><span class="ic">🏮</span> CRÉER UN SALON</button>
         </div>
+        <!--
+          🔑 LA PLAQUE « CODE » : le champ rose porte la saisie, le sceau jaune
+          sert de bouton.
+
+          ⚠️ Le libellé au-dessus est MUET pour l'œil, pas pour le lecteur
+          d'écran : le sceau dit déjà « Code », et deux fois le même mot à dix
+          pixels d'écart fait bégayer l'écran.
+        -->
         <div class="field">
-          <label for="joinCode">Rejoindre par code</label>
-          <div class="row">
+          <label for="joinCode" class="muet">Rejoindre par code</label>
+          <div class="row plaquecode">
             <input
               id="joinCode"
+              class="pinceau"
               type="text"
               maxlength="6"
               placeholder="CODE"
@@ -952,7 +949,7 @@
               autocapitalize="characters"
               spellcheck="false"
             />
-            <button id="btnJoinCode" class="ghost">OK</button>
+            <button id="btnJoinCode" class="sceau" aria-label="Rejoindre le salon de ce code">OK</button>
           </div>
         </div>
         <div class="field">
@@ -960,7 +957,7 @@
             <label>Salons ouverts</label>
             <button id="btnRefresh" class="ghost" aria-label="Rafraîchir"><span class="ic">↻</span></button>
           </div>
-          <div id="salonList" class="salonlist"></div>
+          <div id="salonList" class="salonlist bois"></div>
         </div>
       </section>
 

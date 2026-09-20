@@ -1018,14 +1018,169 @@ la grille a **six** colonnes, une tuile ordinaire en occupe deux, une tuile
 `large` en occupe trois. Six est le plus petit nombre divisible par 2 et par 3,
 et c'est tout le mécanisme.
 
-⚠️ Les tuiles ne descendent pas sous **96 px**. Sur un téléphone étroit, trois
-colonnes laissent ~106 px chacune et « Course Infinity » passe à la ligne ; sans
-plancher, la tuile suivrait son texte et les trois n'auraient plus la même
-hauteur. Une rangée en dents de scie se lit comme un défaut.
+⚠️ **Ce n'est plus un plancher de 96 px qui tient la rangée, mais le RAPPORT du
+dessin.** Les tuiles portaient un texte, donc une hauteur minimale : sans elle,
+la tuile suivait son texte et les trois n'avaient plus la même hauteur — une
+rangée en dents de scie se lit comme un défaut. Maintenant chaque tuile est une
+image : `aspect-ratio` la tient, et trois images de même rapport font toujours
+trois tuiles de même hauteur, quelle que soit la largeur de l'écran.
 
-⚠️ **Chaque tuile porte une promesse en petit.** « Course VS.E » ne dit rien à
-qui arrive, et un sigle qu'il faut deviner fait hésiter devant le bouton — c'est
-là qu'on repart au menu au lieu de lancer une course.
+⚠️ **La promesse en petit a disparu avec le texte.** « Contre de vrais joueurs »,
+« Jusqu'aux flammes » : ces lignes existaient parce qu'un sigle qu'il faut
+deviner fait hésiter devant le bouton. Les dessins disent la même chose sans un
+mot — un torrent, des bambous, un panneau de chantier. Le sens n'est pas perdu
+pour autant : il vit dans l'`aria-label` de chaque tuile, qui est ce que lit un
+lecteur d'écran, et il est resté écrit en toutes lettres dans l'aide.
+
+## 🖼️ Les dessins du menu
+
+Les boutons de « Jouer » et l'écran des salons sont des **dessins faits à la
+main**, scannés, détourés et posés tels quels.
+
+| Dessin | Ce qu'il devient |
+|---|---|
+| Un torrent bleu | ⚔️ la tuile **Course VS.E** |
+| Des bambous, ruban NEW | ♾️ la tuile **Course Infinity** |
+| Un chantier, panneau DEV | 🚧 la tuile du **troisième mode** |
+| Un avis de recherche | 🥷 le **choix du guerrier** |
+| Une enseigne peinte | 🏋️ l'**entraînement** |
+| Une flèche dorée | ← le **retour**, dans tous les en-têtes |
+| Une plaque rose et un sceau jaune | 🔑 le **code de salon** et son bouton |
+| Une planche de bois à quatre rangées | 🪵 la **liste des salons ouverts** |
+
+### Ils vivent dans `src/ui/`, pas dans `public/`
+
+⚠️ Et c'est la réponse au piège qu'on a payé sur le bouton pause. Une image de
+`public/` n'est pas touchée par Vite : son adresse reste littérale, et une
+adresse **relative** écrite dans la feuille de style se résoudrait en production
+contre `/assets/`, où la feuille est empaquetée — donc un 404, invisible en
+développement. Sous `src/`, Vite réécrit chaque `url()`, y met une empreinte, et
+**refuse de compiler** si le fichier manque. Le défaut ne peut plus atteindre le
+joueur.
+
+⚠️ **Jamais d'adresse rangée dans une variable CSS.** C'est exactement ce qui
+avait caché le problème la première fois : chaque dessin est cité en clair dans
+sa règle, là où l'empaqueteur peut le voir.
+
+### Découpés dans le navigateur, faute de mieux
+
+La planche arrive en **un seul scan**, couché d'un quart de tour, huit dessins
+sur la même page. Ni Python, ni ImageMagick, ni `sharp` sur cette machine — mais
+le navigateur sait décoder un WebP, pivoter, découper et ré-encoder. Le découpage
+s'est donc fait dans une page, et un petit serveur local a reçu les morceaux.
+
+Les limites de chaque dessin ne sont pas pointées à la main : on cherche les
+**composantes connexes** de l'encre, après un léger épaississement qui recolle
+les traits d'un même dessin sans souder deux dessins voisins. Le cadre très pâle
+de la page les soudait tous : il a fallu durcir le seuil d'encre.
+
+⚠️ **En WebP, pas en PNG : 250 ko au lieu de 1,3 Mo** pour les mêmes images. Un
+scan est une photo — du grain partout — et le PNG ne sait pas l'abréger.
+
+### ⚠️ Les tuiles ne sont PAS détourées, et c'est une correction
+
+Au premier passage, les huit dessins étaient allés au détoureur. Le torrent de
+« Course VS.E » en est ressorti **éteint** : ses blancs d'écume et ses bleus les
+plus clairs tombaient dans la distance du papier, ils sont donc devenus
+transparents — et le fond sombre du menu est passé au travers. Une scène de
+neige et d'eau vive affichée en bleu nuit.
+
+La règle est donc la forme du dessin, pas l'habitude :
+
+| | |
+|---|---|
+| **Rectangulaire** (les trois tuiles) | aucun détourage — le dessin garde son papier, et toutes ses couleurs |
+| **Découpé** (bandeaux, flèche, plaque du code) | détouré, mais au ras : on mange le papier depuis les bords, sans décomposer les pixels de bordure |
+
+Le détoureur du bouton pause décompose les bords anticrénelés pour éviter un
+liseré pâle ; c'est ce qu'il faut pour un dessin posé sur un fond sombre, et
+c'est précisément ce qui mangeait les clairs d'une scène. Les pièces découpées
+passent donc par un remplissage depuis les bords qui ne touche à aucune couleur.
+
+⚠️ **Le papier, c'est « clair ET gris ».** Premier essai : on effaçait ce qui
+était à moins de 24 de la teinte échantillonnée dans un coin. Trop étroit — le
+scan n'a pas un blanc uniforme, et il restait un liseré pâle autour
+d'« Entraînement » et du panneau de chantier. La règle porte maintenant sur la
+CLARTÉ (plus de 196) et sur l'absence de teinte (saturation sous 0,22) : le rose
+de la plaque du code et le bois du tableau, eux, ont une teinte franche et
+restent, même très clairs.
+
+⚠️ **Et l'on repasse pour le halo.** Les pixels anticrénelés, entre le papier et
+le trait, sont un peu moins clairs : un second passage les efface (seuil 172),
+mais SEULEMENT s'ils touchent ce qui vient de partir. Mesuré sur le bandeau de
+l'entraînement : 14 193 pixels, là où le premier essai n'en avait vu aucun.
+
+### Les personnages, en noir pour de bon
+
+Ils étaient noirs par accident : leurs corps blancs, détourés, laissaient voir le
+fond sombre du menu. En rendant ses couleurs à la scène, ils sont redevenus
+blancs — et le joueur les voulait noirs.
+
+Ils sont donc **peints** en noir, corps par corps : un remplissage depuis un point
+intérieur, borné par les traits du dessin. Le personnage de gauche a demandé une
+autre règle — son corps est gris-blanc au milieu d'une eau bleu pâle, donc c'est
+la SATURATION qui les sépare, pas la clarté. Noirs dans l'image, ils le restent
+quel que soit le fond.
+
+### Les mots des dessins, plus nets
+
+« Entraînement » et « Course Infinity » sont écrits à la main sur des fonds
+colorés : au format d'une tuile, ils se lisaient mal. Le contraste et la
+saturation sont donc poussés **au découpage** (×1,3 et ×1,2), une fois pour
+toutes — pas au rendu, où un filtre CSS coûterait à chaque image affichée.
+
+### 🌊 L'eau coule
+
+Le dessin de « Course VS.E » est un torrent : figé, il n'en a que la forme.
+
+Un **second calque** ne porte que les pixels bleus du torrent. Ils ne sont pas
+détourés à la main mais choisis par leur **teinte** (172° à 246°), ce qui écarte
+le violet des berges et le noir des silhouettes. Une lueur traverse ce calque en
+biais, sans fin : ce qui bouge est la **lumière sur l'eau**, pas le dessin —
+déplacer l'image l'aurait déformée ou aurait laissé un trou derrière elle.
+
+⚠️ **Le calque s'arrête au cadre.** Les deux bandes grises, en haut et en bas du
+dessin, sont d'un bleu-gris qui tombe dans la même teinte que l'eau : la lueur
+leur passait dessus, et c'est le cadre qui semblait couler.
+
+⚠️ **Et le nom passe AU-DESSUS de la lueur** (`z-index`), sinon elle lui glisse
+sur les lettres.
+
+**🎋 L'eau des bambous coule aussi**, sur la tuile Infinity : quatre segments
+cyan, choisis par la même règle de teinte, que le violet du fond et le vert des
+bambous ne franchissent pas.
+
+⚠️ **Les deux lueurs ne battent pas ensemble** : 3,8 s pour le torrent, 4,6 s
+pour les bambous. Synchronisées, deux tuiles voisines se seraient lues comme un
+clignotant.
+
+### 🖌️ L'effet pinceau
+
+Les dessins portent leurs propres mots ; ceux que le JEU écrit — un pseudo, le
+nom du guerrier choisi, un code de salon — devaient leur ressembler, sinon
+l'écran se lit en deux voix.
+
+Pas de police d'écriture chargée pour ça : un fichier de plus à attendre, et un
+rendu qui saute quand il arrive. Le texte est **masqué par une trame d'encre**
+(`encre.webp`, fabriquée au canvas : des traînées dans le sens du geste, et des
+manques là où le poil du pinceau saute). La lettre garde sa couleur — crème sur
+les bandeaux sombres, brun sur le bois clair.
+
+⚠️ **Un navigateur qui ignore `mask-image` affiche le texte normalement.** On
+perd le grain, jamais le mot.
+
+### 🪵 La planche des salons
+
+Le dessin porte **quatre rangées** ; la liste en affiche zéro, deux ou dix. Il ne
+pouvait donc pas servir de fond tel quel — les traits ne seraient jamais tombés
+sous les vrais salons. On en tire deux choses : le **cadre**, découpé en
+`border-image`, et une **trame de bois** prise entre deux rangées, répétée à
+l'intérieur. Chaque salon est une ligne soulignée à l'encre, comme sur le dessin,
+et toute la ligne est le bouton pour rejoindre.
+
+⚠️ **La découpe du cadre vaut 20 px, pas 34.** Plus large, elle emportait le
+début des traits dessinés, qui réapparaissaient en petits tirets noirs le long du
+bord gauche.
 
 ## 🎬 Les boutons répondent
 

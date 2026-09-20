@@ -1135,8 +1135,11 @@ body {
     animation: none;
   }
   /* 🎓 Le reflet du TUTO vit dans `::after` : un pseudo-élément, que
-     `#overlay button *` n'attrape pas. Sa lueur, elle, est déjà coupée. */
-  #overlay button.tutobtn::after {
+     `#overlay button *` n'attrape pas. Sa lueur, elle, est déjà coupée.
+     🌊 Même chose pour l'eau de la course VS.E. */
+  #overlay button.tutobtn::after,
+  #overlay #btnVSE.dessine::before,
+  #overlay #btnInfini.dessine::before {
     display: none;
   }
   .joue #encre g { transform: scale(1); }
@@ -1497,6 +1500,308 @@ body {
   border: 1px solid #3d4560;
   box-shadow: none;
   color: #f0e8d8;
+}
+
+/* ═══════════════ 🖌️ LES DESSINS DU MENU ═══════════════ */
+/*
+ * Les boutons de « Jouer » et l'écran des salons sont des DESSINS faits à la
+ * main, détourés de leur papier (cf. public/ui/LISEZ-MOI.md).
+ *
+ * ⚠️ ILS VIVENT DANS `src/ui/`, PAS DANS `public/`, et c'est la réponse au
+ * piège qu'on a payé sur le bouton pause. Une image de `public/` n'est pas
+ * touchée par Vite : son adresse reste littérale, et une adresse RELATIVE
+ * écrite ici se résoudrait en production contre `/assets/`, où la feuille de
+ * style est empaquetée — donc un 404. Sous `src/`, Vite réécrit chaque `url()`
+ * (empreinte comprise) et REFUSE DE COMPILER si le fichier manque. Le défaut
+ * ne peut plus arriver jusqu'au joueur.
+ *
+ * ⚠️ Et jamais d'adresse rangée dans une variable CSS : c'est exactement ce
+ * qui avait caché le problème la première fois. Chaque dessin est cité en clair
+ * dans sa règle.
+ */
+#overlay button.dessine {
+  background-color: transparent !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  /* `100% 100%` et non `contain` : la boîte a EXACTEMENT les proportions du
+     dessin (voir les `aspect-ratio` plus bas), donc rien ne se déforme — et
+     l'on ne laisse pas de marge vide autour. */
+  background-size: 100% 100% !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  color: #f4eedf;
+}
+#overlay #btnVSE.dessine { background-image: url(./ui/vse.webp); }
+#overlay #btnInfini.dessine { background-image: url(./ui/infini.webp); }
+#overlay #btnDev.dessine { background-image: url(./ui/dev.webp); }
+#overlay #btnSolo.dessine { background-image: url(./ui/entrainement.webp); }
+#overlay #btnRoster.dessine { background-image: url(./ui/roster.webp); }
+
+/* Chaque tuile prend les proportions de son dessin. Le plancher de 96 px des
+   tuiles ordinaires n'a plus lieu d'être : c'est le rapport qui commande. */
+.modes > .mode.dessine {
+  aspect-ratio: 306 / 370;
+  min-height: 0;
+}
+.modes > .large.dessine {
+  aspect-ratio: 516 / 156;
+  min-height: 0;
+}
+/* 🚧 Le mode à venir garde ses couleurs : son dessin DIT déjà qu'il n'est pas
+   prêt (panneau, rubalise, « En cours de développement »). Le griser par-dessus
+   reviendrait à le dire deux fois, et plus mal. */
+#overlay button.mode.dessine:disabled {
+  opacity: 1;
+  border: none !important;
+}
+
+/* ⚔️ Le nom de la course VS.E, posé en bas de sa scène. */
+#overlay #btnVSE.dessine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 0 7% !important;
+  position: relative;
+  overflow: hidden; /* la lueur de l'eau ne déborde pas du cadre */
+}
+#overlay #btnVSE .nom {
+  font-size: 0.74rem;
+  line-height: 1.1;
+  /* Au-dessus de la lueur, sinon elle lui passe dessus. */
+  position: relative;
+  z-index: 1;
+}
+
+/*
+ * ————— 🌊 L'EAU DE LA COURSE VS.E COULE —————
+ *
+ * Le dessin est un torrent : figé, il n'en a que la forme.
+ *
+ * Un second calque ne porte QUE les pixels bleus du torrent — découpés par
+ * leur TEINTE (172° à 246°), pas à la main, et bornés à l'intérieur du cadre :
+ * les deux bandes grises du haut et du bas sont d'un bleu-gris qui tombait
+ * dans la même teinte, et la lueur leur passait dessus.
+ *
+ * Ce qui bouge, c'est la LUMIÈRE, pas le dessin : une bande claire traverse en
+ * biais, sans fin. Déplacer l'image elle-même l'aurait déformée ou aurait
+ * laissé un trou derrière elle.
+ *
+ * ⚠️ Le calque est un `::before`, donc il lui faut sa propre ligne dans le bloc
+ * « mouvement réduit » : la règle qui y ratisse `#overlay button *` n'attrape
+ * pas les pseudo-éléments (même piège que le reflet du bouton TUTO).
+ */
+#overlay #btnVSE.dessine::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url(./ui/vse-eau.webp) center / 100% 100% no-repeat;
+  -webkit-mask-image: linear-gradient(118deg, transparent 36%, #000 50%, transparent 64%);
+  mask-image: linear-gradient(118deg, transparent 36%, #000 50%, transparent 64%);
+  -webkit-mask-size: 300% 300%;
+  mask-size: 300% 300%;
+  animation: eauCoule 3.8s linear infinite;
+  /* `screen` : la lueur ÉCLAIRE l'eau, elle ne la repeint pas. */
+  mix-blend-mode: screen;
+  opacity: 0.8;
+  pointer-events: none;
+}
+/*
+ * 🎋 Et l'eau des bambous, sur la tuile Infinity.
+ *
+ * Même mécanique, deux réglages à part : les quatre segments d'eau sont
+ * petits et espacés, donc la lueur est un peu plus opaque pour se voir ; et
+ * elle met 4,6 s au lieu de 3,8, pour que les deux tuiles voisines ne battent
+ * pas ensemble — deux lueurs synchronisées se liraient comme un clignotant.
+ */
+#overlay #btnInfini.dessine {
+  position: relative;
+  overflow: hidden;
+}
+#overlay #btnInfini.dessine::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url(./ui/infini-eau.webp) center / 100% 100% no-repeat;
+  -webkit-mask-image: linear-gradient(100deg, transparent 38%, #000 50%, transparent 62%);
+  mask-image: linear-gradient(100deg, transparent 38%, #000 50%, transparent 62%);
+  -webkit-mask-size: 300% 300%;
+  mask-size: 300% 300%;
+  animation: eauCoule 4.6s linear infinite;
+  mix-blend-mode: screen;
+  opacity: 0.9;
+  pointer-events: none;
+}
+@keyframes eauCoule {
+  from {
+    -webkit-mask-position: 150% 150%;
+    mask-position: 150% 150%;
+  }
+  to {
+    -webkit-mask-position: -70% -70%;
+    mask-position: -70% -70%;
+  }
+}
+
+/* 🥷 L'avis de recherche : le nom du guerrier va dans la place laissée vide à
+   GAUCHE, l'affiche occupe la droite. */
+#overlay #btnRoster.dessine {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0 30% 0 7% !important;
+}
+#btnRoster .jp-mini {
+  flex: none;
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+#btnRoster .nom {
+  font-size: 0.92rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ← Le retour : la flèche dorée, sur tous les en-têtes. */
+#overlay button.back {
+  width: 58px;
+  height: 34px;
+  font-size: 0;
+  background: url(./ui/retour.webp) center / contain no-repeat;
+  border: none;
+  box-shadow: none;
+}
+
+/*
+ * ————— 🖌️ L'EFFET PINCEAU —————
+ *
+ * Les dessins portent leurs propres mots ; ceux que le JEU écrit (un pseudo,
+ * un nom de guerrier, un code) doivent leur ressembler, sinon l'écran se lit
+ * en deux voix.
+ *
+ * On ne charge pas de police d'écriture pour ça : un fichier de plus à
+ * attendre, et un rendu qui saute quand elle arrive. On MASQUE le texte avec
+ * une trame d'encre (`encre.webp`, fabriquée à la main) — le poil du pinceau
+ * saute par endroits, et la lettre garde sa couleur, quelle qu'elle soit.
+ *
+ * ⚠️ Un navigateur qui ignore `mask-image` affiche le texte NORMALEMENT : on
+ * perd le grain, jamais le mot.
+ */
+.pinceau {
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  -webkit-mask-image: url(./ui/encre.webp);
+  mask-image: url(./ui/encre.webp);
+  -webkit-mask-size: 180px;
+  mask-size: 180px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/*
+ * ————— 🪵 LE TABLEAU DES SALONS —————
+ *
+ * Le cadre de bois vient du dessin, découpé en bordure ; l'intérieur est une
+ * trame de bois prise dans la même planche, entre deux rangées.
+ *
+ * ⚠️ Le dessin entier ne pouvait pas servir de fond : il porte QUATRE rangées
+ * dessinées, et la liste en affiche zéro, deux ou dix. Les traits ne seraient
+ * jamais tombés sous les vrais salons.
+ */
+.salonlist.bois::-webkit-scrollbar {
+  width: 6px;
+}
+.salonlist.bois::-webkit-scrollbar-thumb {
+  background: rgba(60, 38, 22, 0.45);
+  border-radius: 3px;
+}
+.salonlist.bois {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(60, 38, 22, 0.45) transparent;
+  background: url(./ui/bois.webp) repeat;
+  border: 12px solid transparent;
+  border-image: url(./ui/salons.webp) 20 / 11px / 0 stretch;
+  padding: 4px 8px;
+  gap: 0;
+}
+/* Sur le bois clair, l'encre est SOMBRE. Une rangée est soulignée comme sur le
+   dessin : c'est le trait qui porte le pseudo. */
+#overlay .bois button.salonrow {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid rgba(48, 30, 18, 0.45);
+  border-radius: 0;
+  color: #2b1d14;
+  padding: 9px 2px;
+}
+#overlay .bois button.salonrow:last-child {
+  border-bottom: none;
+}
+.bois .salonhost {
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+  font-weight: 700;
+  -webkit-mask-image: url(./ui/encre.webp);
+  mask-image: url(./ui/encre.webp);
+  -webkit-mask-size: 180px;
+  mask-size: 180px;
+}
+.bois .saloncount {
+  color: #5c3f27;
+}
+.bois .salonempty {
+  color: #4a3324;
+  opacity: 0.85;
+}
+
+/*
+ * ————— 🔑 LA PLAQUE DU CODE —————
+ * Le champ rose reçoit la saisie, le sceau jaune est le bouton. Les
+ * proportions viennent du dessin ; la saisie est centrée dans l'ovale.
+ */
+.plaquecode {
+  background: url(./ui/code.webp) center / 100% 100% no-repeat;
+  aspect-ratio: 528 / 110;
+  align-items: center;
+  gap: 0;
+  padding: 0 2%;
+}
+#overlay .plaquecode input {
+  flex: 1;
+  min-width: 0;
+  height: 58%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: #3a2418;
+  text-align: center;
+  letter-spacing: 0.32em;
+}
+#overlay .plaquecode input::placeholder {
+  color: rgba(58, 36, 24, 0.5);
+}
+/* Le sceau : sa surface est cliquable, mais tout ce qu'on y voit est dessiné. */
+#overlay button.sceau {
+  flex: none;
+  width: 21%;
+  align-self: stretch;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-size: 0;
+  padding: 0;
+}
+/* Muet pour l'œil, present pour le lecteur d'écran. */
+.field > label.muet {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* ——— Choix du guerrier ——— */
