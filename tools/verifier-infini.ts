@@ -338,9 +338,19 @@ console.log('\n————— 🗺️ Les decors sont tires au sort ———�
   const GRAINES = [1, 7, 99, 1234, 4242, 55555]
   const suites = GRAINES.map((g) => suite(g))
 
+  /*
+   * ⚠️ LE NOM EST TIRÉ DE LA TABLE, JAMAIS ÉCRIT ICI.
+   *
+   * Ce test vérifie `s[0] === 0` — le premier créneau porte le PREMIER biome.
+   * Il disait « le village en flammes » parce que le village occupait la
+   * première place ; la bambouseraie revenue en tête, l'étiquette serait devenue
+   * fausse alors que la règle, elle, tient toujours. Un test qui ment sur ce
+   * qu'il mesure est pire que pas de test : on le lit, on se fie, et on corrige
+   * le code alors que c'est le test qui était périmé.
+   */
   ok(
     suites.every((s) => s[0] === 0),
-    'on commence TOUJOURS par le village en flammes',
+    `on commence TOUJOURS par « ${BIOMES[0].nom} »`,
     suites.map((s) => s[0]).join(',')
   )
   ok(

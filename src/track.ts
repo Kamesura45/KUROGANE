@@ -489,6 +489,79 @@ export class Track {
   private biomeImpose = -1
   /** La graine de la course, gardée pour bâtir les tronçons suivants. */
   private graine = 0
+
+  /**
+   * ————— 🎚️ LE RÉGLAGE DE DÉCOR —————
+   *
+   * Un module, pas une classe : la piste est la seule à savoir combien de
+   * massifs sont visibles, donc la seule à pouvoir dire combien on en veut. Et
+   * le décor doit être construit APRÈS le réglage, jamais avant — voir
+   * `viderDecor`.
+   */
+  /**
+   * ⚠️ UN MODULE, ET CE N'EST PAS FUSION POUR RIEN.
+   *
+   * La piste est la seule à savoir combien de massifs tiennent dans le champ.
+   * Mais `fabriqueDecor` — qui les bâtit — vit dans `biomes.ts`, qui
+   * importerait la piste pour lire ce nombre : le cycle serait immédiat
+   * (`track` importe déjà `BIOMES`). D'où la variable de module : elle porte un
+   * nombre, pas une dépendance.
+   *
+   * Elle est bornée comme sa jumelle `densiteDecor` : au-delà de 1,7 le décor
+   * devient un mur (et le décor ne masque JAMAIS un obstacle), en dessous de
+   * 0,6 la forêt s'éclaircit au point de laisser voir le sol nu.
+   */
+  private budget = 1
+
+  /**
+   * Change l'écartement des massifs.
+   *
+   * ⚠️ VIDER LE POOL EST L'APPELANT QUI LE DOIT, ET C'EST À LUI DE LE SAVOIR.
+   *
+   * Un massif est bâti une fois puis recyclé sur toute la course. Changer le
+   * réglage ne change donc rien à ceux qui existent : sans cette purge, le
+   * nouveau réglage mettrait plusieurs centaines de mètres à se voir — et le
+   * joueur conclurait que le bouton ne marche pas.
+   *
+   * Reconstruire coûte quelques dizaines de millisecondes par massif. C'est
+   * gratuit au menu, qui est le seul endroit où l'on change de qualité, et c'est
+   * pour ça que la décision reste ici plutôt que dans la méthode.
+   */
+  setBudgetDecor(k: number, reconstruire = true) {
+    this.budget = Math.min(1.7, Math.max(0.6, k))
+    if (reconstruire) this.viderDecor()
+  }
+
+  /** L'écartement courant — pour savoir s'il faut vider le pool (cf. `applyQuality`). */
+  budgetDecor() {
+    return this.budget
+  }
+
+  /**
+   * Jette tous les massifs de bordure.
+   *
+   * ⚠️ ET LES GÉOMÉTRIES SONT LIBÉRÉES À LA MAIN.
+   *
+   * `clear()` — le détachement des maillages — ne rend pas la mémoire au
+   * navigateur : sans `dispose()`, chaque massif reconstruit laisse son tampon
+   * de positions en place. Changer de qualité cinq fois dans les options
+   * laisserait cinq pools de géométries vivantes, et c'est exactement le genre
+   * de fuite qu'on ne voit qu'après une demi-heure de menu.
+   */
+  viderDecor() {
+    for (const d of this.decors) {
+      this.scene.remove(d.mesh)
+      d.mesh.traverse((o) => {
+        const m = o as THREE.Mesh
+        if (m.geometry) m.geometry.dispose()
+      })
+    }
+    this.decors.length = 0
+    // Le semis repart de zéro : sans ça, `prochainDecor` continuerait d'avancer
+    // par bonds et le premier massif reconstruit tomberait à n'importe quelle
+    // distance du joint.
+    this.prochainDecor = 0
+  }
   /** Jusqu'où le plan est bâti, en mètres. */
   private bord = 0
   /** Combien de tronçons ont été cousus : chacun a sa propre graine. */
@@ -844,20 +917,30 @@ export class Track {
    *
    * Trois règles, et chacune répare un défaut qu'on verrait tout de suite :
    *
-   *  · LE PREMIER EST TOUJOURS LE VILLAGE EN FLAMMES. On commence là où le
-   *    joueur s'attend à commencer ; ouvrir sur la neige un coup sur trois
-   *    donnerait l'impression de tomber au hasard dans une partie déjà entamée.
+   *  · LE PREMIER EST TOUJOURS LE BIOME QUI OUVRE LA COURSE (`BIOMES[0]`, la
+   *    bambouseraie). On commence là où le joueur s'attend à commencer ;
+   *    ouvrir sur un autre décor donnerait l'impression de tomber au hasard dans
+   *    une partie déjà entamée.
+   *
+   *    ⚠️ La règle ne dit pas « le village » mais « le PREMIER BIOME ». Les
+   *    deux écritures disaient la même chose tant que le village en flammes
+   *    occupait la première place, et ont cessé de dire la même chose le jour
+   *    où la bambouseraie lui a rendu sa place. Un `return 0` lit l'index, pas
+   *    le nom : il suffit de ne pas horner le nom à côté.
    *
    *  · JAMAIS DEUX FOIS LE MÊME D'AFFILÉE. Deux créneaux identiques, ce sont
-   *    1 280 m du même décor — ça ne se lit pas comme du hasard, ça se lit
-   *    comme un bug d'affichage.
+   *    deux quarts de cycle du même décor — 960 m sur une course de 1 920 m —
+   *    et ça ne se lit pas comme du hasard, ça se lit comme un bug
+   *    d'affichage. Le nombre suit `COURSE_LENGTH / BIOMES.length × 2` : il
+   *    était écrit en dur à 1 280 m, valeur vraie tant qu'on était en tiers,
+   *    et fausse dès le retour de la bambouseraie.
    *
    *  · TIRÉ DE LA GRAINE, pas de `Math.random`. La piste doit rester une pure
    *    fonction de sa graine : c'est ce qui la rend rejouable, et identique pour
    *    deux joueurs qui la partageraient.
    */
   private ordreSlot(k: number): number {
-    if (k <= 0) return 0 // 🔥 le village en flammes ouvre toujours
+    if (k <= 0) return 0 // 🎋 le premier biome ouvre toujours
     /*
      * ⚠️ MÉMORISÉ, parce que chaque créneau dépend du précédent : sans cache,
      * `biomeDe` refait toute la chaîne depuis zéro à chaque appel — et il est
@@ -1519,10 +1602,10 @@ export class Track {
      * ⚠️ Le décor imposé vaut AUSSI hors course.
      *
      * Sur la grille de départ, l'ambiance retombait sur `ambianceA(0, 1)` —
-     * donc sur le premier biome, le village en flammes. Vu à l'écran : le
-     * tutoriel expliquait le départ canon devant un village orange, puis
-     * basculait sur la neige au premier mètre. Un décor qui change au moment
-     * où l'on part se lit comme un défaut d'affichage.
+     * donc sur le premier biome, la bambouseraie. Vu à l'écran : le tutoriel
+     * expliquait le départ canon devant une forêt, puis basculait sur la neige
+     * au premier mètre. Un décor qui change au moment où l'on part se lit
+     * comme un défaut d'affichage.
      */
     const amb =
       this.biomeImpose >= 0
@@ -1585,15 +1668,31 @@ export class Track {
      * Semer dès `parcouru - 10` (un peu derrière, pour couvrir ce qu'on voit
      * aussi en se retournant) fait exister la forêt dès le premier instant.
      */
-    if (this.prochainDecor === 0) this.prochainDecor = parcouru - 10
+if (this.prochainDecor === 0) this.prochainDecor = parcouru - 10
     while (this.prochainDecor <= parcouru + LOOKAHEAD) {
+      /*
+       * ⚠️ L'ÉCARTEMENT EST LE LEVIER DES APPELS DE DESSIN.
+       *
+       * Un massif_visible = deux appels de dessin (le solide, le feuillage), et
+       * le nombre de massifs dans le champ est inversement proportionnel à
+       * l'écartement. C'est donc LE seul réglage qui baisse réellement le pic —
+       * le nombre de pixels, lui, ne change rien à un appel de dessin.
+       *
+       * ⚠️ Et l'écartement ne peut pas non plus être le SEUL levier : en
+       * doublant l'écart, on ne fait pas que réduire le nombre de massifs, on
+       * ÉLOIGNE le décor de la caméra et on fait disparaître les tiges
+       * proches — celles qui donnent la densité au premier plan. Les deux
+       * briquetés ensemble : l'écartement pour les appels, `densiteDecor` pour
+       * la matière.
+       */
+      const ecart = biome.ecartDecor * this.budget
       // Un élément de chaque côté, mais jamais à la même distance : deux rangées
       // symétriques feraient une allée de cimetière, pas une forêt.
       for (const cote of [-1, 1]) {
-        const d = this.prochainDecor + (cote < 0 ? 0 : biome.ecartDecor * 0.5)
+        const d = this.prochainDecor + (cote < 0 ? 0 : ecart * 0.5)
         this.spawnDecor(devant, cote, -(d - parcouru))
       }
-      this.prochainDecor += biome.ecartDecor
+this.prochainDecor += ecart
     }
 
     /*

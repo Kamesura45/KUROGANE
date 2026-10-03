@@ -166,6 +166,8 @@ kurogane/
 │   ├── parchemin.ts    Le catalogue des sorts et tous leurs réglages
 │   ├── bot.ts          Les rivaux d'entraînement : esquive scriptée, parchemins
 │   ├── scores.ts       🏆 Les meilleurs temps gardés sur l'appareil
+│   ├── settings.ts     Les réglages gardés sur le téléphone + l'échelle de qualité
+│   ├── oiseaux.ts      🐦 Les volées de la bambouseraie (une volée = un maillage)
 │   ├── pays.ts         🌍 Les 194 pays, leurs régions et leurs villes
 │   ├── catalogue.ts    🏮 Le banc d'essai : tout ce que le jeu sait fabriquer
 │   ├── net.ts          La connexion au serveur : rejoindre, envoyer, recevoir
@@ -216,7 +218,10 @@ taillés **une seule fois** : **118 → 71 matériaux**, **318 → 270 géométr
 > en commun ferait déteindre un objet sur tous les autres.
 
 ```bash
+# Un seul cran (Maxi par défaut)
 node --import ./tools/resolveur-ts.mjs tools/mesurer-scene.ts
+# Les cinq crans, sur la même course et la même graine — le seul moyen de comparer
+node --import ./tools/resolveur-ts.mjs tools/mesurer-scene.ts tous
 ```
 
 ## 🎋 Les plateformes arrêtent — et la bambouseraie en a DEUX
@@ -307,6 +312,8 @@ npm run mur:test           # le flanc bloque de côté, la voie est libre au nez
 npm run glissade:test      # la glissade au sol (0,55 s) et celle en vol (5 s)
 npm run sprint:test        # pendant le sprint, clavier et tactile se taisent
                            # pareil — et la zone est bien vide d'obstacles
+npm run bambous:test       # la forêt a un bord ? le couloir est-il libre ? les
+                           # cinq crans de qualité gardent-ils leur lisière ?
 ```
 
 ## ⛩️ Le portique et sa forme creuse
@@ -1852,7 +1859,7 @@ Trois règles, et chacune répare un défaut qu'on verrait tout de suite :
 | Règle | Sans elle |
 |---|---|
 | **Le premier est toujours le village en flammes** | Ouvrir sur la neige un coup sur trois donnerait l'impression de tomber au hasard dans une partie déjà commencée |
-| **Jamais deux fois le même d'affilée** | Deux créneaux identiques, c'est 1 280 m du même décor — ça ne se lit pas comme du hasard, mais comme un bug d'affichage |
+| **Jamais deux fois le même d'affilée** | Deux créneaux identiques, c'est deux quarts de cycle du même décor — **960 m** — ça ne se lit pas comme du hasard, mais comme un bug d'affichage |
 | **Tiré de la GRAINE, pas de `Math.random`** | La piste ne serait plus rejouable, ni identique pour deux joueurs qui la partagent |
 
 ⚠️ **L'ambiance suit le même tirage.** `ambianceA` accepte désormais l'ordre des
@@ -2637,20 +2644,76 @@ d'asset — zéro octet à télécharger. Trois détails qui font qu'elle vit :
 
 ### La qualité graphique
 
-| Réglage | Pixels dessinés |
-|---|---|
-| **Auto** | ×2 sur PC, ×1,5 sur mobile |
-| **Belle** | ×2 |
-| **Fluide** | ×1 — 4 fois moins de pixels qu'en « Belle » |
+⚠️ **Six positions, et chacune pilote DEUX leviers — plus les pixels.**
 
-Elle ne joue **que** sur le nombre de pixels (`pixelRatio`) : c'est de loin le
-plus gros coût sur mobile, et diviser la densité par 2, c'est 4 fois moins de
-pixels à dessiner.
+C'était le défaut du réglage à deux positions : il ne jouait que sur le nombre
+de pixels, ce qui est le plus gros coût sur mobile… et le seul que la bambouseraie
+**ne paie pas**. La forêt coûte en **appels de dessin** (deux par massif, une
+vingtaine de massifs dans le champ) et en **triangles**. Un joueur qui divisait
+la densité d'écran par deux gardait ses 148 maillages visibles : il ne gagnait
+rien.
 
-On ne touche **surtout pas à la brume**, alors que la rapprocher ferait gagner
-des images/s : c'est elle qui décide à quelle distance on découvre les
-obstacles. Moins de brume = moins de temps pour réagir. Ce serait un réglage de
-**difficulté déguisé en réglage graphique** — et un désavantage en duel.
+| Réglage | Pixels | Écartement | Matière | **Pic d'appels** |
+|---|---|---|---|---|
+| **Auto** | selon l'appareil | → *Moyen* (mobile) / *Maxi* (ordinateur) | | 138 / 148 |
+| **Ultra** | ×3 | ×0,85 | ×1,25 | **160** |
+| **Maxi** | ×2 | ×1 | ×1,05 | 148 |
+| **Moyen** | ×1,5 | ×1,15 | ×0,9 | 138 |
+| **Faible** | ×1,25 | ×1,35 | ×0,72 | 129 |
+| **Fluide** | ×1 | ×1,7 | ×0,5 | **118** |
+
+*Mesuré sur la même course et la même graine : `node tools/mesurer-scene.ts tous`.*
+
+⚠️ **LE LEVIER QUI MARCHE EST L'ÉCARTEMENT, PAS LA MATIÈRE.** Un massif visible
+= deux appels de dessin, et le nombre de massifs dans le champ est inversement
+proportionnel à leur écartement. C'est donc lui qui baisse le pic — de 148 à 118,
+soit **un cinquième du budget de dessin en moins**. Les triangles, eux, ne bougent
+que de **−15 %** entre Ultra et Fluide : le gros du décor (le rideau de fond, les
+tiges ornées) est structurel, et le couper se verrait. Le réglage qui aide un
+téléphone est donc « Fluide », pas « Faible ».
+
+⚠️ **« ULTRA » EST LE SEUL CRAN AU-DESSUS DU PLAFOND DE CONFORT (~150).** Il
+passe à 160 appels : c'est le prix demandé, et il n'a de sens que sur un appareil
+qui tiendrait 60 images à ×2. **« Fluide » est le cran de la sécurité** — c'est
+lui qu'on propose à un téléphone qui saccade, et son nom dit « ça passe » avant
+de dire « c'est moins beau ».
+
+⚠️ **LA DENSITÉ A UN PLANCHER DE 55 TIGES À LA LISIÈRE ET 90 LAMES À LA
+CANOPÉE.** On pourrait, à « Fluide », se passer de lisière : les 24 m du rideau
+suffiraient à une pixélisation grossière. Le vide de 24 à 44 m ne se voit pas
+« moins » en moins de pixels — il se voit moins, c'est tout. `npm run bambous:test`
+garde ces deux planchers.
+
+⚠️ **CHANGER DE CRAN PURGE LE POOL DE DÉCOR.** Un massif est bâti une fois puis
+recyclé sur toute la course : sans la purge, le nouveau réglage ne s'appliquerait
+qu'aux massifs construits plus tard, plusieurs centaines de mètres plus loin, et
+le joueur conclurait que le bouton ne marche pas. Les géométries sont **`dispose()`**
+au passage — sans quoi cinq changements de qualité dans les options laisseraient
+cinq pools vivants, invisible en cinq minutes et fatal après une demi-heure de
+menu. ⚠️ Et si le niveau RÉSOLU n'a pas changé, on ne purge rien : « Auto » garderait
+son décor au prix d'une reconstruction pour rien.
+
+⚠️ **LES ANCIENS RÉGLAGES SONT RAMPÉS, PAS EFFACÉS.** `haut` → `Maxi`, `bas` →
+`Fluide`. Sans cette translation, l'ancien choix disparaîtrait sans mot et le
+joueur retomberait sur « Auto », donc sur « Maxi » — il constaterait que le jeu
+saccade parce qu'on a effacé son réglage sans lui demander.
+
+⚠️ **« AUTO » EST CHOISI UNE FOIS ET NE BOUGE PAS.** Un auto qui ajuste en partie
+oscille : le jeu descend d'un cran, la cadence remonte, il remonte, la cadence
+retombe — et l'image « respire » sans que le joueur sache pourquoi. Auto demande
+donc à l'appareil ce qu'il est (pointeur grossier = mobile ; 4 cœurs ou moins =
+`Faible`), ce qu'on peut faire une fois sans trembler. L'aide sous le sélecteur
+**dit quel cran a été résolu** : sans cela, « Auto » est un réglage dont on ne sait
+rien, et on ne peut pas décider s'il faut monter ou descendre.
+
+⚠️ **L'AIDE EST TIRÉE DE LA TABLE `NIVEAUX`**, comme tous les autres chiffres de
+l'interface. La recopier en dur l'aurait fait mentir au premier réglage modifié.
+
+Elle ne joue que sur ces trois leviers. Le nombre de pixels est plafonné sans
+ombres, et on ne touche **surtout pas à la brume** : c'est elle qui décide à
+quelle distance on découvre les obstacles. Moins de brume = moins de temps pour
+réagir. Ce serait un réglage de **difficulté déguisé en réglage graphique** — et un
+désavantage en duel.
 
 ## ⚔️ Le combat : le 2ᵉ acte
 
@@ -3460,12 +3523,22 @@ insupportable au bout de trente.
 - [x] 🎌 Le menu : écran-titre, choix du guerrier, options (pseudo, qualité), aide
 - [x] 🥷 Le roster en entraînement : Hana, Oni-Maru, Tamae, et le boss Kurokumo
 - [x] 📜 Les 10 parchemins de la fiche, et des rivaux qui les jouent aussi
+- [x] 🎋 La bambouseraie 竹 remise en course, avec sa lisière, ses cinq
+      caractères de massif et ses oiseaux
+- [x] 🎚️ Six crans de qualité, qui pilotent les pixels **et** le décor
 - [ ] 🔊 **Le son** — il n'y en a aucun pour l'instant. À faire avant d'ajouter
       l'option « Son » au menu : un interrupteur qui ne coupe rien serait pire
       que pas d'interrupteur du tout.
 - [ ] 🌍 Mise en ligne publique (Vercel + Railway)
 - [ ] 🎨 Vrais modèles 3D low-poly, sons, décors variés
-- [ ] 👹 Kurokumo jouable (il est déjà dans `roster.ts`, en `pickable: false`)
+- [ ] 👹 Kurokumo jouable — il est `pickable: true`, mais sa fiche dit encore
+      « pas encore jouable » et il n'a pas de passif (roster.ts)
+
+> ⚠️ **Trois cases de cette liste sont périmées, et la liste ment sur elles.**
+> Le son existe (`sfx.ts`, `audio.ts`), la mise en ligne est faite
+> ([DEPLOY.md](DEPLOY.md)), et Kurokumo est `pickable: true`. Les garder
+> cochées ici serait une liste qui ment — c'est-à-dire une liste à laquelle on
+> ne se fie plus. Ce qui reste est en dessous.
 
 ## 📜 L'univers
 
@@ -3485,25 +3558,66 @@ Des décors qui changent, ce sont des repères — « je suis dans les flammes, 
 
 | Part | Biome | Brume | Portée | Décor |
 |---|---|---|---|---|
-| 0–33 % | **Village en flammes** 火 | orange, fumée | 26 → **72** | Masures et braises |
-| 33–66 % | **Pont au clair de lune** 月 | indigo | 30 → 92 | Rambardes, lanternes |
-| 66–100 % | **Flancs du Fuji** 雪 | **gris clair** | 38 → **105** | Rochers neigeux, pins |
+| 0–25 % | **Forêt de bambous** 竹 | vert sombre | 26 → **68** | Touffes, canopée, litière |
+| 25–50 % | **Village en flammes** 火 | orange, fumée | 26 → **72** | Masures et braises |
+| 50–75 % | **Pont au clair de lune** 月 | indigo | 30 → 92 | Rambardes, lanternes |
+| 75–100 % | **Flancs du Fuji** 雪 | **gris clair** | 38 → **105** | Rochers neigeux, pins |
 
-> ⏸️ **La forêt de bambous 竹 est en pause.** Elle ouvrait la course ; elle est
-> retirée de `BIOMES`, mais **pas supprimée** — son code entier vit dans
-> `BIOMES_EN_PAUSE`, et il suffit de la remettre dans la liste pour qu'elle
-> revienne telle quelle.
+⚠️ **`BIOMES[0]` n'est pas une fissure dans le découpage.** Trois choses en
+dépendent, et il ne se déplace pas à la légère : le partage en
+`BIOMES.length` fractions, le **menu** — hors course `distance` vaut `-1`, donc
+l'ambiance retombe sur ce premier biome, et le menu est la bambouseraie — et le
+**créneau 0 de la course sans fin**, que `ordreSlot` force sur lui.
+
+### 🎋 La bambouseraie est revenue, et ce que son retour a coûté
+
+Elle avait été retirée de la course, **pas supprimée** : tout son code vivait dans
+`BIOMES_EN_PAUSE`, ce qui la gardait typée et vérifiée à chaque build. Sept cents
+lignes de texte mort, elles, cesseraient d'être compilées — et l'on retrouverait
+dans six mois un biome « en pause » qu'il faudrait en fait réécrire.
+
+> ⚠️ **Le test qui nommait le village est devenu faux sans que la règle change.**
+> `ordreSlot` renvoie `BIOMES[0]`, et le banc affirmait « on commence TOUJOURS
+> par le village en flammes » en testant `s[0] === 0`. Les deux disaient la même
+> chose tant que le village occupait la première place. Le nom est donc maintenant
+> **tiré de la table** (`BIOMES[0].nom`) : un test qui ment sur ce qu'il mesure
+> est pire que pas de test, car on le lit, on se fie, et on corrige le code
+> alors que c'est le test qui était périmé.
+
+Mesuré avant/après sur la même course de 1 920 m (`mesurer-scene.ts`, deux
+exécutions, la seconde avec `BAMBOUS` remis dans la liste) :
+
+| | 3 biomes | 4 biomes |
+|---|---|---|
+| **pire** meshes visibles | 120 (à 1 192 m) | **148** (à 278 m) |
+| géométries distinctes | 296 | 398 |
+| matériaux distincts | 43 | 48 |
+
+> ⚠️ **Le pic se déplace de 1 192 m à 278 m, et c'est le seul chiffre qui
+> compte.** Le décor le plus lourd n'était plus le pire moment de la course, il
+> en devenait le **premier quart** — 148 appels de dessin d'affilée dès la
+> sortie, là où l'on accélère. Les +28 appels sont la forêt, et ils sont le
+> prix de sa densité (cf. « Ce qui fait qu'une forêt ressemble à une forêt » :
+> chaque massif est soudé, donc charger ne coûte qu'en appels).
 >
-> Elle n'est volontairement **pas mise en commentaire** : sept cents lignes de
-> texte mort cesseraient d'être compilées, ne suivraient plus les changements de
-> l'interface `Biome`, et l'on retrouverait dans six mois un biome « en pause »
-> qu'il faudrait en fait réécrire. Parquée dans un tableau, elle reste typée et
-> vérifiée à chaque build.
+> ⚠️ **148 reste sous la ligne de confort (~150)** que le biome lui-même s'était
+> fixée en portant son `ecartDecor` de 6 à 7 m — mais de peu. Le levier reste
+> celui-là, et il est dans `BAMBOUS.ecartDecor`.
 >
-> `indexBiome` découpe sur `BIOMES.length` : le partage s'est refait tout seul,
-> en tiers au lieu de quarts. Deux conséquences — la course **commence dans les
-> flammes**, et les 🐦 oiseaux ne se font plus entendre (la bambouseraie était
-> le seul biome à porter `ambiance: 'oiseaux'`).
+> Les **géométries** bondissent de 102 : ce sont les massifs soudés, chacun le
+> sien. Les **matériaux**, eux, ne gagnent que 5 — le partage de matière tient,
+> et `MAT_FEUILLE` sert tout le décor sans se dupliquer.
+
+Le régime établi, lui, bouge peu : `npm run endurance` sur 20 km donne **4,3 →
+5,1 µs/image**, soit 0,03 % d'une image à 60 Hz.
+
+> ⚠️ **Le premier palier de l'endurance bondit : 66,8 → 770 µs.** Ce n'est pas
+> une dérive, c'est la bambouseraie qui se construit pour la première fois dans
+> le processus. Et **le jeu ne le paie pas en course** : `track.update(dt, 0, 0)`
+> peuple 85 m de piste à vitesse nulle pendant le décompte, puis
+> `renderer.compileAsync` cuit ces matériaux pendant qu'on est immobile sur la
+> grille. Le banc, lui, ne fait pas passer par le décompte — il mesure donc à nu
+> ce que le jeu, lui, avance pendant l'arrêt.
 
 ### 🏠 Les deux rives du pont
 
@@ -3624,10 +3738,158 @@ l'identique, tout ce qui dépassait sa portée s'y confondait : plus de ligne
 d'horizon, plus de différence entre le ciel et la forêt lointaine.
 
 ⚠️ **La piste possède la brume, le fond et les sols**, pas `main.ts` — seule
-elle sait où l'on se trouve sur la course. Hors course, `distance` vaut `-1` :
+elle sait où on se trouve sur la course. Hors course, `distance` vaut `-1` :
 le menu est explicitement la forêt de bambous. Sans ça, la brume gardait la
 couleur du dernier endroit traversé, et finir sur le Fuji laissait un menu tout
 blanc.
+
+## 🎋 Faire croire à une GRANDE forêt
+
+Une forêt de bambous depuis la première image, et elle ne l'était pas. Deux
+mesures, deux causes — et ni l'une ni l'autre n'avaitTrait à la densité, qui
+était déjà juste et déjà comptée en tiges par m².
+
+| | avant | après |
+|---|---|---|
+| portée du décor | 24 m | **44 m** |
+| hauteurs de massif | 7–24 m | **8–30 m** |
+| silhouettes distinctes | 1 | **9** (sur 24 massifs) |
+| pire meshes visibles | 148 | **148** |
+| µs/image à 20 km | 5,1 | **4,2** |
+
+Le pic d'appels de dessin n'a pas bougé d'une unité : c'est le but. La lisière
+aurait pu être un troisième maillage, et ce serait +1 appel **par massif**, soit
+une vingtaine au pic. Elle est donc soudée dans le solide existant — gratuite en
+appels, payée en triangles seulement. Le réglage de qualité s'appuie dessus :
+comme la lisière ne coûte aucun appel, **écarter les massifs** est le seul levier
+qui baisse vraiment le pic (148 → 118 à « Fluide », soit un cinquième du budget
+de dessin en moins).
+
+### La lisière, qui est le vrai mot
+
+Le rideau de tiges s'arrêtait à 24 m. Au-delà : le sol nu, puis la brume. À
+28 m/s, en regardant droit devant, **cet arrêt se voyait** — et un arrêt qui se
+voit n'est pas un lointain, c'est un bord. On ne se figurait pas une forêt, on
+se figurait un bosquet entouré de vide.
+
+Le remède n'est pas d'allonger le décor, c'est de **combler l'intervalle** entre
+le rideau et la brume. Où s'arrête se mesure, il ne se devine pas :
+
+| distance | part de brume (`near = 26`, `far = 68`) | ce qu'on lit |
+|---|---|---|
+| 24 m | 0 % | les tiges, toutes nettes — et le vide juste après |
+| **44 m** | **43 %** | une silhouette nette : c'est là qu'il faut du bois |
+| 60 m | 81 % | à peine plus qu'une ombre |
+
+⚠️ **Elle est semée ENRACINÉE (√).** Un tirage uniforme sur la distance
+entassait tout contre le rideau et laissait le même trou dix mètres plus loin —
+c'est exactement le défaut que les touffes avaient déjà donné.
+
+⚠️ **Elle va dans la soudure du solide, pas dans un troisième maillage.** La
+tentation était évidente : un plan « lointain lointain » et son matériau. C'est
+précisément ce qu'il ne fallait pas — la forêt est à **148 appels de dessin
+visibles, à deux doigts du plafond de confort (~150)**, et un maillage de plus
+par massif c'est une vingtaine d'appels au pic. La lisière est donc **gratuite
+en appels de dessin** et ne paie que ses triangles : 8 par tige, dans un budget
+qui, lui, a de la marge.
+
+### Cinq caractères, et pas cinq programmes
+
+Une course croise environ **140 massifs** (2 bords × 480 m ÷ 7 m). Ils
+sortaient tous du même moule, donc l'œil lisait un motif répété — et une forêt
+sans variété se lit comme un décor **petit**. La densité ne se voit pas de loin ;
+la **silhouette**, si.
+
+| Caractère | Hauteur | Ce qu'il dit |
+|---|---|---|
+| **Futaie** | 12–19 m | les grands chaumes droits — l'image attendue, donc jamais le cas par défaut |
+| **Fourré** | 5–9 m | bas et dru : il ferme le regard, et fait regretter la clairière |
+| **Clairière** | 8–13 m | le plus important du jeu, et le moins rempli |
+| **Jeunesse** | 3–6 m | un repeuplement de pousses |
+| **Sec** | 9–14 m | un peuplement de vieux chaumes, presque tous morts |
+
+⚠️ **Une clairière n'est pas un massif moins dense, c'est un massif DÉVASTÉ.**
+Baisser le compte partout ne donne qu'une forêt maigre — et une forêt maigre
+reste une forêt, seulement triste. Ce qui manque, c'est un trou qui a un **bord** :
+la bande proche s'ouvre et le rideau lointain reste debout derrière. L'œil lit
+alors une clairière *et* une profondeur derrière elle.
+
+⚠️ **Les cinq sont des NOMBRES, pas des comportements.** Ils ne font que
+pondérer des tirages déjà faits. Aucun n'ajoute un maillage — c'est ce qui
+permet d'en tirer cinq sans payer.
+
+⚠️ **Le feuillage ne descend jamais sous 3,4 m.** Le personnage « jeunesse » fait
+des tiges de 3 m, dont le feuillage partait à 68 % : **2 m de haut**, à 5,6 m du
+centre. Un plan vert de cette taille se lit comme un élément de *jeu*, alors que
+c'est de la végétation pas là où l'on court — et on ne réapprend pas à faire la
+différence en courant. Le plancher est donc une constante du décor, pas une règle
+du personnage.
+
+### 🐦 Des oiseaux qui volent
+
+Le son existait déjà : la bambouseraie est le seul biome à porter `ambiance:
+'oiseaux'`. On entendait donc des chants dans un ciel parfaitement vide.
+
+**La règle qui décide de tout : un vol n'apparaît que là où on l'entend.**
+`majOiseaux` reçoit la même information que `oiseauxAmbiance` — le biome
+porte-t-il `oiseaux` — donc l'image et le bruit ne peuvent pas se contredire.
+Ajouter `oiseaux` à un autre biome lui donnerait des oiseaux sans écrire une
+ligne de plus.
+
+⚠️ **Hors course, le décor EST la bambouseraie** — donc des oiseaux traversent
+le ciel derrière le titre, et c'est voulu : un décor qui se fige au moment où
+l'on quitte la course se lit comme un arrêt de la machine. C'est aussi ce que le
+son fait déjà. *(À noter : le son, lui, reste coupé hors course. Les deux
+choix sont défendables ; ils sont séparés parce que l'oreille est moins
+têtue que l'œil.)*
+
+⚠️ **Une volée = UN maillage, et les sommets sont réécrits à la main.** Un
+oiseau en `Group` pour animer ses ailes coûterait deux appels de dessin pièce :
+six oiseaux, deux volées, **vingt-quatre appels posés dans le ciel**. À la
+place : six sommets par oiseau, deux triangles, et l'aile qui bat est un `y`
+qu'on recalcule — 36 écritures par volée et par image.
+
+Le prix de ce choix est réel et il est écrit dans le module : les oiseaux d'une
+même volée sont dessinés dans un ordre fixe. À 30 m dans une brume de forêt,
+cela ne se voit pas.
+
+Les deux oublis que three.js ne signale pas, tous deux dans `oiseaux.ts` :
+`DynamicDrawUsage` sans quoi la carte graphique relit des sommets en cache, et
+`frustumCulled = false` sans quoi la sphère d'encombrement — jamais recalculée
+puisqu'on réécrit les positions — déclare la volée hors champ. Le second ne se
+voit qu'après une minute de jeu.
+
+### 🐛 Un bug que personne n'avait vu
+
+Le banc a mesuré `x le plus proche : −2,25 m` en coordonnées locales du massif,
+soit **3,35 m du centre de la piste — 35 cm en dedans de la paroi** (3,70 m).
+
+La cause : les touffes sont semées sur une bande à partir de `x = 0`, et **une
+tige peut tomber `r` mètres avant le centre de sa touffe** — jusqu'à 1,3 m. La
+forêt n'était donc pas à 5,6 m du centre comme le suppose `spawnDecor`, mais à
+5,6 − 2,25.
+
+C'est la règle absolue du jeu qui était violée — *rien ne masque jamais un
+obstacle* — **depuis que les bambous poussaient en touffes**. Et ça ne se voyait
+pas : un maillage ne se plaint pas d'être deux centimètres trop près. `semeTouffes`
+prend maintenant un `x0`, et les centres commencent au-delà du plus grand rayon.
+
+| | avant | après |
+|---|---|---|
+| tige la plus proche | 3,35 m du centre | **4,92 m** |
+| marge après le mur | **−0,35 m** | **+1,22 m** |
+
+```bash
+npm run bambous:test
+```
+
+Le banc vérifie la portée (le vide est-il comblé jusqu'à la brume ?), le
+dégagement, la variété des silhouettes, le **nombre de maillages** (deux, plus
+jamais trois — c'est le seul garde-fou contre le plafond d'appels de dessin) et
+les oiseaux (une volée se forme-t-elle, les ailes battent-elles, les coordonnées
+restent-elles finies ?).
+
+
 
 ## 🚃 Les plateformes : sauter pour ALLER quelque part
 

@@ -20,7 +20,15 @@ import {
   TIRAGE_INFINI,
   type ParcheminKind,
 } from './parchemin'
-import { cleanName, loadSettings, saveSettings, type Quality, type Settings } from './settings'
+import {
+  cleanName,
+  NIVEAUX,
+  loadSettings,
+  resoudreQualite,
+  saveSettings,
+  type Quality,
+  type Settings,
+} from './settings'
 import { montant } from './icones'
 import type { LobbyView, SalonInfo } from './net'
 import { COURSE_LENGTH } from './track'
@@ -2139,9 +2147,36 @@ export class Menu {
     })
   }
 
-  private markQuality() {
+  /**
+ * 🎚️ La qualité : le bouton choisi, et ce qu'il faut.
+ *
+ * ⚠️ L'AIDE EST TIRÉE DE LA TABLE, ET ELLE DÉCRIT LE CRAN RÉSOLU.
+ *
+ * Trois raisons, chacune un vrai bug évité :
+ *
+ *  · la table des niveaux est la seule qui sache ce que chaque cran FAIT ;
+ *    le recopier en dur l'aurait fait mentir au premier réglage modifié — c'est
+ *    la règle du jeu entier, appliquée à sa propre interface.
+ *  · il faut décrire le cran RÉSOLU, pas le bouton. « Auto » n'est pas un
+ *    réglage mais un choix : sans dire « c'est Maxi sur ton appareil », le
+ *    joueur ne sait pas ce qu'il a, et il ne peut pas décider s'il doit
+ *    monter ou descendre.
+ *  · elle change donc avec le bouton, et pas une fois pour toutes à l'ouverture
+ *    des options.
+ */
+private markQuality() {
     for (const b of this.el.optQuality.querySelectorAll<HTMLElement>('button')) {
       b.classList.toggle('on', b.dataset.q === this.settings.quality)
+    }
+    const aide = document.getElementById('optQualityAide')
+    if (aide) {
+      const q = this.settings.quality
+      const resolu = resoudreQualite(q)
+      const n = NIVEAUX[resolu]
+      aide.textContent =
+        q === 'auto'
+          ? `Auto a choisi « ${n.nom} » sur cet appareil.`
+          : `${n.nom} — ${n.pixels}× les pixels, décor ${n.decor === 1 ? 'complet' : n.decor > 1 ? `écarté de ${Math.round((n.decor - 1) * 100)} %` : `serré de ${Math.round((1 - n.decor) * 100)} %`}.`
     }
   }
 

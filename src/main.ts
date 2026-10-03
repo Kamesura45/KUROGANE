@@ -74,8 +74,9 @@ import {
   oiseauxAmbiance,
   prechauffeFeu,
 } from './sfx'
-import { BIOMES } from './biomes'
-import type { Quality } from './settings'
+import { BIOMES, setDensiteDecor } from './biomes'
+import { installerOiseaux, majOiseaux } from './oiseaux'
+import { niveauDe, type Quality } from './settings'
 import { Musique } from './audio'
 
 // La longueur de la course vit dans track.ts — le module qui possède la piste.
@@ -350,19 +351,47 @@ function rivalDevant(): Rival | undefined {
 const bots = PROFILS.map((p) => new Bot(scene, p))
 
 /**
- * La qualité graphique ne joue QUE sur le nombre de pixels dessinés — c'est de
- * loin le plus gros coût sur mobile, et diviser par 2 le pixelRatio, c'est 4
- * fois moins de pixels.
+ * La qualité graphique, en trois leviers.
  *
- * On ne touche SURTOUT pas à la brume : c'est elle qui décide à quelle distance
- * on découvre les obstacles. La rapprocher pour gagner des images/s donnerait
- * moins de temps pour réagir — ce serait un réglage de difficulté déguisé en
- * réglage graphique, et un désavantage en duel.
+ * ⚠️ LES PIXELS NE SONT PLUS LE SEUL LEVIER, ET C'ÉTAIT LE PROBLÈME.
+ *
+ * Ce réglage ne jouait que sur le nombre de pixels dessinés — de loin le plus
+ * gros coût sur mobile. Mais la bambouseraie ne coûte pas en pixels : elle coûte
+ * en **appels de dessin** (deux par massif, ~20 massifs visibles au pic) et en
+ * **triangles**. Un joueur qui divisait la densité d'écran par deux gardait donc
+ * ses 148 appels de dessin, et ne gagnait rien.
+ *
+ * Le même réglage descend donc maintenant jusqu'à la matière du décor :
+ *
+ *  · `pixels`  — le plafond de `pixelRatio`, inchangé.
+ *  · `decor`   — l'écartement des massifs : le levier des appels de dessin.
+ *  · `densite` — la matière dans un massif : le levier des triangles.
+ *
+ * ⚠️ ON NE TOUCHE SURTOUT PAS À LA BRUME : c'est elle qui décide à quelle
+ * distance on découvre les obstacles. La rapprocher pour gagner des images/s
+ * donnerait moins de temps pour réagir — ce serait un réglage de difficulté
+ * déguisé en réglage graphique, et un désavantage en duel.
  */
 function applyQuality(q: Quality) {
-  const mobile = matchMedia('(pointer: coarse)').matches
-  const cap = q === 'bas' ? 1 : q === 'haut' ? 2 : mobile ? 1.5 : 2
-  renderer.setPixelRatio(Math.min(devicePixelRatio, cap))
+  const n = niveauDe(q)
+  renderer.setPixelRatio(Math.min(devicePixelRatio, n.pixels))
+  setDensiteDecor(n.densite)
+  /*
+   * ⚠️ LE POOL EST VIDÉ, ET C'EST LA SEULE FAÇON QUE ÇA SE VOIE.
+   *
+   * Un massif est bâti une fois puis recyclé sur toute la course. Sans la purge,
+   * le nouveau réglage ne s'appliquerait qu'aux massifs construits plus tard —
+   * plusieurs centaines de mètres plus loin — et le joueur conclurait que le
+   * bouton ne marche pas.
+   *
+   * ⚠️ ET SI LE RÉGLAGE N'A PAS CHANGÉ, ON NE PURGE RIEN : les massifs sont
+   * reconstruits à l'identique (une graine, un tirage), donc les vider
+   * coûterait le même décor au prix de la reconstruction. Le bouton « Auto »
+   * rapporterait le même niveau qu'au chargement, et le joueur verrait la forêt
+   * disparaître une seconde — pour rien.
+   */
+  const change = track.budgetDecor() !== n.decor
+  track.setBudgetDecor(n.decor, change)
   resize() // setSize doit être rappelé après un changement de pixelRatio
 }
 
@@ -1443,6 +1472,19 @@ for (let i = 0; i < 40; i++) {
 }
 let petalesActifs = false // on ne fait NAÎTRE de nouveaux pétales qu'au départ
 let ventPhase = 0 // l'horloge de la rafale (le chrono, lui, est figé au décompte)
+
+/*
+ * 🐦 Le défilement de l'image, mémorisé.
+ *
+ * `updateEffets` le reçoit en paramètre et le donne à tout ce qui vole ou tombe.
+ * Les oiseaux, eux, sont rappelés depuis la boucle — là où se décide leur
+ * `ambiance`, donc à un autre endroit — et ils en ont besoin aussi. Plutôt que
+ * de réécrire `speed * dt` à un second endroit (et de risquer la règle
+ * « le monde défille avec la vitesse du joueur, pas avec le temps »), on garde
+ * la valeur au moment où elle est calculée : une source, deux lecteurs.
+ */
+let scrollImage = 0
+installerOiseaux(scene)
 
 /**
  * (Re)lâche un pétale. `neuf` : au tout premier souffle on en sème déjà EN
@@ -4310,6 +4352,7 @@ function tick(now?: number) {
     // 🌸 Les pétales tombent pendant tout le décompte (monde immobile : dz = 0)
     petalesActifs = true
     updateEffets(dt, 0)
+    scrollImage = 0
 
     /*
      * La piste doit vivre PENDANT le décompte, à vitesse nulle.
@@ -4784,7 +4827,8 @@ function tick(now?: number) {
     // 🌸💥💨 On ne fait plus naître de pétales passé les 2,5 premières secondes ;
     // ceux déjà en l'air finissent de tomber pendant que le cerisier s'éloigne.
     petalesActifs = time < 2.5
-    updateEffets(dt, speed * dt)
+    scrollImage = speed * dt
+    updateEffets(dt, scrollImage)
     // 💨 Après que TOUT LE MONDE a bougé : qui vient de retomber au sol ?
     detecterAtterrissages()
 
@@ -5284,7 +5328,20 @@ function tick(now?: number) {
    */
   const feuPoursuite = modeInfini && enCourse ? 0.25 + 0.75 * (degats / DEGATS_MAX) : 0
   feuAmbiance(Math.max(feuPoursuite, biomeIci?.ambiance === 'feu' ? 1 : 0), dt)
+  /*
+   * 🐦 Les oiseaux suivent EXACTEMENT la même information que leur chant.
+   *
+   * ⚠️ Hors course, `biomeIci` vaut `null` — donc pas d'oiseaux dans le ciel du
+   * titre. C'est le comportement qui a été écrit, et il est discutable : hors
+   * course, le décor EST la bambouseraie (`indexBiome` retombe sur le premier
+   * biome, et la bambouseraie est revenue en tête), alors qu'on n'y verrait pas
+   * un oiseau. Un décor qui se fige au moment où l'on quitte la course se lit
+   * comme un arrêt de la machine ; on fait donc comme pour le son : le biome du
+   * DÉCOR, pas celui de la course.
+   */
+  const oiseauxIci = (enCourse ? biomeIci : BIOMES[track.biomeA(-1)])?.ambiance === 'oiseaux'
   oiseauxAmbiance(biomeIci?.ambiance === 'oiseaux' ? 1 : 0, dt)
+  majOiseaux(dt, scrollImage, oiseauxIci)
 
   // La caméra suit en douceur la ligne du joueur
   camera.position.x += (player.mesh.position.x * 0.55 - camera.position.x) * Math.min(1, dt * 5)

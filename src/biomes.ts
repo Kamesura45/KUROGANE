@@ -872,6 +872,157 @@ function plateformeSimple(
  * Le tout soudé en 2 maillages (le solide, et le feuillage). Sans la fusion, un
  * massif pareil coûterait ~60 appels de dessin ; il en coûte 2.
  */
+
+/**
+ * 🎋 Les cinq façons d'être un massif de bambous.
+ *
+ * ⚠️ Ce sont des NOMBRES, pas des comportements : chacun ne fait que pondérer
+ * des tirages déjà faits. Aucun n'ajoute un maillage — tout part dans les deux
+ * soudures existantes (`corps`, `feuilles`), donc le nombre d'appels de dessin
+ * est IDENTIQUE quoi qu'il arrive. C'est ce qui permet d'en tirer cinq sans
+ * payer : la forêt est déjà à 148 appels visibles, à deux doigts de la limite
+ * de confort (~150).
+ *
+ * `h` est la bande de hauteur en mètres, `remplissage` le nombre de fûts nus du
+ * plan intermédiaire, `feuilles` le nombre de lames par fût, `seche` la
+ * probabilité d'un chaume mort, `vide` l'ouverture de la bande proche, et
+ * `lisier` le débit du mur de forêt lointain.
+ */
+const CARACTERES = [
+  {
+    nom: 'futaie',
+    h: [12, 7], // 12 à 19 m : de grands chaumes bien droits
+    remplissage: 1,
+    feuilles: 3,
+    seche: 0.18,
+    vide: 0,
+    lisier: 1.15,
+    canopee: [11, 9], // la voûte est haute : on court dessous
+  },
+  {
+    nom: 'fourré',
+    h: [5, 4], // bas, dru
+    remplissage: 1.7,
+    feuilles: 5,
+    seche: 0.06,
+    vide: 0,
+    lisier: 0.85,
+    canopee: [6.5, 5], // et basse : c'est un tunnel de feuillage
+  },
+  {
+    nom: 'clairière',
+    h: [8, 5],
+    /*
+     * ⚠️ UNE CLAIRIÈRE N'EST PAS UN MASSIF MOINS DENSE, C'EST UN MASSIF DÉVASTÉ.
+     *
+     * Baisser `remplissage` partout ne donnerait qu'une forêt maigre — et une
+     * forêt maigre reste une forêt, seulement triste. Ce qui manque, c'est un
+     * trou qui a un BORD : la bande proche s'ouvre, et le rideau lointain, lui,
+     * reste debout juste derrière. L'œil lit alors une clairière ET une
+     * profondeur derrière elle — le seul couple qui dise « ça continue ».
+     */
+    remplissage: 0.45,
+    feuilles: 2,
+    seche: 0.1,
+    vide: 1,
+    lisier: 1.3, // le rideau lointain reste debout
+    canopee: [10, 8],
+  },
+  {
+    nom: 'jeunesse',
+    h: [3, 3],
+    remplissage: 1.25,
+    feuilles: 4,
+    seche: 0,
+    vide: 0.35,
+    lisier: 0.6, // un repeuplement ne cache pas la mature
+    canopee: [7, 5],
+  },
+  {
+    nom: 'sec',
+    h: [9, 5],
+    remplissage: 0.85,
+    feuilles: 1.5,
+    seche: 0.82, // un peuplement de vieux chaumes : presque tous morts
+    vide: 0,
+    lisier: 1,
+    canopee: [9, 7],
+  },
+] as const
+
+/**
+ * ————— Le mur de forêt : jusqu'où doit aller la forêt ? —————
+ *
+ * ⚠️ LE POINT QUI FAIT « PETITE FORÊT », ET IL EST MESURABLE.
+ *
+ * Le rideau de tiges s'arrêtait à 24 m du centre. Au-delà : le sol nu, puis la
+ * brume. À 28 m/s, en regardant droit devant, cet arrêt se VOIT — c'est une
+ * lisière, et une lisière dit « voici le bord ». On ne se figurait pas une
+ * forêt : on se figurait un bosquet encerclé de vide.
+ *
+ * Le mot clé est **lisière**. Il ne s'agit pas d'étendre le décor pour le rendre
+ * plus long — le lointain est déjà perdu dans la brume — mais de COMBLER
+ * L'INTERVALLE entre le rideau et elle, là où le vide se lisait.
+ *
+ * Où s'arrêter se mesure, il ne se devine pas. La brume va de `near = 26` à
+ * `far = 68`, donc :
+ *
+ * | distance | part de brume | ce qu'on lit |
+ * |---|---|---|
+ * | 24 m | 0 % | les tiges, toutes nettes — et le vide juste après |
+ * | 44 m | 43 % | une silhouette nette : c'est là qu'il faut du bois |
+ * | 60 m | 81 % | à peine plus qu'une ombre |
+ *
+ * La lisière s'arrête donc à **44 m**. Au-delà, on ne payerait que du brouillard
+ * en triangles.
+ *
+ * ⚠️ ELLE EST SEMÉE ENRACINÉE (√) ET SANS LE MOINDRE DÉTAIL. Comme les touffes :
+ * un tirage uniforme sur la distance entasserait tout contre le rideau et
+ * laisserait un vide derrière. Et le `tigeLoin` suffit — 4 pans, 8 triangles —
+ * car à 44 m un nœud ne se voit pas : il ne coûterait que du décor invisible.
+ */
+const LISIERE_FIN = 44
+
+/**
+ * ————— 🎚️ LE RÉGLAGE DE DÉCOR, lu par les biomes —————
+ *
+ * Une variable, un sens, une seule question : **combien de matière dans un
+ * massif de bordure ?**
+ *
+ * ⚠️ ELLE N'EST PAS LUE PAR LE NOMBRE DE MASSIFS. Ça, c'est l'écartement, et il
+ * vit dans la piste (`ecartDecor`), parce que c'est lui qui décide de ce qui est
+ *Visible dans le champ. Ici on ne décide que du CONTENU d'un massif déjà
+ * placé — donc le réglage ne peut pas déplacer un décor vers la piste, ni
+ * ouvrir un trou où passe le regard.
+ *
+ * Elle est bornée des deux côtés par construction : sous 0,5 la forêt cesserait
+ * d'être une forêt, et au-delà de 1,3 le pic d'appels de dessin n'augmenterait
+ * pas mais le budget de triangles, lui, continuerait de grossir.
+ */
+let densiteDecor = 1
+
+/**
+ * ⚠️ CE N'EST PAS UN CACHE, ET L'ARGUMENT EST IGNORÉ VOLONTAIREMENT.
+ *
+ * Le décor de bordure est'un POOL : chaque massif est bâti une fois, puis
+ * recyclé d'un bout à l'autre de la course. Changer la densité ne change donc
+ * rien aux massifs déjà construits — il faut vider le pool (cf.
+ * `Track::viderDecor`), sans quoi le réglage mettrait plusieurs centaines de
+ * mètres à se voir.
+ *
+ * Passer une qualité ici ne force donc AUCUNE reconstruction : c'est
+ * volontairement le soin de l'appelant, parce que lui seul sait s'il a le droit
+ * de faire sauter des maillages (au menu, oui ; en pleine course, non).
+ */
+export function setDensiteDecor(k: number) {
+  densiteDecor = Math.min(1.3, Math.max(0.5, k))
+}
+
+/** La densité courante — pour les bancs, qui doivent mesurer ce qu'on leur dit. */
+export function densiteCourante() {
+  return densiteDecor
+}
+
 const BAMBOUS: Biome = {
   nom: 'Forêt de bambous',
   kanji: '竹',
@@ -1061,9 +1212,41 @@ const BAMBOUS: Biome = {
       ],
     }),
 
+  /*
+   * ————— 🎋 LES CARACTÈRES D'UN MASSIF —————
+   *
+   * ⚠️ LA GRANDE FORÊT N'EST PAS UNE QUESTION DE DENSITÉ.
+   *
+   * Tout ce qui précède raisonne en tiges par m², et c'est juste — mais cela
+   * décrit une forêt vue de près, à hauteur d'homme. Or ce qu'on voit en
+   * courant, c'est une SILHOUETTE qui se répète : une course en croise environ
+   * 140 massifs (2 bords × 480 m ÷ 7 m), et ils sortaient tous du même moule —
+   * mêmes hauteurs, même canopée, même teinte. L'œil accroche le motif bien
+   * avant le compte, et une forêt sans variété se lit comme un décor répété,
+   * donc comme PETIT : on en voit les bords, on en voit le bout.
+   *
+   * La densité ne se voit pas de loin ; la SILHOUETTE, si. D'où cinq
+   * caractères, tirés UN SEUL FOIS par massif et appliqués en réorientant des
+   * tirages qui existent déjà :
+   *
+   *  · FOUTAIE    — les grands chaumes droits, 12 à 19 m. C'est l'image qu'on
+   *    attend d'une bambouseraie, et elle ne peut pas être le cas PAR DÉFAUT :
+   *    si tous les massifs sont en futaie, plus aucun ne l'est.
+   *  · FOURRÉ     — bas, dru, illisible au travers. Il ferme le regard, et c'est
+   *    lui qui fait regretter la clairière qu'on vient de traverser.
+   *  · CLAIRIÈRE   — le massif le plus important du jeu, et le moins rempli. Une
+   *    bande vide au milieu, le rideau lointain intact : on voit PAR-DESSUS la
+   *    forêt, ce qui donne la profondeur qu'aucune densité ne donne.
+   *  · JEUNESSE    — des pousses de 3 à 6 m, fines et claires. Un repeuplement.
+   *  · SÈCHE       — un peuplement de vieux chaumes, presque tous secs.
+   *
+   * Aucun de ces caractères ne coûte un seul appel de dessin de plus : ils
+   * ne font que pondérer des tirages dont on dispose déjà. Coût : zéro.
+   */
   fabriqueDecor: (rng) => {
     const corps: Piece[] = []
     const feuilles: Piece[] = []
+    const car = CARACTERES[Math.floor(rng() * CARACTERES.length)]
 
     /*
      * ————— TROIS ÉTAGES, et le classement se fait sur le COÛT, pas la distance
@@ -1101,9 +1284,27 @@ const BAMBOUS: Biome = {
      * géométrie, répartition tout autre : des paquets denses, et de vraies
      * clairières entre eux.
      */
-    const semeTouffes = (etendue: number, profondeur: number, n: number) =>
+    /*
+     * ⚠️ `x0` N'EST PAS UN DÉTAIL : C'EST LA RÈGLE ABSOLUE DU JEU.
+     *
+     * Une touffe a un RAYON, et une tige peut donc tomber `r` mètres avant son
+     * centre. Semer les centres à partir de x = 0 ne met donc pas la forêt à
+     * 5,6 m du centre de la piste, comme le suppose `spawnDecor` : elle met
+     * la tige la plus advancee à 5,6 − 1,3 − rayon ≈ **3,35 m**.
+     *
+     * Or le mur est à 3,70 m. La tige la plus proche était donc plantée DANS le
+     * couloir, à 35 cm en dedans de la paroi — pile là où l'on pose le pied
+     * pour s'accrocher. C'est la règle absolue du jeu qui était violée :
+     * « rien ne masque jamais un obstacle ». Et personne ne l'avait vue : c'est
+     * une question de 2 cm d'un maillage, mesurée par le seul banc qui
+     * regarde la position du décor au lieu de regarder s'il s'affiche.
+     *
+     * `x0` est donc la garde : les centres commencent AU-DELÀ du plus grand
+     * rayon, donc aucune tige ne peut dépasser. 1,5 > 1,3 = rayon max.
+     */
+    const semeTouffes = (etendue: number, profondeur: number, n: number, x0 = 1.5) =>
       Array.from({ length: n }, () => ({
-        x: rng() * etendue,
+        x: x0 + rng() * etendue,
         z: (rng() - 0.5) * profondeur,
         // Serré : au-delà d'un mètre, on retombe sur du semis à plat.
         r: 0.45 + rng() * 0.85,
@@ -1121,12 +1322,50 @@ const BAMBOUS: Biome = {
       return { x: t.x + Math.cos(a) * d, z: t.z + Math.sin(a) * d }
     }
 
+    /*
+     * ————— ⚠️ LA CLAIRIÈRE S'OUVRE ICI, ET ELLE N'OUVRE QUE LA BANDE PROCHE —————
+     *
+     * Le trou ne se tire pas comme les autres : il faut qu'il soit au BON
+     * endroit, sinon ce n'est pas une clairière mais un massif raté.
+     *
+     * On garde donc la structure des touffes et on écarte celles qui tombent dans
+     * la bande médiane (1,5 m à 6 m du centre) — c'est celle qu'on regarde en
+     * courant, et celle dont le vide fait le plus d'effet. Le plan lointain, lui,
+     * n'est pas touché : c'est lui qui doit rester debout DERRIÈRE le trou. Sinon
+     * on ne verrait pas plus loin — on ne verrait que du vide.
+     *
+     * ⚠️ Le seuil est large exprès. Une clairière trop petite se lit comme un
+     * trou accidentel, et le joueur y voit un défaut d'affichage — ce qu'il faut
+     * précisément éviter.
+     */
     const touffesProches = semeTouffes(5, 22, 9)
+    /*
+     * ⚠️ LE TROU EST UN TIRAGE CONSOMMÉ, PAS UN TEST À CHAQUE TIGE.
+     *
+     * On ne rejetait pas les tiges une à une (`if (dans le trou) continue`) :
+     * cela consomme un nombre de tirages variable selon le masque, et la suite
+     * de la forêt en dépendait. La piste est donc décidée UNE fois, par
+     * massif, et appliquée ensuite à toutes les tiges.
+     */
+    const clairiere = car.vide * (0.75 + rng() * 0.5)
+    const touffesOuvertes = touffesProches.filter((t) => t.x < 1.5 + clairiere * 3.5)
     const detaillees = 26 + Math.floor(rng() * 12)
     for (let i = 0; i < detaillees; i++) {
-      const h = 7 + rng() * 7
+      /*
+       * ⚠️ La bande de HAUTEUR vient du caractère, pas du tirage libre.
+       *
+       * C'est le seul endroit où la hauteur décide de ce que le massif
+       * PROMET : un fourré bas sous un pan de canopée à 11 m se lirait comme
+       * deux forêts superposées. La bande est donc resserrée, et non
+       * simplement décalée — un massif ne doit avoir qu'une seule lecture.
+       */
+      const h = car.h[0] + rng() * car.h[1] * (0.45 + rng() * 0.55)
       const r = 0.085 + rng() * 0.05
-      const { x, z } = dansTouffe(touffesProches[Math.floor(rng() * touffesProches.length)])
+      const t =
+        touffesOuvertes.length && rng() < clairiere
+          ? touffesOuvertes[Math.floor(rng() * touffesOuvertes.length)]
+          : touffesProches[Math.floor(rng() * touffesProches.length)]
+      const { x, z } = dansTouffe(t)
       // Plus la tige est loin, plus elle est sombre : la profondeur se lit à la
       // valeur avant de se lire à la taille.
       const recul = Math.min(1, x / 5)
@@ -1186,9 +1425,22 @@ const BAMBOUS: Biome = {
 
       // Le feuillage : quelques lames en haut de tige. Sans ça, une forêt de
       // bambous ressemble à un parking à poteaux.
-      const lames = 2 + Math.floor(rng() * 3)
+      const lames = 1 + Math.floor(rng() * 2 + car.feuilles * 0.6)
       for (let k = 0; k < lames; k++) {
-        const hy = h * (0.68 + rng() * 0.3)
+        /*
+         * ⚠️ LE FEUILLAGE NE DESCEND JAMAIS SOUS 3,4 M — et c'est le personnage
+         * « jeunesse » qui l'impose.
+         *
+         * Le plus court de ses massifs fait 3 m, dont le feuillage partait à
+         * 68 % : 2 m de haut, à 5,6 m du centre. C'est la hauteur d'un coureur.
+         * Un plan vert de cette taille, planté sur le bord de la piste, se lit
+         * comme un élément de JEUX — alors que c'est de la végétation qui
+         * n'est pas là où l'on court. Or on ne réapprend pas à distinguer les
+         * deux en courant : c'est exactement le genre de détail qui fait crier
+         * au bug. Le plancher est donc une constante du décor, pas une règle
+         * du personnage.
+         */
+        const hy = Math.max(h * (0.68 + rng() * 0.3), 3.4)
         feuilles.push({
           geo: GEO.feuille.clone().scale(1.1 + rng() * 0.9, 0.16 + rng() * 0.12, 1),
           couleur: teinte(0x7fa04a, 0x35502a, rng() * 0.8),
@@ -1213,11 +1465,36 @@ const BAMBOUS: Biome = {
      * leurs nœuds à 28 m/s.
      */
     const touffesLarges = semeTouffes(11, 23, 27)
-    const simples = 152 + Math.floor(rng() * 58)
+    /*
+     * ⚠️ LE REMPLISSAGE SUIT LE CARACTÈRE, ET LA CLAIRIÈRE L'ÉVIDE.
+     *
+     * Un fourré en met 1,7 fois plus, une clairière la moitié — mais la
+     * clairière ne fait pas que réduire le nombre : elle ouvre un TROU, à un
+     * endroit donné. Une bande simplement moins dense reste une bande : c'est
+     * une forêt maigre, pas un espace vide. Les touffes ouvertes sont donc
+     * retirées de la réserve, comme pour les tiges détaillées.
+     */
+    const touffesRestaurees = touffesLarges.filter((t) => t.x > 1.2 + clairiere * 4)
+    /*
+     * ⚠️ LE REMPLISSAGE EST LE SEUL POSTE QUI RÉPOND À PEINE À LA DENSITÉ.
+     *
+     * C'est le plan le plus touffu, donc celui dont la baisse se voit le plus
+     * (une bande de 2 ou 3 tiges se lit comme une rangée, pas comme un bois) ;
+     * mais c'est aussi le moins cher en géométrie. On ne le coupe donc que de
+     * moitié au maximum, quel que soit le réglage, et la lisière — qui porte
+     * l'horizon — est coupée de moitié aussi.
+     */
+    const simples = Math.round(
+      (152 + Math.floor(rng() * 58)) * car.remplissage * (0.62 + 0.38 * densiteDecor)
+    )
     for (let i = 0; i < simples; i++) {
-      const h = 7 + rng() * 8
+      const h = car.h[0] + rng() * car.h[1] * (0.5 + rng() * 0.5)
       const r = 0.085 + rng() * 0.055
-      const { x, z } = dansTouffe(touffesLarges[Math.floor(rng() * touffesLarges.length)])
+      const t =
+        touffesRestaurees.length && rng() < clairiere * 0.8
+          ? touffesRestaurees[Math.floor(rng() * touffesRestaurees.length)]
+          : touffesLarges[Math.floor(rng() * touffesLarges.length)]
+      const { x, z } = dansTouffe(t)
       const recul = Math.min(1, Math.max(0, x) / 11)
       /*
        * 🟤 Une tige sur douze est SÈCHE.
@@ -1227,7 +1504,7 @@ const BAMBOUS: Biome = {
        * paquet serré de tiges identiques se lit comme un motif répété — et
        * c'est justement en les groupant qu'on rendrait ce défaut visible.
        */
-      const seche = rng() < 0.085
+      const seche = rng() < car.seche
       corps.push({
         geo: GEO.tigeCreuse.clone().scale(r, h, r),
         couleur: seche
@@ -1254,9 +1531,10 @@ const BAMBOUS: Biome = {
        * Deux ou trois lames par tige suffisent — à 2 triangles pièce, c'est
        * l'ajout le moins cher et le plus décisif du décor.
        */
-      const lames = 3 + Math.floor(rng() * 3)
+      const lames = 2 + Math.floor(rng() * 2 + car.feuilles * 0.5)
       for (let k = 0; k < lames; k++) {
-        const hy = h * (0.6 + rng() * 0.38)
+        // Même plancher qu'au plan détaillé : 3,4 m. Voir le commentaire là-bas.
+        const hy = Math.max(h * (0.6 + rng() * 0.38), 3.4)
         feuilles.push({
           geo: GEO.feuille.clone().scale(1.3 + rng() * 1.2, 0.2 + rng() * 0.16, 1),
           couleur: teinte(0x6f9243, 0x2b4322, recul * 0.6 + rng() * 0.4),
@@ -1310,7 +1588,16 @@ const BAMBOUS: Biome = {
      */
     const loin = 233 + Math.floor(rng() * 70)
     for (let i = 0; i < loin; i++) {
-      const h = 13 + rng() * 11
+      /*
+       * ⚠️ LE RIDEAU suit le caractère EN TAILLE, mais garde ses 5→24 m.
+       *
+       * Un fourré n'a pas besoin d'un rideau de 24 m de haut : il n'en montre
+       * que la moitié, et l'autre moitié ne sert qu'à consummer des triangles.
+       * La hauteur suit donc le caractère — mais l'EMPRISE, elle, ne bouge pas :
+       * c'est elle qui comble le vide, et une clairière doit garder son mur
+       * debout derrière le trou.
+       */
+      const h = car.h[0] * 1.35 + rng() * car.h[1] * 1.4
       const r = 0.11 + rng() * 0.08
       corps.push({
         geo: GEO.tigeLoin.clone().scale(r, h, r),
@@ -1322,6 +1609,90 @@ const BAMBOUS: Biome = {
         z: (rng() - 0.5) * 24,
         rz: (rng() - 0.5) * 0.1,
       })
+    }
+
+    /*
+     * ————— 🎋 LE MUR DE FORÊT : 24 → 44 m —————
+     *
+     * C'est la lisière, et c'est elle qui faisait dire « petit ». Le vide de
+     * 24 à 44 m se lisait comme un bord de décor. On le remplit avec des tiges
+     * de plus en plus espacées — enracinées, sinon elles se collent au rideau et
+     * laissent le même trou 10 m plus loin.
+     *
+     * ⚠️ ELLES VONT DANS `corps`, PAS DANS UN TROISIÈME MAILLAGE.
+     *
+     * La tentation est évidente — un plan « lointain lointain », son propre
+     * matériau. C'est exactement ce qu'il ne faut pas : la forêt est déjà à 148
+     * appels visibles, à deux doigts de la limite de confort. Un troisième
+     * maillage par massif, c'est +1 appel PAR MASSIF, soit une vingtaine de
+     * plus au pic. Ici, la lisière part dans la soudure du solide : elle est
+     * gratuite en appels de dessin, et elle ne coûte que ses 8 triangles —
+     * qu'on paie sur le budget de géométrie, lequel a de la marge.
+     */
+    /*
+     * ⚠️ LA LISIÈRE A UN PLANCHER, ET IL N'EST PAS NUL.
+     *
+     * À densité 0,5 on pourrait la supprimer : les 24 m du rideuse suffiraient
+     * à une pixélisation grossière. On ne le fait pas, parce que le vide de 24 à
+     * 44 m ne se voit pas « moins » en moins de pixels — il se voit moins, c'est
+     * tout. Le plancher est à 55 tiges, soit 0,05/m² : encore une lisière,
+     * juste plus claire. C'est le prix de la lisière, et il est payé partout.
+     */
+    const lisieres = Math.max(
+      55,
+      Math.round((140 + rng() * 70) * car.lisier * densiteDecor)
+    )
+    for (let i = 0; i < lisieres; i++) {
+      const h = car.h[0] * 1.3 + rng() * car.h[1] * 1.3
+      corps.push({
+        geo: GEO.tigeLoin.clone().scale(0.1 + rng() * 0.07, h, 0.1 + rng() * 0.07),
+        couleur: teinte(0x24341e, 0x101810, rng()),
+        // Enracinée : dense contre le rideau, clairsemée jusqu'à la brume.
+        x: 24 + Math.sqrt(rng()) * (LISIERE_FIN - 24),
+        y: h / 2,
+        z: (rng() - 0.5) * 26,
+      })
+    }
+
+    /*
+     * ————— 🎋 LES FÛTS-REPÈRES : ce qui donne l'échelle —————
+     *
+     * Une forêt sans grand rien n'a pas de dimension : on ne peut pas dire si
+     * elle fait 20 mètres de haut ou 5. Deux ou trois fûts qui sortent du lot,
+     * plus hauts que tout le reste et plantés près de la piste, donnent l'échelle
+     * à tout ce qui les entoure — et ils défilent : en courant à 28 m/s, un
+     * repère passe en une demi-seconde et le cerveau le lit comme un mouvement.
+     *
+     * ⚠️ UN SEUL SUR DEUX MASSIFS. Les mettre partout les transforme en
+     * décor : un motif régulier s'annule, c'est tout le principe des fouillis.
+     */
+    if (rng() < 0.5) {
+      for (let k = 0; k < 2 + Math.floor(rng() * 2); k++) {
+        const h = car.h[0] + car.h[1] + 5 + rng() * 6 // 20 à 30 m
+        const x = 5.2 + rng() * 2.4 // près de la piste, mais jamais dessus
+        const z = (rng() - 0.5) * 20
+        corps.push({
+          geo: GEO.tigeCreuse.clone().scale(0.17, h, 0.17),
+          couleur: teinte(0x7d9a4c, 0x2c4022, Math.min(1, x / 5) * 0.7 + rng() * 0.2),
+          x,
+          y: h / 2,
+          z,
+          rz: (rng() - 0.5) * 0.09,
+        })
+        // Un peu de feuillage tout en haut : un fût nu à 25 m se lit comme un
+        // poteau, pas comme un arbre.
+        for (let f = 0; f < 5; f++) {
+          feuilles.push({
+            geo: GEO.feuille.clone().scale(1.3 + rng() * 1.1, 0.2, 1),
+            couleur: teinte(0x6f9243, 0x2b4322, rng()),
+            x: x + (rng() - 0.5) * 1.6,
+            y: h * (0.74 + rng() * 0.24),
+            z: z + (rng() - 0.5) * 1.6,
+            ry: (rng() - 0.5) * 1,
+            rz: rng() * Math.PI,
+          })
+        }
+      }
     }
 
     /*
@@ -1357,9 +1728,31 @@ const BAMBOUS: Biome = {
      *  · elles sont trois fois plus PETITES et deux fois plus nombreuses. Cent
      *    petites lames se moyennent ; trente grandes clignotent.
      */
-    const canopee = 190 + Math.floor(rng() * 70)
+    /*
+     * ⚠️ LA CANOPÉE SUIT LA DENSITÉ, AVEC UN PLANCHER DE 90 LAMES.
+     *
+     * C'est le plan le plus cher du massif en MATIÈRE (190 à 260 lames), et
+     * c'est celui qu'on voit le plus : la voûte est en haut de l'écran en
+     * permanence. Mais il est aussi le seul qui ne se voie pas quand il
+     * manque — une voûte absente se lit comme un ciel, pas comme un réglage
+     * graphique. D'où le plancher : on éclaircit la canopée, on ne la supprime
+     * pas. Elle reste bien plus nombreuse que les feuilles d'une tige.
+     */
+    const canopee = Math.max(
+      90,
+      Math.round(
+        (190 + Math.floor(rng() * 70)) * (car.remplissage > 1.4 ? 1.1 : 1) * densiteDecor
+      )
+    )
     for (let i = 0; i < canopee; i++) {
-      const hy = 8 + rng() * 12
+      /*
+       * ⚠️ LA VOÛTE SUIT LA HAUTEUR DES TIGES, sinon elle se détache.
+       *
+       * Une canopée à 20 m sur un fourré de 6 m, ce n'est pas une voûte, c'est
+       * un plafond en l'air — et le joueur y lit un décor mal placé. On la cale
+       * donc sur la bande du caractère, un peu au-dessus.
+       */
+      const hy = car.canopee[0] + rng() * car.canopee[1]
       feuilles.push({
         geo: GEO.feuille.clone().scale(1.2 + rng() * 1.6, 0.7 + rng() * 1.0, 1),
         couleur: teinte(0x4c6c33, 0x22331a, rng() * 0.9),
@@ -1380,12 +1773,14 @@ const BAMBOUS: Biome = {
     }
 
     // ————— Le sol : litière et jeunes pousses —————
+    // ⚠️ 1,5 m et non 0 : même règle que les touffes, ces lames sont des
+    // géométries larges et la plus petite peut déborder de son point d'entrée.
     const litiere = 7 + Math.floor(rng() * 6)
     for (let i = 0; i < litiere; i++) {
       feuilles.push({
         geo: GEO.feuille.clone().scale(0.5 + rng() * 1.3, 0.3 + rng() * 0.6, 1),
         couleur: teinte(0x4a4a24, 0x26301a, rng()),
-        x: rng() * 6,
+        x: 1.5 + rng() * 4.5,
         y: 0.03, // à ras du sol, sinon ça scintille contre lui
         z: (rng() - 0.5) * 18,
         rx: -Math.PI / 2,
@@ -1398,7 +1793,7 @@ const BAMBOUS: Biome = {
       corps.push({
         geo: GEO.tigeCreuse.clone().scale(0.05, h, 0.05),
         couleur: teinte(0x86a352, 0x4e6a30, rng()),
-        x: rng() * 6,
+        x: 1.5 + rng() * 4.5,
         y: h / 2,
         z: (rng() - 0.5) * 18,
         rz: (rng() - 0.5) * 0.4,
@@ -2956,43 +3351,42 @@ const FUJI: Biome = {
   },
 }
 
-/** Dans l'ordre de la course. */
-/*
- * ⚠️ ————— LA FORÊT DE BAMBOUS EST RETIRÉE DE LA COURSE —————
+/**
+ * Dans l'ordre de la course.
  *
- * Retirée, PAS supprimée : son code entier vit toujours juste au-dessus, et il
- * suffit de remettre `BAMBOUS` dans cette liste pour qu'elle revienne telle
- * qu'elle était. Rien d'autre à toucher.
+ * ⚠️ ————— LE PREMIER BIOME OUVRE LA COURSE, ET IL EST DONC LE MENU —————
  *
- * ⚠️ Et il n'est pas mis en COMMENTAIRE, volontairement. Sept cents lignes de
- * texte mort cesseraient d'être compilées : elles ne suivraient plus les
- * changements de l'interface `Biome`, et l'on retrouverait dans six mois du
- * code qui ne compile plus — un biome qu'on croyait « en pause » et qu'il
- * faudrait en fait réécrire. `BIOMES_EN_PAUSE`, juste en dessous, le garde
- * VIVANT : typé, vérifié à chaque build, prêt à revenir.
+ * `BIOMES[0]` n'est pas une fissure dans le découpage, c'est une convention
+ * dont trois choses dépendent, et il ne faut pas le déplacer à la légère :
  *
- * ————— Ce que ce retrait change —————
+ *  · `indexBiome` partage la course en `BIOMES.length` fractions. Les
+ *    frontières sont donc des FRACTIONS, pas des mètres : rallonger la course
+ *    rééquilibre les quatre parts tout seul.
  *
- * `indexBiome` découpe la course sur `BIOMES.length` : le partage se refait
- * tout seul, en tiers au lieu de quarts. Concrètement :
+ *  · Hors course, `distance` vaut `-1` et l'ambiance retombe sur ce premier
+ *    biome. Le menu est donc la bambouseraie — et il doit l'être : c'est le
+ *    décor le plus calme des quatre, et l'on y attend.
  *
- *   · la course COMMENCE dans le village en flammes ;
- *   · les 🐦 oiseaux ne se font plus entendre — la bambouseraie était le seul
- *     biome à porter `ambiance: 'oiseaux'` ;
- *   · ses deux radeaux (le plein et celui sur pilotis) ne se croisent plus en
- *     piste. Les trois autres biomes ont les leurs, le tunnel existe toujours.
+ *  · En course sans fin, le créneau 0 est ce même biome (`ordreSlot`). Les
+ *    trois autres défilent ensuite dans un ordre tiré au sort.
  */
-export const BIOMES: readonly Biome[] = [/* BAMBOUS, */ VILLAGE, PONT, FUJI]
+export const BIOMES: readonly Biome[] = [BAMBOUS, VILLAGE, PONT, FUJI]
 
 /**
  * Les biomes ÉCRITS mais hors course.
  *
- * Ils ne sont tirés par rien — ni `indexBiome`, ni le décor, ni les fabriques.
- * Leur seule raison d'être ici est de rester COMPILÉS : c'est ce qui garantit
- * qu'ils suivront les changements de l'interface `Biome` au lieu de pourrir en
- * silence, et qu'ils reviendront en une ligne le jour où on les rappelle.
+ * Vide aujourd'hui : la bambouseraie 竹 y vivait pendant qu'elle était retirée
+ * de la course, et la liste est conservée pour le prochain biome qu'on voudra
+ * garder sur l'étagère.
+ *
+ * ⚠️ Un biome en pause se GARDE VIVANT ici, jamais en commentaire. Sept cents
+ * lignes de texte mort cesseraient d'être compilées : elles ne suivraient plus
+ * les changements de l'interface `Biome`, et l'on retrouverait dans six mois du
+ * code qui ne compile plus — un biome qu'on croyait « en pause » et qu'il
+ * faudrait en fait réécrire. Ici il reste typé, vérifié à chaque build, et
+ * ramenable en une ligne.
  */
-export const BIOMES_EN_PAUSE: readonly Biome[] = [BAMBOUS]
+export const BIOMES_EN_PAUSE: readonly Biome[] = []
 
 /** L'ambiance à un instant donné : deux biomes et le fondu entre eux. */
 export interface Ambiance {

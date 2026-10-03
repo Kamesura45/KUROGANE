@@ -490,10 +490,19 @@
           <label>Qualité graphique</label>
           <div class="seg" id="optQuality">
             <button data-q="auto">Auto</button>
-            <button data-q="haut">Belle</button>
-            <button data-q="bas">Fluide</button>
+            <button data-q="ultra">Ultra</button>
+            <button data-q="maxi">Maxi</button>
+            <button data-q="moyen">Moyen</button>
+            <button data-q="faible">Faible</button>
+            <button data-q="fluide">Fluide</button>
           </div>
-          <small>« Fluide » dessine moins de pixels : à essayer si ça saccade.</small>
+          <!-- ⚠️ LE TEXTE EST ÉCRIT ICI ET NULLE PART AILLEURS.
+               Les cinq crans ne se contentent pas de dessiner moins de pixels :
+               chacun écarte aussi les massifs de décor, ce qui baisse le nombre
+               d'appels de dessin — le vrai coût de la forêt. C'est pour ça que
+               le texte est un <span> rempli par NIVEAUX : le décrire en dur
+               ici l'aurait fait mentir au premier réglage modifié. -->
+          <small id="optQualityAide"></small>
         </div>
 
         <div class="field">
