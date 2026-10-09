@@ -309,6 +309,8 @@ npm run sprint:test        # pendant le sprint, clavier et tactile se taisent
                            # pareil — et la zone est bien vide d'obstacles
 npm run fuites:test        # le feu ne reprogramme sa rampe qu'en CHANGEANT de
                            # cible, et les cinq scans des plans coûtent 28 µs
+npm run image              # ce que la boucle pait HORS Track.update : collisions,
+                           # arcs de portail et animations — 37 µs sur 16 667
 ```
 
 ## ⛩️ Le portique et sa forme creuse
@@ -462,6 +464,56 @@ puis au niveau voulu, changent tous les deux la consigne.
   > 74 µs puis 30 µs au lancer suivant — un écart de ×2,4 qui n'avait rien à
   > voir avec la piste. Un chiffre qui bouge d'un lancer à l'autre ne peut pas
   > servir de seuil.
+
+- **Ce que la boucle paie à côté de `Track.update`.** Rien de tout cela ne
+  passait dans `npm run endurance`, qui ne chronomètre que la piste. Un banc à
+  part, `npm run image`, chronomètre ce que `main.ts` appelle **à chaque
+  image** par-dessus : les quatre tests de collision (`ramasse`,
+  `hits`, `heurteTorii`, `heurteJarre`), les sept arcs tremblés d'un portail,
+  et l'animation des cinq coureurs.
+
+  **37 µs sur 16 667, soit 0,22 % d'une image.** Aucun des trois sujets
+  n'atteint seul un dixième de pour cent :
+
+  | ce qui est chronométré | µs/image | % de l'image |
+  |---|---|---|
+  | les 4 tests de collision, sur une vraie course de 3 km | 4,1 | 0,02 % |
+  | les 7 arcs d'un portail (`jitterArc`) | 7,0 | 0,04 % |
+  | 5 coureurs animés (joueur + 4 bots) | 26 à 28 | 0,16 % |
+
+  Trois suspects historiques, et la mesure acquitte les trois.
+
+  **`Box3.setFromObject`** remonte tout le sous-arbre d'un maillage, et c'est
+  cher : **3,4 µs par jarre**. Mais les quatre appels le placent **derrière** un
+  filtre sur `|z|` — il ne se paie que pour les deux ou trois objets réellement
+  devant le coureur, d'où les 4,1 µs du total. La réserve plafonne à 4 jarres
+  (relevé après 5 km), donc il n'y a même pas une longue liste à balayer.
+  `casseAuContact`, elle, ne tourne que pendant une frappe
+  (`main.ts:2551`) : 0,6 µs.
+
+  **`Object.keys(clip.pistes)`** alloue un tableau de dix chaînes par coureur
+  et par image — et coûte **0,04 µs**. Cinq coureurs pendant une seconde de
+  jeu, cela fait 13 µs par seconde. L'allocation existe, elle est mesurable, et
+  elle est sans conséquence.
+
+  **`poserAuSol()`** force un `updateMatrixWorld(true)` complet par coureur et
+  par image — **6 à 7 µs**, le plus gros poste des animations, devant
+  `anim.appliquer` (7 à 8 µs). C'est le seul chiffre du tableau qui mérite
+  d'être regardé : le rendu va en faire un second, sur la scène entière. Mais
+  à 0,04 % d'image pour un coureur, il faudrait une raison indépendante du
+  budget pour y toucher.
+
+  > ⚠️ **`jitterArc` ne mesure que le CPU.** Node n'a pas de GPU : le
+  > `needsUpdate = true` qui réécrit le tampon en mémoire vidéo ne se fait pas
+  > ici. Les 7 µs sont donc une **borne basse** ; le vrai coût est côté
+  > graphique, où sept tampons de 18 octets partent à chaque image d'un
+  > portail. Ce banc ne peut pas le chiffrer, et il ne prétend pas le faire.
+
+  > ⚠️ **Le relevé est repris trois fois, on garde le meilleur.** Mesuré une
+  > seule fois, le peloton d'un coureur rendait 23 µs et celui de cinq 28 µs ;
+  > enchaîné sans longue chauffe, le premier rendait 71 µs et le second 52 µs —
+  > cinq coureurs *moins chers qu'un*, ce qui n'a aucun sens et ne venait que
+  > de la compilation du JIT en cours de mesure.
 
 ## 👻 Le coureur fantôme
 
