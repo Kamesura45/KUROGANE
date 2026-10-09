@@ -307,6 +307,8 @@ npm run mur:test           # le flanc bloque de côté, la voie est libre au nez
 npm run glissade:test      # la glissade au sol (0,55 s) et celle en vol (5 s)
 npm run sprint:test        # pendant le sprint, clavier et tactile se taisent
                            # pareil — et la zone est bien vide d'obstacles
+npm run fuites:test        # le feu ne reprogramme sa rampe qu'en CHANGEANT de
+                           # cible, et les cinq scans des plans coûtent 28 µs
 ```
 
 ## ⛩️ Le portique et sa forme creuse
@@ -390,6 +392,47 @@ vaut un cinquième de pixel : invisible, et cinq fois moins d'écritures.
 une nouvelle course commence à « 0.0 s », et si la précédente s'était terminée
 sur cette valeur on sauterait l'écriture — l'écran garderait le chrono d'avant.
 
+### 🔥 Le feu ne reprogramme pas sa propre rampe
+
+```bash
+npm run fuites:test
+```
+
+`main.ts:5286` appelle `feuAmbiance()` à **chaque image**, et `main.ts:5272`
+rend `enCourse` vrai dès le décompte : la fonction tournait donc dans **tous**
+les états du jeu. Or sa dernière ligne posait une consigne sur l'AudioParam de
+la nappe — et `setTargetAtTime` ne régle pas un volume, il **dépose un
+événement dans la file d'automatisation** du thread audio.
+
+Le son entendu ne changeait pas. La file, elle, ne cessait de grossir.
+
+| segment | images | avant (à plat) | après |
+|---|---|---|---|
+| accueil, 30 s au silence | 1 800 | 1 800 | **0** |
+| décompte + préchauffe | 300 | 300 | **3** |
+| course de 1 920 m | 5 237 | 5 237 | **1** |
+| retour au menu, 30 s | 1 800 | 1 800 | **0** |
+| 20 km de sans fin | 54 546 | 54 546 | **28** |
+| **session entière** | **63 683** | 63 683 | **32** |
+
+**Une session sur mille, enfin.** Le correctif tient en une comparaison :
+`feuConsigne` retient la valeur **déjà confiée au thread audio**, et on ne
+reprogramme que si elle a changé.
+
+⚠️ **Reprogrammer la même cible ne sert à RIEN.** Une exponentielle qui vise
+une cible converge seule, quel que soit le moment où on la lance — relancer son
+démarrage 60 fois par seconde ne la fait pas converger plus vite, il enchaîne
+60 exponentielles vers la même asymptote. Le seul effet mesurable est le coût.
+C'est aussi pourquoi la rampe reste juste « même si le jeu perd des images »,
+comme le disait déjà le commentaire d'origine : une seule programmation suffit,
+et un changement de cible se relance aussitôt.
+
+⚠️ **`feuConsigne` n'est pas une valeur mise en cache à la manière du HUD.**
+Si l'appel sort avant de programmer (pas encore de contexte audio), la variable
+ne bouge pas — elle ne doit mentir que sur ce qui a **réellement** été remis au
+thread. C'est ce qui laisse `prechauffeFeu()` intact : ses deux appels, à 1
+puis au niveau voulu, changent tous les deux la consigne.
+
 ### Ce qui a été mesuré et laissé tel quel
 
 - **Le nombre de pixels** est déjà plafonné (`applyQuality`), sans ombres.
@@ -399,6 +442,26 @@ sur cette valeur on sauterait l'écriture — l'écran garderait le chrono d'ava
 - **Les allocations de `hitbox()`** — 15 petits objets par image. Les mutualiser
   aurait introduit un état partagé mutable pour un gain que le ramasse-miettes
   générationnel rend nul. On ne paie pas un risque de corruption pour rien.
+- **Les cinq scans linéaires des plans** (`murA`, `flancA`, `premierBarrage`,
+  `murAvale`, et `premierePlateforme` derrière). Chronométrés par
+  `npm run fuites:test` sur les plans **réels** d'une piste de 20 km — 1 879
+  obstacles, 339 plateformes, 100 murs — les quatre ensemble, **appelés à
+  chaque image**, coûtent 28 µs sur 16 667, soit **0,17 % d'une image**. Et
+  aucune ne tourne à chaque image : `murA`/`flancA` ne répondent que si le
+  coureur est sur une paroi, `premierBarrage` pendant le vol d'un portail,
+  `murAvale` à la pose d'une barrière. `supportSous`, elle, tourne bien à tous
+  les coups : moins de 1,5 µs. Rien à faire ici — et la mesure le dit.
+
+  Un seul sort du lot : `premierBarrage` à **25,8 µs**, une vingtaine de fois
+  `supportSous`, parce qu'elle reparcourt deux plans entiers et appelle
+  `biomeDe()` pour chaque plateforme. C'est le seul appel de piste du jeu qui
+  vaille un sixième de pour cent d'image — et il y reste largement.
+
+  > ⚠️ **Le banc passe une PASSE DE CHAUFFE avant de chronométrer.** Sans elle,
+  > le premier relevé mesure la compilation du JIT : retirée, la passe valait
+  > 74 µs puis 30 µs au lancer suivant — un écart de ×2,4 qui n'avait rien à
+  > voir avec la piste. Un chiffre qui bouge d'un lancer à l'autre ne peut pas
+  > servir de seuil.
 
 ## 👻 Le coureur fantôme
 

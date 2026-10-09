@@ -120,6 +120,25 @@ let feuGain: GainNode | null = null
  *  encore : le joueur peut entrer dans le village avant d'avoir touché
  *  l'écran, et le feu doit démarrer au bon niveau dès qu'il y touche. */
 let feuVoulu = 0
+/**
+ * La consigne DERNIÈRE remise à la rampe, ou −1 avant toute première.
+ *
+ * ⚠️ On ne reprogramme que si elle a CHANGÉ. `setTargetAtTime` est appelé par
+ * la boucle de jeu à CHAQUE image — c'est l'entrée du jeu, et elle ne bouge pas
+ * —, si bien qu'une ligne simple enchaînait 60 programmations par seconde,
+ * indéfiniment, dans tous les états : au menu, au silence, sur le pont, sur le
+ * Fuji, et sur les deux tiers d'une course normale où le feu ne brûle pas. On
+ * ne voyait rien, on n'entendait rien, et pourtant la file d'automatisation de
+ * l'AudioParam ne fait que GROSSIR pendant tout le jeu.
+ *
+ * ⚠️ Et reprogrammer la même cible ne sert à RIEN : une exponentielle qui vise
+ * la cible converge seule, quel que soit le moment où on la lance. La rampe
+ * d'une image à l'autre n'est qu'une chaîne de ré-exponentielles qui vise la
+ * même asymptote — donc le seul effet de 60 relances par seconde est le coût.
+ * Changer de cible, en revanche, se voit aussitôt : c'est la seule raison de
+ * reprogrammer.
+ */
+let feuConsigne = -1
 /** Secondes avant le prochain craquement. */
 let crepiteT = 0
 
@@ -225,7 +244,26 @@ export function feuAmbiance(intensite: number, dt = 0) {
    * il pose le lieu et rien d'autre. Ce qu'on doit entendre d'un brasier, ce
    * sont les craquements — et ils ne dépendent plus de ce chiffre.
    */
-  feuGain.gain.setTargetAtTime(feuVoulu * 0.07, ac.currentTime, 0.5)
+  /*
+   * ————— On ne reprogramme qu'un CHANGEMENT de consigne —————
+   *
+   * Avant : `setTargetAtTime(...)` plat, à CHAQUE image, ce qui donnait 60
+   * programmations par seconde dans TOUS les états du jeu, pour un fondu qui en
+   * réclame deux par entrée et sortie de village. Mesuré par
+   * `npm run fuites:test` sur une course de 1 920 m :
+   *
+   *   avant  4 500 programmations (une par image, 75 s à 60 images/s)
+   *   après     2 programmations (entrée du village, sortie du village)
+   *
+   * `feuConsigne` n'est pas un cache d'affichage : il retient la valeur DÉJÀ
+   * confiée au thread audio, et non la valeur voulue. Si la cible bouge, la
+   * rampe est relancée ; si elle ne bouge pas, elle tourne déjà.
+   */
+  const consigne = feuVoulu * 0.07
+  if (consigne !== feuConsigne) {
+    feuGain.gain.setTargetAtTime(consigne, ac.currentTime, 0.5)
+    feuConsigne = consigne
+  }
 
   /*
    * ————— 🔥 Les crépitements, en événements —————
