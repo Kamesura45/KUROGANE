@@ -133,6 +133,21 @@ export class Musique {
   }
 
   /**
+   * Couper TOUT, immédiatement, sans fondu.
+   *
+   * `setVolume(0)` ne suffit pas : il laisse la boucle de fondu descendre le
+   * volume image par image, or quand le rendu a disparu plus aucune image ne
+   * vient. Le `<audio>` continuera alors de tourner en boucle sur une seule
+   * note, seule, tant que la page reste ouverte. On met en pause et on
+   * l'oublie : la suite du jeu reprendra la piste depuis le début.
+   */
+  couperTout() {
+    this.voulue = null
+    this.courante = null
+    for (const a of this.elements.values()) a.pause()
+  }
+
+  /**
    * Le fondu, appelé à chaque image par la boucle de jeu. On fait varier le
    * volume à la main plutôt qu'avec un minuteur : ça suit exactement le rythme
    * du jeu, et ça s'arrête avec lui quand l'onglet passe en arrière-plan.

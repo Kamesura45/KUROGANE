@@ -73,6 +73,7 @@ import {
   feuAmbiance,
   oiseauxAmbiance,
   prechauffeFeu,
+  couperLeSon,
 } from './sfx'
 import { BIOMES } from './biomes'
 import type { Quality } from './settings'
@@ -364,6 +365,10 @@ function applyQuality(q: Quality) {
   const cap = q === 'bas' ? 1 : q === 'haut' ? 2 : mobile ? 1.5 : 2
   renderer.setPixelRatio(Math.min(devicePixelRatio, cap))
   resize() // setSize doit être rappelé après un changement de pixelRatio
+  // Le flou des voiles n'est pas gratuit : le navigateur le refait dès que
+  // l'image du dessous bouge, en plein écran. En qualité basse, le voile garde
+  // son opacité — c'est elle qui masque — et le filtre part.
+  document.documentElement.classList.toggle('qualite-basse', q === 'bas')
 }
 
 // ————— L'interface —————
@@ -383,6 +388,9 @@ const degatsMotEl = document.getElementById('degatsMot')!
 const jarresEl = document.getElementById('jarres')!
 const jarresNEl = document.getElementById('jarresN')!
 const jarresPctEl = document.getElementById('jarresPct')!
+/** Le voile des menus. Avec `#pause`, ce sont les deux seuls ridesaux plein
+ *  écran : tant que l'un des deux est là, le jeu n'est pas visible. */
+const overlayEl = document.getElementById('overlay')!
 const pauseEl = document.getElementById('pause')!
 const pauseTitreEl = document.getElementById('pauseTitre')!
 const pauseMotEl = document.getElementById('pauseMot')!
@@ -4142,6 +4150,47 @@ function oublierHud() {
   hudScore = hudCount = hudGap = hudProgress = hudSprint = hudVitesse = '\u0000'
 }
 
+// ————— 🔴 La carte a lâché —————
+/*
+ * Un contexte WebGL qui disparaît ne se répare PAS tout seul. Le canvas reste
+ * noir, `renderer.render()` ne dessine plus rien — au pire il lève une
+ * exception à chaque image — et le son, lui, continue : la musique HTML boucle
+ * sur une seule note pendant que le joueur regarde du noir. C'est exactement le
+ * « bruit fort » qui précède les ventilateurs emballés.
+ *
+ * On écoute, on éteint tout, on dit ce qui s'est passé. Sans ce retour, le jeu
+ * donne l'impression d'être encore en vie : rien ne bouge, rien ne dit pourquoi,
+ * et le joueur peut rester planté là dix secondes avant de comprendre qu'il doit
+ * recharger.
+ */
+let renduPerdu = false
+
+function annoncerPerteDeRendu() {
+  if (renduPerdu) return
+  renduPerdu = true
+
+  couperLeSon() // le Web Audio, sinon les sources déjà lancées bouclent
+  musique.couperTout() // les <audio> HTML, sinon la piste tourne toute seule
+
+  const panneau = document.createElement('div')
+  panneau.className = 'panne-rendu'
+  panneau.innerHTML =
+    '<div class="jp">黒鉄</div>' +
+    '<h2>LE RENDU A ÉTÉ PERDU</h2>' +
+    "<p>La carte graphique a interrompu la partie. L'image ne reviendra pas " +
+    'toute seule et le son a été coupé.</p>' +
+    '<button type="button">Recharger la page</button>'
+  panneau.querySelector('button')!.addEventListener('click', () => location.reload())
+  document.body.appendChild(panneau)
+}
+
+canvas.addEventListener('webglcontextlost', (e) => {
+  // `preventDefault()` est INDISPENSABLE : sans lui le navigateur considère la
+  // perte comme définitive et refuse tout `webglcontextrestored`.
+  e.preventDefault()
+  annoncerPerteDeRendu()
+})
+
 // ————— La boucle de jeu (60 fois par seconde) —————
 const timer = new THREE.Timer()
 
@@ -4159,6 +4208,20 @@ function tick(now?: number) {
   const ecoule = Math.min(timer.getDelta(), 0.05) // temps écoulé depuis la dernière image
   if (repriseActive) avancerReprise(ecoule) // ⏳ peut lever la pause à cette image même
   const dt = enPause ? 0 : ecoule
+
+  /*
+   * 🪟 Un voile plein écran couvre-t-il le jeu ?
+   *
+   * Deux seulement : `#overlay` (les menus) et `#pause`. Tous deux portent un
+   * `backdrop-filter`, qui ne se recalcule que si l'image du DESSOUS bouge.
+   * Dessiner derrière, c'est donc fabriquer 60 images par seconde que le voile
+   * cache — et payer en prime 60 refontes de flou plein écran, sur une image
+   * qu'on distingue à peine sous 86 % d'opacité. On l'utilise deux fois plus
+   * bas : pour ne pas dessiner, et pour ne pas faire défiler un décor qu'on ne
+   * verra pas. Le voile se retire tout seul au départ d'une course (où la piste
+   * est de toute façon tirée à neuf) ou à la reprise après pause.
+   */
+  const voileOuvert = !overlayEl.classList.contains('hidden') || !pauseEl.classList.contains('hidden')
 
   /*
    * ————— ⏳ Le salon avant la grille —————
@@ -5252,10 +5315,19 @@ function tick(now?: number) {
     //    le décor repartait sous le mot de fin. On se cale donc aussi sur la
     //    bannière d'arrivée, qui dure exactement tant qu'on lit son chrono.
     const fige = state === 'fini' || menu.arriveeAffichee()
-    track.update(dt, fige ? 0 : 5)
+    // 🪟 Sous un voile, le décor ne se déplace plus : rien ne le regarde, et
+    // `track.update` promène toute la piste. Le garde est relu à chaque image :
+    // le jour où ce bloc s'exécute les voiles levés, la boule reprend là où
+    // elle s'était arrêtée.
+    if (!voileOuvert) track.update(dt, fige ? 0 : 5)
     player.update(dt)
     if (state === 'fini' && online) for (const r of rivals.values()) r.opp.update(dt, distance)
-    speedEl.style.opacity = '0' // pas de rideau de vitesse hors course
+    // Le cache de `speedEl` vit dans le même fichier : sans lui, on remettrait
+    // cette opacité à zéro 60 fois par seconde au menu — pour rien.
+    if (hudVitesse !== '0') {
+      hudVitesse = '0'
+      speedEl.style.opacity = '0'
+    }
   }
 
   /*
@@ -5313,7 +5385,10 @@ function tick(now?: number) {
     camera.updateProjectionMatrix()
   }
 
-  renderer.render(scene, camera)
+  // Un contexte perdu ne dessine plus rien : tenter relèverait une exception
+  // image après image, sur un canvas qui reste de toute façon noir.
+  // `voileOuvert`, mesuré au début de cette même image, dit le reste.
+  if (!renduPerdu && !voileOuvert) renderer.render(scene, camera)
   menu.update(dt) // l'aperçu 3D du guerrier, quand le menu de sélection est ouvert
   musique.update(dt) // le fondu entre deux pistes
 }
@@ -5441,6 +5516,18 @@ if (import.meta.env.DEV) {
         tutoAttend,
         rival: bots[0].actif ? { ecart: bots[0].distance - distance, vitesse: bots[0].speed } : null,
       }
+    },
+    /**
+     * Simule une carte graphique qui lâche.
+     *
+     * L'écran de panne ne se déclenche QUE sur `webglcontextlost`, un
+     * événement que rien ne produit volontairement : sans cette porte, on ne
+     * saurait même pas si le message sort correctement — on attendrait une
+     * vraie panne pour découvrir une faute de frappe. `event.cancelable` est
+     * indispensable : sans lui, `preventDefault()` du handler est ignoré.
+     */
+    panneRendu() {
+      canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }))
     },
   }
 }

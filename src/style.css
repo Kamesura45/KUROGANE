@@ -629,6 +629,16 @@ body {
 #overlay.hidden {
   display: none;
 }
+/* ⚡ QUALITÉ BASSE : les voiles gardent leur opacité, leur flou part.
+   `backdrop-filter` ne coûte que si l'image du dessous BOUGE, mais il le
+   refait alors en plein écran — et sous un fond déjà opaque à 86 %, l'effet
+   se lit à peine. Le voile masque, c'est son rôle : le flou n'en est qu'une
+   décoration. */
+html.qualite-basse #overlay,
+html.qualite-basse #pause,
+html.qualite-basse .tutobox {
+  backdrop-filter: none;
+}
 
 /* Un écran = une page du menu. Un seul visible à la fois. */
 .screen {
@@ -3416,4 +3426,60 @@ body {
   .finsceau {
     animation: none;
   }
+}
+
+/*
+ * ————— 🔴 L'écran de panne du rendu —————
+ *
+ * Il s'affiche quand le contexte WebGL a disparu. Tout doit être OPAQUE : derrière,
+ * le canvas est noir et le HUD continue peut-être de bouger. Le joueur ne doit
+ * lire que ceci, comprendre en une seconde, et recharger — surtout pas se
+ * demander si le jeu est encore en train de réfléchir.
+ */
+.panne-rendu {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  background: #151a2c;
+  color: #f0e8d8;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.panne-rendu .jp {
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+  font-size: 3rem;
+  line-height: 1;
+  color: #e24b3a;
+}
+.panne-rendu h2 {
+  font-size: 1.15rem;
+  letter-spacing: 0.22em;
+  font-weight: 800;
+}
+.panne-rendu p {
+  max-width: 46ch;
+  margin-top: 4px;
+  color: #9aa4c0;
+  font-size: 0.92rem;
+  line-height: 1.65;
+}
+.panne-rendu button {
+  margin-top: 10px;
+  padding: 11px 22px;
+  font: inherit;
+  font-size: 0.95rem;
+  color: #f0e8d8;
+  background: rgba(226, 75, 58, 0.2);
+  border: 1px solid #e24b3a;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.panne-rendu button:hover {
+  background: rgba(226, 75, 58, 0.4);
 }

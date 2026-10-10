@@ -15,13 +15,31 @@ function audio(): AudioContext | null {
   const AC = window.AudioContext ?? (window as any).webkitAudioContext
   if (!AC) return null
   if (!ctx) ctx = new AC()
-  if (ctx.state === 'suspended') void ctx.resume()
+  if (ctx.state === 'suspended' && !silencieux) void ctx.resume()
   return ctx
 }
 
 // Déblocage au premier geste : après ça, le son marche partout dans la partie.
 for (const ev of ['pointerdown', 'keydown', 'touchstart']) {
   addEventListener(ev, () => audio(), { once: true, passive: true })
+}
+
+/**
+ * 🔇 Couper tout le son, sans fondu, et ne plus le relancer.
+ *
+ * Quand le contexte WebGL disparaît, l'image meurt mais le son, lui, continue :
+ * les sources déjà lancées bouclent sur elles-mêmes et le joueur se retrouve
+ * avec une note répétée, forte, pendant que les ventilateurs s'emballent. C'est
+ * le symptôme le plus déroutant de la panne — et le seul qu'on puisse faire
+ * taire. Un drapeau empêche `audio()` de relancer le contexte au prochain geste
+ * : sur un écran figé, un clic de trop ramènerait exactement le bruit qu'on
+ * vient d'éteindre.
+ */
+let silencieux = false
+
+export function couperLeSon() {
+  silencieux = true
+  if (ctx && ctx.state !== 'closed') void ctx.suspend()
 }
 
 /**

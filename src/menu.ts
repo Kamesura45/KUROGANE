@@ -196,6 +196,16 @@ export class Menu {
   /** 🌀 L'enseigne a-t-elle déjà été peinte ? Elle ne l'est qu'une fois. */
   private enseigneJouee = false
   private preview: Preview | null = null
+  /**
+   * Détache l'écouteur posé par `initPreview` sur le canvas de l'aperçu.
+   *
+   * Chaque visite du vestiaire en ajoute un — et `dispose()` ne retire que les
+   * siens. Sans ce détachement, l'ancien survivait à son auteur : une perte de
+   * contexte survenait, et il déchargeait un renderer mort tout en mettant à
+   * zéro `preview` — alors que ce `preview` venait d'être recréé. Le nouveau
+   * renderer perdait alors sa seule référence sans jamais être libéré.
+   */
+  private detachePerteApercu: (() => void) | null = null
   private spin = 0
   /** La dernière vue du salon reçue — pour savoir qui je suis, si je suis prêt… */
   private view: LobbyView | null = null
@@ -1049,6 +1059,36 @@ export class Menu {
 
   hide() {
     document.getElementById('overlay')!.classList.add('hidden')
+    // Une course démarre : le 2ᵉ contexte WebGL passe la main. Il ne dessine
+    // RIEN pendant la course, et pourtant il reste ouvert toute la session.
+    this.libererPreview()
+  }
+
+  /**
+   * Fermer l'aperçu, géométries et contexte compris.
+   *
+   * C'est de la mémoire vidéo dormante sur une carte qui n'en a déjà que
+   * 973 Mo — et le jeu vient d'en ouvrir un autre pour jouer. `showInPreview`
+   * le recrée à la prochaine visite du vestiaire : recharger un petit
+   * personnage coûte moins cher qu'un contexte gardé ouvert entre deux courses.
+   */
+  private libererPreview() {
+    // Avant tout : l'écouteur peut être encore là alors que `preview` ne l'est
+    // plus (une perte de contexte l'a mis à zéro sans le détacher).
+    this.detachePerteApercu?.()
+    this.detachePerteApercu = null
+    const p = this.preview
+    if (!p) return
+    p.scene.traverse((o) => {
+      const m = o as THREE.Mesh
+      if (!m.isMesh) return
+      m.geometry.dispose()
+      const mat = m.material as THREE.Material | THREE.Material[]
+      if (Array.isArray(mat)) mat.forEach((x) => x.dispose())
+      else mat.dispose()
+    })
+    p.renderer.dispose()
+    this.preview = null
   }
 
   // ————— Le choix du guerrier —————
@@ -2048,6 +2088,21 @@ export class Menu {
     scene.add(group)
 
     this.preview = { renderer, scene, camera, group }
+
+    // Le 2ᵉ contexte a sa propre vie, et une carte déjà chargée n'a aucune
+    // raison d'en ouvrir un troisième. Si celui-ci disparaît, on jette l'aperçu
+    // entier : les vignettes statiques prennent le relais, exactement comme
+    // quand le navigateur a refusé la création au départ.
+    //
+    // ⚠️ Écoutant sous nom, et détaché dans `libererPreview()` : `dispose()`
+    // ne retire que les écouteurs internes de THREE, pas celui-ci.
+    const surPerte = (e: Event) => {
+      e.preventDefault()
+      renderer.dispose()
+      this.preview = null
+    }
+    canvas.addEventListener('webglcontextlost', surPerte)
+    this.detachePerteApercu = () => canvas.removeEventListener('webglcontextlost', surPerte)
   }
 
   /** Le canvas est dimensionné par le CSS : on recale le rendu dessus. */

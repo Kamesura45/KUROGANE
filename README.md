@@ -435,6 +435,76 @@ ne bouge pas — elle ne doit mentir que sur ce qui a **réellement** été remi
 thread. C'est ce qui laisse `prechauffeFeu()` intact : ses deux appels, à 1
 puis au niveau voulu, changent tous les deux la consigne.
 
+### 🔬 Un banc de diagnostic, dans le navigateur
+
+```bash
+# http://localhost:5173/diagnostic.html      (?auto=1 enchaîne tout seul)
+```
+
+`npm run endurance` chronomètre la piste, `npm run image` ce que la boucle paie
+à côté — tous deux au pied de node, où il n'y a **ni GPU ni CSS**. Celui-ci
+tourne dans le navigateur, sur la machine du joueur : il reconstruit la vraie
+scène (caméra 70°, brouillard à 30/85, les deux lumières, la piste avancée de
+600 pas) et compare **trois configurations** — celle du jeu, sans antialias, et
+sans antialias à 0,7× de résolution.
+
+Relevé sur une machine d'entrée de gamme (GeForce GT 320, ANGLE/Direct3D11,
+écran 1 875 × 971 à densité ×1, deux cœurs) :
+
+| configuration | ms/image | images/s |
+|---|---|---|
+| **A — telle que livrée** (antialias) | **1,8** | 59 |
+| B — sans antialias | 2,5 | 59 |
+| C — sans antialias, 0,7× | 2,0 | 61 |
+
+**13 336 triangles rendus en 1,8 ms sur les 16,7 d'une image.** Le GPU n'est
+pas le goulot, et l'antialias ne l'est pas non plus : les trois relevés tiennent
+dans le même broutage (B plus cher que A ne veut rien dire à ±0,7 ms). Aucun
+contexte n'a été perdu pendant la mesure.
+
+> ⚠️ **Le banc ne mesure que du WebGL.** Ni le DOM ni le CSS n'y passent — et
+> c'est pourtant là que se cachait le coût, cf. la section suivante. Lire
+> « 1,8 ms » n'a jamais dit rien d'un `backdrop-filter`.
+
+> ⚠️ **Trois garde-fous, payés chacun par une vraie défaillance.** Chaque
+> configuration a **son propre canvas** et son `renderer.dispose()` avant la
+> suivante — sinon trois contextes s'empilent et le navigateur en perd lui-même
+> un au troisième tour. Un numéro de tour empêche les retours tardifs d'écrire
+> dans la configuration suivante. Et deux compteurs (10 s de chauffe, 30 de
+> comptage) interrompent un tour où le rendu n'aurait pas lieu : sans eux, une
+> mesure en erreur laissait un verdict triumphant.
+
+### 🪟 Le menu ne paie plus le flou qu'il fabrique
+
+Le voile des menus pose `backdrop-filter: blur(6px)` **en plein écran**, et le
+canvas 3D se redessinait 60 fois par seconde derrière. Or ce filtre ne se
+recalcule que si l'image du dessous **bouge** : on lui donnait donc 60 occasions
+par seconde de refaire un flou gaussien sur 1 875 × 971, **pour un rendu qu'on
+distingue à peine sous 86 % d'opacité**. C'est la dépense qui n'apparaît dans
+aucun de nos bancs — elle n'est pas en trois dimensions.
+
+Trois postes, coupés d'un seul garde relu au début de chaque image :
+
+| ce qui ne tourne plus sous un voile | avant |
+|---|---|
+| `renderer.render()` | 60 images/s fabriquées puis jetées |
+| `track.update()` — le décor qui « tourne à vide » | toute la piste promenée |
+| `speedEl.style.opacity = '0'` | 60 écritures de style par seconde |
+
+Les voiles sont deux : `#overlay` (les menus) et `#pause`. Le garde est relu à
+chaque image, donc il se lève de lui-même au départ d'une course — où
+`track.reset()` a de toute façon tiré la piste à neuf — et à la reprise après
+pause. La boule reprend exactement là où elle s'était arrêtée.
+
+**En qualité basse, le flou des voiles part** (`html.qualite-basse`, posée par
+`applyQuality`, sur `#overlay`, `#pause` et la fiche du tutoriel). Le voile garde
+son opacité : c'est elle qui masque. À 86 %, 92 % et 93 % opaque, le flou n'était
+qu'une décoration qu'on payait à chaque image qui bouge dessous.
+
+⚠️ **Le rendu s'arrête aussi pendant la pause**, où le même voile (à 92 %) se
+pose sur une scène que `dt = 0` a déjà figée : dessiner derrière ne changerait
+que le papier peint.
+
 ### Ce qui a été mesuré et laissé tel quel
 
 - **Le nombre de pixels** est déjà plafonné (`applyQuality`), sans ombres.
@@ -444,6 +514,16 @@ puis au niveau voulu, changent tous les deux la consigne.
 - **Les allocations de `hitbox()`** — 15 petits objets par image. Les mutualiser
   aurait introduit un état partagé mutable pour un gain que le ramasse-miettes
   générationnel rend nul. On ne paie pas un risque de corruption pour rien.
+- **Les deux filtres par image** — `botsEnCourse()` (`b.actif` ne bouge qu'à la
+  mise en place, pourtant on refiltre au moins une fois par image) et
+  `sprintTaps.filter()`. Chronométré hors ligne, un filtre de cinq entrées fait
+  **0,265 µs**, soit **0,0016 % d'une image** à 60 par seconde. Un cache
+  demanderait d'être invalidé aux **huit endroits** où `b.actif` change, pour
+  gagner une allocation que le ramasse-miettes avale entre deux images. Même
+  réponse que pour `hitbox()`, et pour la même raison.
+- **L'antialias** — le banc de diagnostic (ci-dessus) le met hors cause sur la
+  plus petite carte qu'on ait sous la main : 1,8 ms avec, 2,5 sans, et l'écart
+  tient dans le broutage de la mesure. Rien à retirer.
 - **Les cinq scans linéaires des plans** (`murA`, `flancA`, `premierBarrage`,
   `murAvale`, et `premierePlateforme` derrière). Chronométrés par
   `npm run fuites:test` sur les plans **réels** d'une piste de 20 km — 1 879
@@ -514,6 +594,49 @@ puis au niveau voulu, changent tous les deux la consigne.
   > enchaîné sans longue chauffe, le premier rendait 71 µs et le second 52 µs —
   > cinq coureurs *moins chers qu'un*, ce qui n'a aucun sens et ne venait que
   > de la compilation du JIT en cours de mesure.
+
+## 🖥️ Quand la carte lâche la main, le jeu le dit
+
+Le symptôme, rapporté deux fois dans les mêmes termes : **le jeu rame un peu,
+puis écran noir, jamais au même moment, la musique devient un grondement.**
+
+C'est la signature d'un **contexte WebGL perdu sans être annoncé**. `three` ne
+rattrape pas tout seul : sans écouteur, `renderer.render()` lève une exception
+**à chaque image suivante**, sur un canvas qui reste noir. Et quand le
+navigateur coupe le contexte, il coupe aussi l'audio — d'où le bruit au lieu de
+la musique.
+
+Ce que fait le jeu, dans l'ordre où la panne arrive :
+
+1. **`webglcontextlost` sur le canvas → `preventDefault()`.** Sans cet appel,
+   le navigateur ne prépare même pas la restauration : on se prive du seul
+   moyen qu'il ait de revenir.
+2. **`renduPerdu` arrête le rendu.** Dessiner sur un contexte mort, c'est une
+   exception par image, donc un jeu non seulement noir mais inutilisable.
+3. **Le son se tait, tout de suite** — `couperLeSon()` suspend le contexte
+   audio et pose un drapeau qui bloquera tout `resume()` ultérieur ;
+   `Musique.couperTout()` annule la piste voulue et met en pause chaque `<audio>`.
+   Un grondement n'est pas une information.
+4. **Un écran `.panne-rendu` prend le relais**, avec un bouton qui recharge.
+   Mieux vaut une page franche qu'un écran noir muet.
+
+Pour le voir sans attendre une vraie panne : `__sorts.panneRendu()` dans la
+console (guichet de développement, absent du build).
+
+⚠️ **Ce qui ne se répare pas là :** cette mécanique *gère* la défaillance, elle
+ne l'empêche pas. Le banc de diagnostic dit que le GPU n'est pas saturé
+(1,8 ms sur 16,7) — la cause n'est donc pas un rendu trop lourd. Sur la machine
+de test, la carte tournait **78 °C sous charge puis 62 °C à vide**, plancher
+10 à 15 °C au-dessus du repos normal : le refroidissement, pas le code.
+
+**Deuxième lieu où le contexte pouvait tomber : l'aperçu du vestiaire**, le
+second contexte WebGL de la session. `renderer.dispose()` retire **les siens**
+et laisse les autres en place — l'écouteur anonyme ajouté à chaque visite du
+vestiaire survivait donc à son auteur, déchargeait un renderer mort et mettait à
+zéro `preview` *pendant que la visite suivante venait de le recréer*, abandonnant
+son renderer sans le libérer. L'écouteur porte désormais un nom, et
+`libererPreview()` le détache — **avant** de tester `preview`, puisque la perte
+de contexte elle-même a mis le champ à zéro.
 
 ## 👻 Le coureur fantôme
 

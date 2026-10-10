@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#151a2c" />
+    <title>KUROGANE — diagnostic du poste</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        min-height: 100vh;
+        padding: clamp(20px, 5vw, 44px);
+        background: #151a2c;
+        color: #f0e8d8;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .jp { font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; font-size: 2.4rem; color: #e24b3a; line-height: 1; }
+      h1 { font-size: 1.35rem; letter-spacing: 0.22em; margin: 6px 0 4px; font-weight: 800; }
+      .sous { color: #6b7594; font-size: 0.84rem; letter-spacing: 0.04em; }
+      .retour { display: inline-block; margin-top: 22px; color: #d6ac5a; font-size: 0.88rem; text-decoration: none; }
+      .retour:hover { text-decoration: underline; }
+
+      .bloc { max-width: 940px; margin-top: 28px; }
+      .titre {
+        font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase;
+        color: #6b7594; margin-bottom: 8px;
+      }
+
+      /* ——— La carte d'identité du poste ——— */
+      .identite {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 1px; background: #3d4560; border: 1px solid #3d4560; border-radius: 10px; overflow: hidden;
+      }
+      .cellule { background: rgba(13, 16, 28, 0.9); padding: 12px 14px; }
+      .cellule .cle { color: #6b7594; font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; }
+      .cellule .val { font-size: 0.92rem; margin-top: 3px; word-break: break-word; line-height: 1.4; }
+      .cellule .val.gras { color: #e24b3a; font-weight: 700; }
+
+      /* ——— Les résultats ——— */
+      table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+      th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #3d4560; }
+      th { color: #6b7594; font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; }
+      td.num { font-variant-numeric: tabular-nums; text-align: right; }
+      tr.regle td { color: #5ef08a; }
+      tr.actuel td { background: rgba(226, 75, 58, 0.12); }
+      .etat { color: #6b7594; font-size: 0.8rem; }
+
+      .barre { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; align-items: center; }
+      button {
+        background: rgba(226, 75, 58, 0.16); color: #f0e8d8; border: 1px solid #e24b3a;
+        border-radius: 8px; padding: 9px 16px; font: inherit; font-size: 0.88rem; cursor: pointer;
+      }
+      button:hover:not(:disabled) { background: rgba(226, 75, 58, 0.32); }
+      button:disabled { opacity: 0.4; cursor: default; }
+      button.discret { background: rgba(61, 69, 96, 0.22); border-color: #3d4560; }
+
+      .avancement { color: #9aa4c0; font-size: 0.84rem; }
+      .avancement b { color: #5ef08a; }
+
+      /* ——— La verdict ——— */
+      .verdict {
+        margin-top: 22px; border: 1px solid #3d4560; border-left: 4px solid #e24b3a;
+        background: rgba(61, 69, 96, 0.22); border-radius: 10px; padding: 15px 17px;
+        font-size: 0.9rem; line-height: 1.65; white-space: pre-wrap;
+      }
+
+      .note {
+        margin-top: 26px; max-width: 74ch; font-size: 0.8rem; line-height: 1.75;
+        color: #6b7594; border-top: 1px dashed #3d4560; padding-top: 14px;
+      }
+      .note b { color: #9aa4c0; }
+      code { background: rgba(61, 69, 96, 0.5); padding: 1px 5px; border-radius: 4px; font-size: 0.85em; }
+
+      /* La vue masquée : la scène tourne vraiment, on la montre juste pas. */
+      #vue { position: fixed; left: -10000px; top: 0; width: 640px; height: 360px; }
+      #alerte { margin-top: 14px; color: #e24b3a; font-size: 0.86rem; display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="jp">黒鉄</div>
+    <h1>DIAGNOSTIC DU POSTE</h1>
+    <div class="sous">On ne devine pas ce que vaut une machine : on le mesure chez elle</div>
+
+    <div class="bloc">
+      <div class="titre">Ce qui répond à la question</div>
+      <div class="identite" id="identite">
+        <div class="cellule"><div class="cle">Carte graphique</div><div class="val" id="gpu">…</div></div>
+        <div class="cellule"><div class="cle">Fabricant</div><div class="val" id="fab">…</div></div>
+        <div class="cellule"><div class="cle">WebGL</div><div class="val" id="webgl">…</div></div>
+        <div class="cellule"><div class="cle">Écran</div><div class="val" id="ecran">…</div></div>
+        <div class="cellule"><div class="cle">Cœurs</div><div class="val" id="coeurs">…</div></div>
+        <div class="cellule"><div class="cle">Réglage actuel</div><div class="val gras" id="reglage">…</div></div>
+      </div>
+      <div id="alerte"></div>
+    </div>
+
+    <div class="bloc">
+      <div class="titre">Trois configurations, la vraie piste</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Configuration</th>
+            <th style="text-align:right">ms / image</th>
+            <th style="text-align:right">images / s</th>
+            <th>Verdict</th>
+          </tr>
+        </thead>
+        <tbody id="resultats">
+          <tr><td colspan="4" class="etat">En attente du lancement…</td></tr>
+        </tbody>
+      </table>
+
+      <div class="barre">
+        <button id="lancer">Lancer les mesures</button>
+        <button id="copier" class="discret" disabled>Écrire le rapport à copier ici</button>
+        <span class="avancement" id="avancement">~15 secondes, on ne triche pas sur la durée</span>
+      </div>
+
+      <div class="verdict" id="verdict" hidden></div>
+    </div>
+
+    <div class="note">
+      <b>Ce que le banc fait.</b> Il reconstruit la scène du jeu — même caméra, même brume,
+      mêmes lumières, la vraie piste — puis la fait tourner à <b>trois configurations</b> :
+      celle du jeu aujourd'hui (antialias à fond, résolution native), sans antialias, puis
+      sans antialias à résolution réduite. Chaque configuration est <b>créée à part</b> et
+      jetée avant la suivante, parce qu'un contexte WebGL ne se reconfigure pas à l'exécution.
+      <br /><br />
+      <b>Pourquoi deux colonnes.</b> <code>ms/image</code> force la carte graphique à rendre
+      réellement jusqu'au bout — c'est elle qui dit si le GPU tient la cadence, même quand
+      l'écran plafonne à 60. <code>images/s</code> est le ressenti : le vrai nombre de
+      images que vous voyez.
+      <br /><br />
+      <b>Le contexte perdu.</b> Si votre carte lâche pendant le test, la ligne s'affiche en
+      rouge : c'est exactement ce qui fait figer une course en vrai.
+    </div>
+
+    <a class="retour" href="/dev.html">← panneau dev</a>
+
+    <script type="module" src="/src/diagnostic.ts"></script>
+  </body>
+</html>
