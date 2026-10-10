@@ -3369,24 +3369,25 @@ const FUJI: Biome = {
  *
  *  · En course sans fin, le créneau 0 est ce même biome (`ordreSlot`). Les
  *    trois autres défilent ensuite dans un ordre tiré au sort.
+ *
+ * ————— ⚠️ LE PROPRE BIOME RETIRÉ DE LA COURSE —————
+ *
+ * La bambouseraie 竹 a vécu ici une saison, retirée de `BIOMES` pendant qu'on
+ * lui cherchait un problème. Elle est revenue, et ce qu'elle a appris est resté.
+ *
+ * La règle qu'elle a laissée, et qui vaut pour le prochain :
+ *
+ * > **Un biome retiré n'est JAMAIS mis en commentaire.** Il reste dans le
+ * > fichier, typé, vérifié à chaque build. Commenté, il cesse d'être compilé :
+ * > il ne suit plus les changements de l'interface `Biome`, et l'on retrouve
+ * > dans six mois du code qui ne compile plus — un biome qu'on croyait « en
+ * > pause » et qu'il faudrait en fait réécrire.
+ *
+ * Concrètement : on le laisse dans ce fichier, et on le retire de la SEULE
+ * liste qui le fait exister en course — celle-ci. Il n'y a pas de seconde liste
+ * à tenir, et c'est pour ça qu'il n'y en a pas.
  */
 export const BIOMES: readonly Biome[] = [BAMBOUS, VILLAGE, PONT, FUJI]
-
-/**
- * Les biomes ÉCRITS mais hors course.
- *
- * Vide aujourd'hui : la bambouseraie 竹 y vivait pendant qu'elle était retirée
- * de la course, et la liste est conservée pour le prochain biome qu'on voudra
- * garder sur l'étagère.
- *
- * ⚠️ Un biome en pause se GARDE VIVANT ici, jamais en commentaire. Sept cents
- * lignes de texte mort cesseraient d'être compilées : elles ne suivraient plus
- * les changements de l'interface `Biome`, et l'on retrouverait dans six mois du
- * code qui ne compile plus — un biome qu'on croyait « en pause » et qu'il
- * faudrait en fait réécrire. Ici il reste typé, vérifié à chaque build, et
- * ramenable en une ligne.
- */
-export const BIOMES_EN_PAUSE: readonly Biome[] = []
 
 /** L'ambiance à un instant donné : deux biomes et le fondu entre eux. */
 export interface Ambiance {

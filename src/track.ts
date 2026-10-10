@@ -603,8 +603,48 @@ export class Track {
   private brume: THREE.Fog
   private fond: THREE.Color
 
+  /**
+   * 🎨 Le TERRAIN est-il dessiné ?
+   *
+   * ⚠️ UN SEUL GROUPE, ET NON UNE LISTE DE MAILLAGES À CACHER.
+   *
+   * La première version énumérait ce qu'elle croyait être tout : les sols, les
+   * massifs, les barrières. Le banc a trouvé **18 maillages encore visibles** au
+   * menu — les repères entre les lignes, les torii, l'arche d'arrivée, les
+   * plateformes, les murs, les jarres, les obstacles. Sept réserves oubliées,
+   * donc sept listes à tenir, et la prochaine qui naîtra le sera aussi.
+   *
+   * Un seul parent règle la question : la visibilité d'un enfant est multipliée
+   * par celle de ses ancêtres, donc tout ce qui est dedans disparaît d'un coup,
+   * et **rien à l'intérieur ne peut se rallumer tout seul** — ce qui est
+   * exactement le piège de `spawnDecor`, qui remettait `visible = true` à chaque
+   * réutilisation. Les maillages continuent de tenir leur propre comptabilité
+   * entre eux ; le menu n'a plus qu'une seule décision à prendre.
+   */
+  private groupe = new THREE.Group()
+
+  /**
+   * Affiche ou efface tout le terrain : piste, sol de forêt, décor, barrières,
+   * obstacles, murs, plateformes, jarres, torii, ligne d'arrivée.
+   *
+   * Le fond de scène, lui, n'est PAS touché : c'est une couleur, et c'est
+   * précisément ce qu'on garde.
+   */
+  setTerrain(v: boolean) {
+    this.groupe.visible = v
+  }
+
   constructor(scene: THREE.Scene) {
     this.scene = scene
+    /*
+     * 🎨 TOUT LE TERRAIN VIT DANS CE GROUPE, et lui seul.
+     *
+     * C'est le seul objet de la scène que la piste ajoute directement : tout le
+     * reste passe par `this.groupe.add(…)`. Une seule porte à fermer au menu
+     * (cf. `setTerrain`), au lieu d'une liste de réserves à tenir à jour — et la
+     * liste aurait déjà été fausse sept fois (cf. le commentaire de `setTerrain`).
+     */
+    scene.add(this.groupe)
 
     /*
      * La brume appartient à la PISTE, pas à la scène de main.ts.
@@ -661,7 +701,7 @@ export class Track {
       g.rotation.x = -Math.PI / 2
       g.position.z = -90
       g.renderOrder = m === this.matSol ? 0 : 1
-      scene.add(g)
+      this.groupe.add(g)
     }
     this.matSolHaut.visible = false
 
@@ -691,7 +731,7 @@ export class Track {
     foret.rotation.x = -Math.PI / 2
     foret.position.set(0, -0.03, -110)
     foret.renderOrder = -1 // toujours dessiné avant la piste
-    scene.add(foret)
+    this.groupe.add(foret)
 
     /*
      * Les quatre matières sont peintes MAINTENANT, au chargement.
@@ -761,20 +801,20 @@ export class Track {
     }
     this.pointilles = new THREE.Mesh(mergeGeometries(traits, false)!, this.matLigne)
     for (const t of traits) t.dispose()
-    scene.add(this.pointilles)
+    this.groupe.add(this.pointilles)
 
     // Des torii rouges enjambent la piste (décor, pas de collision)
     for (let i = 0; i < 3; i++) {
       const t = makeTorii()
       t.position.z = -40 - i * 70
       this.toriis.push(t)
-      scene.add(t)
+      this.groupe.add(t)
     }
 
     // Le torii SACRÉ : la ligne d'arrivée, tout en or
     this.finish = makeFinishGate()
     this.finish.position.z = -99999 // caché tant que la course n'a pas commencé
-    scene.add(this.finish)
+    this.groupe.add(this.finish)
   }
 
   /**
@@ -1823,7 +1863,7 @@ this.prochainDecor += ecart
         active: false,
       }
       this.decors.push(dec)
-      this.scene.add(dec.mesh)
+      this.groupe.add(dec.mesh)
     }
     /*
      * ⚠️ 5,6 m du centre, pas 7.
@@ -1851,11 +1891,22 @@ this.prochainDecor += ecart
      * l'éclairage, et retourne aussi la profondeur : la même touffe recyclée à
      * droite puis à gauche ne se lit pas comme un copier-coller.
      */
-    dec.mesh.rotation.y = cote < 0 ? Math.PI : 0
+dec.mesh.rotation.y = cote < 0 ? Math.PI : 0
+    /*
+     * ⚠️ LE GROUPÉ NE REMPLACE PAS CE `visible = true`.
+     *
+     * Le groupe règle le MENU ; ici, on parle du RECYCLAGE, qui est une autre
+     * affaire : un massif réutilisé sortait de sa réserve `visible = false`, et
+     * sans cette ligne il y resterait. La forêt perdrait ses massifs au fil de
+     * la course — un par un, sans bruit.
+     *
+     * Les deux cohabitent : si le groupe est caché (au menu), l'enfant peut
+     * dire `visible = true` sans rien montrer, puisque la visibilité se
+     * MULTIPLIE de proche en proche. C'est tout l'intérêt d'un parent unique.
+     */
     dec.mesh.visible = true
     dec.active = true
   }
-
   private spawnPlateforme(p: PlannedPlateforme, z: number) {
     const biome = this.biomeDe(p.d)
     /*
@@ -1890,7 +1941,7 @@ this.prochainDecor += ecart
         active: false,
       }
       this.plateformes.push(pf)
-      this.scene.add(pf.mesh, pf.rampe, pf.nez)
+      this.groupe.add(pf.mesh, pf.rampe, pf.nez)
     }
     pf.plan = p
     // Le maillage est bâti sur 1 m de long, centré : on l'étire et on le recule
@@ -1930,7 +1981,7 @@ this.prochainDecor += ecart
       const habille = BIOMES[biome].fabriqueMur
       m = { mesh: habille ? habille() : makeMurMesh(biome), biome, active: false }
       this.murs.push(m)
-      this.scene.add(m.mesh)
+      this.groupe.add(m.mesh)
     }
     // Le maillage est bâti sur 1 m : on l'étire à la longueur voulue. Il est
     // centré en z, d'où le décalage d'une demi-longueur.
@@ -1956,9 +2007,10 @@ this.prochainDecor += ecart
     if (!b) {
       b = { mesh: habille(), biome, active: false }
       this.barrieres.push(b)
-      this.scene.add(b.mesh)
+      this.groupe.add(b.mesh)
     }
-    b.mesh.position.set(cote * MUR_X, 0, z)
+b.mesh.position.set(cote * MUR_X, 0, z)
+    // Même raison que pour les massifs : ici c'est le recyclage, pas le menu.
     b.mesh.visible = true
     b.active = true
   }
@@ -2004,7 +2056,7 @@ this.prochainDecor += ecart
         active: false,
       }
       this.jarres.push(j)
-      this.scene.add(j.mesh)
+      this.groupe.add(j.mesh)
     }
     j.parchemin = p.parchemin
     // Le trésor suit le plan, pas le maillage recyclé : deux pots verts d'une
@@ -2093,7 +2145,7 @@ this.prochainDecor += ecart
     if (!r) {
       r = { mesh: makeRouleauMesh(), active: false }
       this.rouleaux.push(r)
-      this.scene.add(r.mesh)
+      this.groupe.add(r.mesh)
     }
     r.mesh.position.x = LANES[lane]
     r.mesh.position.z = z
@@ -2137,7 +2189,7 @@ this.prochainDecor += ecart
         active: false,
       }
       this.obstacles.push(o)
-      this.scene.add(o.mesh)
+      this.groupe.add(o.mesh)
     }
     o.mesh.position.x = LANES[lane]
     o.mesh.position.z = z

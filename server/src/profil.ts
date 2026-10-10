@@ -187,45 +187,17 @@ export async function crediter(
   }
 }
 
-/**
- * Dépense. Renvoie `null` si le joueur n'a pas de quoi payer.
+/*
+ * ⚠️ IL N'Y A PLUS DE `debiter`, ET IL NE FAUT PAS LE RÉÉCRIRE.
  *
- * Le `and ${col} >= $1` est le cœur de la sécurité : c'est la BASE qui
- * refuse, pas un `if` dans le code. Deux achats lancés en même temps (double
- * tap) ne peuvent donc pas passer tous les deux avec le solde d'un seul.
+ * Il y avait ici une fonction `debiter`, symétrique de `crediter` : même
+ * `update … where ${col} >= $1`, même refus par la base. Elle n'était plus
+ * appelée nulle part — la boutique fait son propre débit, DANS la transaction
+ * qui tient l'article en `for update` (cf. `acheter`, dans boutique.ts).
+ *
+ * La réécrire pour « factoriser » les deux serait une régression silencieuse :
+ * le débit ouvrirait sa propre connexion pendant qu'on tient le verrou, et un
+ * refus en aval ne remonterait plus le débit. C'est le genre de factorisation
+ * qui passe la revue parce qu'elle supprime du code — et qui ne se voit qu'en
+ * production, sur un double-achat refusé.
  */
-export async function debiter(
-  joueur: string,
-  monnaie: Monnaie,
-  montant: number,
-  motif: string
-): Promise<Profil | null> {
-  if (!pool || montant <= 0) return null
-  const col = colonne(monnaie)
-
-  const client = await pool.connect()
-  try {
-    await client.query('begin')
-    const { rows } = await client.query<Profil>(
-      `update profils set ${col} = ${col} - $1
-       where joueur = $2 and ${col} >= $1
-       returning joueur, pseudo, mon, hisui, guerrier`,
-      [montant, joueur]
-    )
-    if (!rows[0]) {
-      await client.query('rollback')
-      return null // solde insuffisant, ou profil inconnu
-    }
-    await client.query(
-      'insert into mouvements (joueur, monnaie, montant, motif) values ($1, $2, $3, $4)',
-      [joueur, monnaie, -montant, motif]
-    )
-    await client.query('commit')
-    return rows[0]
-  } catch (e) {
-    await client.query('rollback')
-    throw e
-  } finally {
-    client.release()
-  }
-}

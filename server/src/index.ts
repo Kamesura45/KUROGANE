@@ -103,6 +103,23 @@ function codeErreur(e: unknown): string {
  * Ne lève jamais : elle rend `true` ou note la raison de l'échec.
  */
 async function tenterBase(): Promise<boolean> {
+  /*
+   * ⚠️ PAS D'ADRESSE N'EST UNE PANNE COMME UNE AUTRE, ET ELLE AVAIT PAS DE NOM.
+   *
+   * `migrer()` ne tente rien quand `DATABASE_URL` manque : il rend la main sans
+   * lever. On rentrait donc dans le `catch`… non, dans le `try`, sans rien
+   * noter — et `/sante` répondait `saine: false` SANS `raison`.
+   *
+   * Le joueur lisait donc « la base ne répond pas » pour une base qui n'a jamais
+   * existé, et l'exploitant ne pouvait pas distinguer « la base est morte » de
+   * « personne n'a posé DATABASE_URL ». Le second cas se corrige en une ligne ;
+   * le premier demande de l'administration..autant que le serveur le dise.
+   */
+  if (!baseDispo()) {
+    baseSaine = false
+    baseRaison = 'DATABASE_URL absente — le serveur n\'a aucune base à interroger'
+    return false
+  }
   try {
     await migrer()
     // Puis les tables d'IDENTITÉ, qui appartiennent à Better Auth et vivent hors
@@ -211,6 +228,23 @@ if (baseDispo()) {
     // ⚠️ Surtout PAS de `await` : les courses ne doivent pas attendre la base.
     void insister()
   }
+} else {
+  /*
+   * ⚠️ PAS D'ADRESSE N'EST UN ÉTAT, ET IL AVAIT NOIR DE NOM.
+   *
+   * Ce `else` n'existait pas : sans `DATABASE_URL`, tout le bloc était sauté,
+   * donc `tenterBase()` — la seule chose qui note `baseRaison` — n'était jamais
+   * appelée. `/sante` répondait `saine: false` SANS `raison`, et le jeu ne
+   * pouvait donc rien dire de plus que « la base ne marche pas ».
+   *
+   * C'est faux : personne n'a posé la variable. La distinction vaut de l'or sur
+   * une machine de développement — « installe Postgres » contre « le mot de
+   * passe a changé » n'appellent pas la même chose — et elle est déjà dans
+   * `db.ts`, qui prévient à voix haute. On la fait donc passer par le MÊME
+   * chemin que les autres échecs, pour qu'il n'y ait qu'un endroit qui écrit
+   * cette raison.
+   */
+  await tenterBase()
 }
 
 const authHandler = auth ? toNodeHandler(auth) : null

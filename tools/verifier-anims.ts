@@ -13,7 +13,7 @@
  *   node tools/verifier-anims.ts
  */
 import * as THREE from 'three'
-import { Anim, animerGuerrier, clipDe, type Action } from '../src/anims.ts'
+import { Anim, animerGuerrier, clipDe, vieDeLobby, type Action } from '../src/anims.ts'
 
 /** La pose de garde attendue pour l'épaule armée (cf. ARME_EPAULE dans anims). */
 const ARME_EPAULE_ATTENDUE = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.3, 0, 0))
@@ -580,6 +580,155 @@ console.log('\n————— Le repli quand le mouvement manque ————�
     precedent = corps.jambeG.pivot.quaternion.clone()
   }
   verifier('sans clip, le guerrier continue de courir', bouge > 0.5, `mouvement cumule ${bouge.toFixed(2)} rad`)
+}
+
+console.log('\n----- 🎭 L attente : la tete ne traverse JAMAIS le torse -----')
+{
+  /*
+   * ⚠️ CE BUG A DÉJÀ ÉTÉ VU, ET IL EST INVISIBLE AU TYPAGE.
+   *
+   * La tête est le seul membre qui puisse traverser le buste : elle pend à un
+   * cou de cinq centimètres. Une inclinaison de 17° vers l'avant fait descendre
+   * son point le plus bas de 4 cm — juste assez pour entrer dans le torse — et la
+   * version d'avant faisait exactement cela, parce que le signe était inversé :
+   * le corps est modelé face à +Z, donc une rotation X POSITIVE fait partir la
+   * tête vers l'avant. On voyait le crâne passer dans la poitrine, et aucun
+   * message d'erreur ne le signalait.
+   *
+   * ⚠️ ET LA MESURE SE FAIT PIÈCE PAR PIÈCE, PAS SUR DEUX GRANDES BOÎTES.
+   *
+   * Deux boîtes globales ne disent rien : le torse porte le KATANA, qui monte à
+   * 2,3 m, et sa boîte englobe la tête sans qu'aucune géométrie ne la touche. Le
+   * banc accusait alors les trois gestes d'un défaut inexistant — et un banc qui
+   * donne tort fait perdre plus de temps qu'un banc qui n'existe pas.
+   *
+   * Ici on compare chaque MAILLAGE de la tête à chaque maillage du torse. Comme
+   * le corps entier est bâti de boîtes (`boite()`, dans roster.ts), deux boîtes
+   * qui se recouvrent, c'est deux pièces qui se pénètrent vraiment.
+   */
+  const BOITE = new THREE.Box3()
+  /** Les maillages d'un groupe, en coordonnées monde. */
+  const pieces = (groupe: THREE.Object3D, exclure?: THREE.Object3D) => {
+    const liste: THREE.Mesh[] = []
+    groupe.updateWorldMatrix(true, true)
+    groupe.traverse((o) => {
+      const m = o as THREE.Mesh
+      if (!m.isMesh) return
+      if (exclure) {
+        for (let p: THREE.Object3D | null = m; p && p !== groupe; p = p.parent) {
+          if (p === exclure) return
+        }
+      }
+      liste.push(m)
+    })
+    return liste
+  }
+  const boiteDe = (m: THREE.Mesh) => {
+    m.geometry.computeBoundingBox()
+    return BOITE.copy(m.geometry.boundingBox!).applyMatrix4(m.matrixWorld)
+  }
+  /*
+   * ⚠️ 1 MM DE TOLÉRANCE, et ce n'est pas de la mollesse.
+   *
+   * Le cou est posé SUR le buste : les deux pièces se touchent à la construction,
+   * sans rotation aucune. Sans marge, le banc serait rouge au premier coup de
+   * neuf sur neuf — et le rouge permanent est la pire des alertes : on finit
+   * par l'ignorer.
+   */
+  const TOUCHE = 0.001
+  const sePenetrent = (a: THREE.Box3, b: THREE.Box3) =>
+    a.min.x < b.max.x - TOUCHE && a.max.x > b.min.x + TOUCHE &&
+    a.min.y < b.max.y - TOUCHE && a.max.y > b.min.y + TOUCHE &&
+    a.min.z < b.max.z - TOUCHE && a.max.z > b.min.z + TOUCHE
+
+  for (const f of PERSOS) {
+    const { racine, corps } = corpsDe(f)
+    const anim = new Anim()
+    let pire = ''
+    let pireP = 0
+    for (const geste of ['respirer', 'baille', 'scrute'] as const) {
+      for (let i = 0; i < 300; i++) {
+        const t = i / 60
+        animerGuerrier(racine, f, anim, 'repos', 1 / 60, t)
+        vieDeLobby(racine, t, geste, 0.4)
+        const tete = pieces(corps.tete)
+        const torse = pieces(corps.torse, corps.tete)
+        for (const mt of tete) {
+          const bt = boiteDe(mt).clone()
+          for (const mo of torse) {
+            if (!sePenetrent(bt, boiteDe(mo))) continue
+            const d = Math.min(bt.max.y - boiteDe(mo).min.y, 0)
+            if (-d > pireP) {
+              pireP = -d
+              pire = geste
+            }
+          }
+        }
+      }
+    }
+    verifier(
+      `${f.name.padEnd(16)} la tete reste dehors du torse`,
+      pireP === 0,
+      pire ? `pénètre de ${(pireP * 100).toFixed(1)} cm pendant « ${pire} »` : ''
+    )
+  }
+
+  // Les bornes, mesurées sur les trois axes et non lues dans le code.
+  const f = PERSOS[0]
+  const { racine, corps } = corpsDe(f)
+  const anim = new Anim()
+  let maxY = 0
+  let minY = 0
+  let maxX = 0
+  let minX = 0
+  /*
+   * ⚠️ LE GESTE SE TESTE AUSSI, ET C'EST L'AUTRE MOITIÉ DU BUG.
+   *
+   * Les bornes suffisent à empêcher la pénétration — on vient de le vérifier en
+   * remettant le signe de la bâille à l'envers : le banc est resté vert, parce
+   * que la borne absorbait l'erreur. Bien. Mais le geste, lui, reste faux : le
+   * personnage baisse la tête au lieu de la lever.
+   *
+   * On exige donc que « bâille » passe franchement NEGATIF en X — c'est-à-dire
+   * menton en l'air — sans quoi le geste est faux même s il ne traverse rien.
+   */
+  let minXBaille = 0
+  for (const geste of ['respirer', 'baille', 'scrute'] as const) {
+    for (let i = 0; i < 200; i++) {
+      const t = i / 60
+      animerGuerrier(racine, f, anim, 'repos', 1 / 60, t)
+      vieDeLobby(racine, t, geste, 0)
+      maxY = Math.max(maxY, corps.tete.rotation.y)
+      minY = Math.min(minY, corps.tete.rotation.y)
+      maxX = Math.max(maxX, corps.tete.rotation.x)
+      minX = Math.min(minX, corps.tete.rotation.x)
+      if (geste === 'baille') minXBaille = Math.min(minXBaille, corps.tete.rotation.x)
+    }
+  }
+  const d = 180 / Math.PI
+  verifier(
+    'la tete ne tourne pas plus de 12 deg a droite',
+    maxY <= 0.211,
+    `${(maxY * d).toFixed(1)}°`
+  )
+  verifier('ni plus de 5 deg a gauche', -minY <= 0.089, `${(-minY * d).toFixed(1)}°`)
+  verifier(
+    'et elle ne plonge pas vers l avant',
+    maxX <= 0.051,
+    `${(maxX * d).toFixed(1)}° vers l avant, ${(-minX * d).toFixed(1)}° vers l arrière`
+  )
+  /*
+   * ⚠️ LE MENTON MONTE, ET PAS SEULEMENT « IL NE PEINT PAS ».
+   *
+   * Une borne suffit à empêcher le défaut, pas à garantir le geste : un signe
+   * inversé passe le test de pénétration et fait un personnage qui baisse la tête
+   * en prétendant bâiller. On teste donc le geste pour lui-même.
+   */
+  verifier(
+    'la baille leve vraiment le menton',
+    minXBaille < -0.15,
+    `${(minXBaille * d).toFixed(1)}° vers l arrière au plus creux`
+  )
 }
 
 console.log(echecs === 0 ? '\nTout est bon.\n' : `\n${echecs} controle(s) en echec.\n`)

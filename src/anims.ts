@@ -593,3 +593,202 @@ export function animerGuerrier(
   finitions(g, tSecours, intensite, anim.gesteEnCours)
   if (racine) poserAuSol(racine, g)
 }
+
+/**
+ * ————— 🎭 LA VIE DE LOBBY —————
+ *
+ * ⚠️ ELLE S'AJOUTE À LA RESPIRATION, ELLE NE LA REMPLACE PAS.
+ *
+ * `animerGuerrier(…, 'repos')` écrit déjà une pose debout et un souffle. Ce que
+ * cette fonction ajoute par-dessus est ce qui fait qu'un personnage posé devant
+ * vous a l'air **vivant** plutôt qu'endormi : le transfert de poids d'un pied sur
+ * l'autre, les bras qui ne sont jamais tout à fait immobiles, et — de temps en
+ * temps — une **bâille**.
+ *
+ * ⚠️ ADDITIF, ET C'EST TOUT L'AFFAIRE.
+ *
+ * Tout est additionné à ce que le repos vient d'écrire, jamais remplacé. Poser
+ * une valeur absolue écraserait la respiration selon un rythme arbitraire, et
+ * les deux gestes se marcheraient dessus avec un tremblement à chaque fois que
+ * leurs périodes se croisent. Additionner veut dire qu'ils se superposent
+ * naturellement : on respire en même temps qu'on se balance, et rien ne claque.
+ *
+ * ⚠️ AUCUN CLIP, ET C'EST DÉLIBÉRÉ.
+ *
+ * Onze clips existent, tous de course ou de combat : pas un seul « Standing
+ * Idle » n'a été déposé dans `animation/`. Tout ce qui se joue ici est donc
+ * CALCULÉ — et c'est un avantage : la vie fonctionne pour les dix guerriers,
+ * donc pour le perso à ornement, sans qu'il faille saisir un mouvement par
+ * modèle. Le jour où un clip d'attente arrive, il remplacera cette fonction, et
+ * celle-ci disparaîtra sans qu'aucun appelant ne change.
+ */
+
+
+/**
+ * ————— 🎭 LES TROIS GESTES D'ATTENTE —————
+ *
+ * ⚠️ TROIS, ET PAS UN DE PLUS.
+ *
+ * Cinq postures d'abord — cinq jeux d'ampitudes — et le résultat fut le même
+ * partout : une seule animation, jouée à cinq vitesses. Ce n'était pas faux,
+ * c'était **invisible** : personne ne distingue un coefficient multiplié par deux
+ * d'un autre mouvement.
+ *
+ * Ce qui se voit, c'est le GESTE : une bâille n'est pas un regard posé sur le
+ * côté, même faits à la même vitesse. D'où trois gestes, et pas quatre — au-delà,
+ * l'écran de choix devient un changement de danse, et le joueur regarde le
+ * spectacle au lieu de choisir un guerrier.
+ *
+ * Les AMPLITUDES restent propres à chaque posture : trois gestes, mais trois
+ * façons de les jouer, pour qu'aucun voisin de la liste ne se ressemble.
+ */
+const GESTES = {
+  /** 🫁 Il se contente de respirer. Le plus calme — pour les imposants. */
+  respirer: { pois: 0.7, cadence: 0.7, bras: 0.6, cycle: 0, duree: 0 },
+
+  /** 🫧 Il bâille. Un geste ample, une fois par cycle. */
+  baille: { pois: 1.15, cadence: 1.1, bras: 1.35, cycle: 8.4, duree: 0.34 },
+
+  /** 👀 Il regarde autour de lui, la main au menton. Le plus expressif. */
+  scrute: { pois: 0.95, cadence: 1.35, bras: 1.1, cycle: 5.2, duree: 0.46 },
+} as const
+
+export type Posture = keyof typeof GESTES
+
+/**
+ * ⚠️ LES LIMITES DE LA TÊTE, ET ELLES SONT DANS LE CODE.
+ *
+ * La tête est le seul membre qui peut traverser le torse : elle est posée au
+ * sommet d'un cou de 5 cm, et une inclinaison de 20° vers l'avant suffit à
+ * envoyer le devant du crâne **dedans** la poitrine. C'était exactement ce que
+ * faisait la bâille — le signe de l'inclinaison était inversé (cf. plus bas).
+ *
+ * Les bornes ci-dessous ne sont donc pas un réglage de goût, c'est la
+ * preventing du défaut : 3° vers l'avant, 20° vers l'arrière, ±6° d'inclinaison,
+ * et la rotation latérale limitée à 12° d'un côté, 5° de l'autre.
+ *
+ * ⚠️ 12° ET 5°, ET NON 12° ET 12° : la dissymétrie est un choix. Une tête qui
+ * tourne autant à droite qu'à gauche fait un pendule ; une tête qui tourne
+ * *plus* d'un côté regarde quelque chose. C'est le seul endroit du jeu où
+ * l'asymétrie est un choix, et non un oubli.
+ */
+const TETE_AVANT = 0.05 // 3°
+const TETE_ARRIERE = 0.35 // 20°
+const TETE_COTE = 0.1 // 6° d'inclinaison
+const TETE_DROITE = 0.21 // 12°
+const TETE_GAUCHE = 0.09 // 5°
+
+const borne = (v: number, min: number, max: number) =>
+  v < min ? min : v > max ? max : v
+
+/**
+ * @param posture Le GESTE, pas une graine. Deux guerriers peuvent le partager —
+ *   c'est le seul doublon acceptable : ce qui compte est qu'aucun voisin de la
+ *   liste ne joue le même.
+ */
+export function vieDeLobby(
+  racine: THREE.Object3D | undefined,
+  t: number,
+  posture: Posture = 'baille',
+  phase = 0
+) {
+  const g = racine?.userData?.corps as Corps | undefined
+  if (!g) return
+  const P = GESTES[posture]
+
+  /*
+   * ⚠️ `phase` DÉCALE L'HORLOGE, IL NE CHANGE PAS LE GESTE.
+   *
+   * Les deux font un travail différent : le geste dit CE QU'IL FAIT, la phase
+   * dit QUAND. Sans phase, deux guerriers du même geste se mettent à bouger
+   * ensemble — et sur l'écran de choix, cela se lit comme une seule commande.
+   */
+  const T = t + phase * 7.31
+
+  /*
+   * Le transfert de poids : lent, ample, et JAMAIS symétrique. Un sinus seul
+   * fait une horloge ; deux fréquences battues ensemble font une démarche.
+   */
+  const poids =
+    Math.sin(T * 0.55 * P.cadence) * 0.5 + Math.sin(T * 0.23 * P.cadence + 1.1) * 0.5
+  g.bassin.position.x = poids * 0.022 * P.pois
+  g.bassin.rotation.z = poids * 0.03 * P.pois
+  g.torse.rotation.z += poids * 0.018 * P.pois
+
+  // Les bras : un flottement très lent, et un débattement plus vif mais minuscule.
+  const bras = Math.sin(T * 0.9 * P.cadence + 2.1)
+  g.brasG.pivot.rotation.x += bras * 0.035 * P.bras
+  g.brasD.pivot.rotation.x += -bras * 0.028 * P.bras
+  g.brasG.pivot.rotation.z +=
+    0.012 * P.bras + Math.sin(T * 0.41 * P.cadence) * 0.02 * P.bras
+  g.brasD.pivot.rotation.z +=
+    -0.012 * P.bras - Math.sin(T * 0.37 * P.cadence + 1) * 0.02 * P.bras
+
+  // Les avant-bras ont leur propre inertie : sinon le bras bouge d'un bloc.
+  g.brasG.bas.rotation.x += Math.sin(T * 1.3 * P.cadence) * 0.05 * P.bras
+  g.brasD.bas.rotation.x += Math.sin(T * 1.15 * P.cadence + 0.7) * 0.05 * P.bras
+
+  /*
+   * ————— 🫧 LA BÂILLE —————
+   *
+   * ⚠️ LE SIGNE EST NEGATIF, ET C'EST LE CŒUR DU BUG.
+   *
+   * Le corps est modelé face à **+Z** (cf. le demi-tour de `racine`, dans
+   * roster.ts). Une rotation X positive fait donc partir la tête **vers
+   * l'avant** — c'est-à-dire dans la poitrine. La première version faisait
+   * `+= f * 0.3` : elle.non seulement ne bâillait pas, elle **enfonçait le
+   * crâne dans le buste**, de quatre centimètres.
+   *
+   * Negative : la tête part en arrière, le menton se lève, et c'est une bâille.
+   *
+   * ⚠️ ET ELLE EST CALCULÉE, PAS DÉCLENCHÉE. `u` est le reste d'une division :
+   * le geste vaut 0 en dehors de sa fenêtre, et monte puis redescend tout seul.
+   * Pas de minuterie à armer — donc rien qui puisse rester bloqué à mi-geste,
+   * ce qui arrive toujours à une animation déclenchée quand on change de
+   * guerrier juste avant son pic.
+   */
+  const u = P.cycle > 0 ? (T % P.cycle) / P.cycle : 1
+  if (u < P.duree) {
+    const v = u / P.duree
+    // Montée, tenue, retour : une cloche, pas un sinus.
+    const f = v < 0.35 ? v / 0.35 : v < 0.6 ? 1 : (1 - v) / 0.4
+    g.tete.rotation.x -= f * 0.26 // en ARRIÈRE : le menton se lève
+    g.brasD.pivot.rotation.x += -f * 1.45 // le bras devant la bouche
+    g.brasD.pivot.rotation.z += -f * 0.32
+    g.torse.rotation.x += f * 0.05
+  }
+
+  /*
+   * ————— 👀 LE REGARD —————
+   *
+   * La tête pivote lentement d'un côté puis de l'autre, à la recherche d'un
+   * rival qu'il n'y a pas. C'est un geste dejoueur : c'est lui qui donne au
+   * personnage l'air d'ATTENDRE quelqu'un plutôt que de tenir bon.
+   *
+   * Le bras droit monte au menton. Il ne le touche pas — le buste est à 5 cm du
+   * cou, et une main qui entre dans la mâchoire se voit bien plus qu'un bras
+   * qui s'arrête trop tôt.
+   */
+  if (posture === 'scrute') {
+    const balayage = Math.sin(T * 0.75)
+    // `rotation.y` fait tourner la tête autour du cou : c'est le seul axe qui
+    // regarde vraiment « à côté ».
+    g.tete.rotation.y += balayage * 0.19
+    g.brasD.pivot.rotation.x += -0.95 - balayage * 0.12
+    g.brasD.pivot.rotation.z += -0.3
+    g.brasD.bas.rotation.x += -0.5
+  }
+
+  /*
+   * ⚠️ LES BORNES, EN DERNIER — ET C'EST LE BON ORDRE.
+   *
+   * Elles passent APRÈS tous les gestes, jamais avant : une borne posée au
+   * milieu de la fonction serait contournée par le geste suivant, et le défaut
+   * qu'elle corrige reviendrait par la porte de derrière. Ici, quoi qu'il ait
+   * fait — une bâille, un regard, les deux, ou une combinaison qu'on n'avait pas
+   * prévue — la tête sort dans ces bornes, et jamais plus.
+   */
+  g.tete.rotation.x = borne(g.tete.rotation.x, -TETE_ARRIERE, TETE_AVANT)
+  g.tete.rotation.y = borne(g.tete.rotation.y, -TETE_GAUCHE, TETE_DROITE)
+  g.tete.rotation.z = borne(g.tete.rotation.z, -TETE_COTE, TETE_COTE)
+}

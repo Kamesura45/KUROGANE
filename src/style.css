@@ -2974,6 +2974,30 @@ body {
   background: rgba(61, 69, 96, 0.3);
   border: 1px solid #3d4560;
 }
+/*
+ * ⚠️ LE MONTANT ET SON NOM SONT DEUX BLOCS, ET LE NOM NE SE COLORTE PAS.
+ *
+ * La couleur de la pavé identifie la monnaie (or = Mon, vert = jade) : c'est
+ * utile, mais ce n'est pas une légende. Un joueur qui ne sait pas que le vert
+ * est du jade n'a rien à quoi raccrocher — et une étiquette qui prend la
+ * couleur du montant se fond dedans au lieu de le nommer.
+ *
+ * D'où le `small` en dessous, dans la couleur du TEXTE : il dit le mot, et le
+ * pavé dit la matière. Répéter le mot ne sert personne.
+ */
+.bourse-grande span b {
+  display: block;
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+.bourse-grande span small {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
 /* Le jade a sa couleur : on distingue les deux monnaies d'un coup d'œil */
 #bourseHisui {
   color: #74dba6;

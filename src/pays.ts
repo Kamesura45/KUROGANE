@@ -564,11 +564,6 @@ const VILLES: Readonly<Record<string, readonly string[]>> = Object.fromEntries(
     })
 )
 
-/** Le nom d'un pays depuis son code. `''` si le code est inconnu. */
-export function nomPays(code: string): string {
-  return PAYS.find((p) => p.code === code)?.nom ?? ''
-}
-
 /**
  * Ce qu'on peut choisir SOUS un pays.
  *

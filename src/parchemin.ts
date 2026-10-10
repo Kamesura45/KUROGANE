@@ -105,8 +105,22 @@ export function tirerParchemin(
 /** Les sorts qui partent chez quelqu'un d'autre — les seuls que le serveur relaie. */
 export const OFFENSIFS: ParcheminKind[] = ['kunai', 'kusarigama', 'fumigene', 'senbon', 'onmyoji']
 
-/** Les afflictions que le 🍵 Thé Purificateur nettoie. */
-export const AFFLICTIONS: ParcheminKind[] = ['kusarigama', 'fumigene', 'senbon']
+/*
+ * ⚠️ IL N'Y A PLUS DE TABLE `AFFLICTIONS`, ET C'EST MIEUX.
+ *
+ * Elle listait ici `['kusarigama', 'fumigene', 'senbon']` — ce que le
+ * 🍵 Thé Purificateur nettoie. Personne ne la lisait : le thé mettait à zéro
+ * trois MINUTEURS, écrits à la main dans main.ts.
+ *
+ * C'est-à-dire deux listes du même ensemble, dont une seule fait le travail.
+ * Le jour où une quatrième affliction est arrivée, on l'a ajoutée au minuteur
+ * et oubliée dans la table — et la table, que personne ne lisait, n'a rien dit.
+ * Une recopie ne ment jamais quand on la relit ; elle ment quand on écrit à
+ * côté d'elle, ce qui est précisément le moment où personne ne la relit.
+ *
+ * ⚠️ LA VRAIE LISTE, C'EST LÀ-BAS : les trois `xxxFin = 0` du bloc `the`, dans
+ * main.ts. C'est celle qu'il faut lire avant d'ajouter une affliction.
+ */
 
 /** On ne porte jamais plus de 2 rouleaux : le 3e ramassage est ignoré. */
 export const SLOTS_MAX = 2

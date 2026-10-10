@@ -11,7 +11,34 @@ import {
   type Fighter,
   type Head,
 } from './roster'
-import { Anim, animerGuerrier } from './anims'
+import { Anim, animerGuerrier, vieDeLobby, type Posture } from './anims'
+
+/**
+ * 🎭 Le geste d'attente de chaque guerrier.
+ *
+ * ⚠️ TROIS GESTES, ET LA LISTE EST LUE PAR `id`.
+ *
+ * Trois, pas cinq : au-delà, l'écran de choix devient un changement de danse et
+ * le joueur regarde le spectacle au lieu de choisir un guerrier. Et lue par `id`
+ * plutôt que déduite d'un index — `ROSTER[i % 3]` aurait donné le même geste à
+ * deux personnages voisins dès le premier ajout d'un guerrier, sans qu'on puisse
+ * dire pourquoi.
+ *
+ * ⚠️ ET LES VOISINS DE LA LISTE N'ONT PAS LE MÊME GESTE. C'est la seule contrainte
+ * qui compte réellement : deux guerriers côte à côte qui bâillent ensemble se
+ * lisent comme un seul personnage, quel que soit le nombre de postures.
+ *
+ * Le persona n'y figure pas : `customFighter` change le skin, pas la façon de se
+ * tenir. Il reprend le geste du guerrier dont il porte l'ornement — cornes pour
+ * le poids, oreilles pour la ruse — comme le veut `CUSTOM_STYLE`.
+ */
+const POSTURE_PAR_GUERRIER: Record<string, Posture> = {
+  yasuke: 'scrute', // il cherche un adversaire : le geste d'attente par excellence
+  hana: 'baille', // expressive, elle bâille
+  onimaru: 'respirer', // immobile : respirer suffit
+  tamae: 'scrute', // la ruse, c'est regarder avant de bouger
+  kurokumo: 'respirer', // imposant, et immobile
+}
 import {
   CIBLAGE,
   EFFETS,
@@ -204,7 +231,45 @@ export class Menu {
   /** 🌀 L'enseigne a-t-elle déjà été peinte ? Elle ne l'est qu'une fois. */
   private enseigneJouee = false
   private preview: Preview | null = null
+  /**
+   * 🎭 La rotation de l'aperçu, en DEUX morceaux.
+   *
+   * ⚠️ LE BALAYAGE EST BORNÉ, ET C'EST LA CORRECTION D'UN VRAI DÉFAUT.
+   *
+   * C'était une rotation continue à 0,7 rad/s : un tour en neuf secondes. Le
+   * guerrier passait donc une partie du temps **de dos** — et sur un écran où
+   * l'on choisit un personnage, voir sa nuque deux secondes sur neuf n'est pas un
+   * détail, c'est « il n'y a pas de torse ». Le joueur ne pouvait même pas voir ce
+   * qu'il était en train de choisir.
+   *
+   * Le mouvement automatique est donc un BALAYAGE : ±0,42 rad (≈ ±24°) autour de
+   * la face, ce qui suffit à faire vivre la silhouette sans jamais perdre le
+   * buste. Un tour complet reste possible — c'est le geste du doigt, et c'est
+   * le joueur qui le décide, lui qui sait qu'il cherche le dos.
+   *
+   * Les deux mouvements s'additionnent : le balayage ne « reprend » jamais le
+   * dessus d'un coup, on lâche exactement où on voulait le voir.
+   */
   private spin = 0
+  /** La phase du balayage — n'avance que hors geste. */
+  private balayage = 0
+  private tirage = 0
+  /** Le pointeur qui pilote le geste en cours (-1 : aucun). */
+  private pointeur = -1
+  private glisse = false
+  private dernierX = 0
+  /** Les écouteurs sont posés une fois pour toutes sur le canvas. */
+  private branche = false
+  /** L'horloge locale de l'aperçu : la vie s'y joue. */
+  private temps = 0
+  /** Le PROFIL de vie du guerrier affiché — la silhouette, pas le décalage. */
+  private posture: Posture = 'respirer'
+  /**
+   * Le décalage d'horloge par guerrier. Indispensable même quand deux
+   * personnages partagent un profil : sans lui, ils se mettent à bouger ensemble,
+   * et sur un écran de choix cela se lit comme une seule commande.
+   */
+  private phaseVie = 0
   /** La dernière vue du salon reçue — pour savoir qui je suis, si je suis prêt… */
   private view: LobbyView | null = null
   /** 💬 La salle dont le chat est affiché. Change → le journal repart vierge. */
@@ -296,8 +361,21 @@ export class Menu {
     bourse: document.getElementById('bourse')!,
     bourseMon: document.getElementById('bourseMon')!,
     bourseHisui: document.getElementById('bourseHisui')!,
-    boutiqueListe: document.getElementById('boutiqueListe')!,
-    boutiqueVide: document.getElementById('boutiqueVide')!,
+boutiqueListe: document.getElementById('boutiqueListe')!,
+      boutiqueVide: document.getElementById('boutiqueVide')!,
+      boutiqueIndispo: document.getElementById('boutiqueIndispo')!,
+      boutiquePossede: document.getElementById('boutiquePossede')!,
+      /*
+       * ⚠️ CE SONT LES `<b>`, PAS LES PAVÉS.
+       *
+       * `bourseMon` est le pavé ; son montant est le premier `<b>` dedans, et son
+       * nom le `<small>` qui suit. Écrire dans le pavé — ce qu'on faisait —
+       * effacerait le nom au passage, et il ne resterait qu'un nombre sans
+       * légende. On pointe donc le montant directement, une fois, à la
+       * construction.
+       */
+      bourseMonVal: document.querySelector<HTMLElement>('#bourseMon b')!,
+      bourseHisuiVal: document.querySelector<HTMLElement>('#bourseHisui b')!,
     // ————— Compte —————
     compteTitre: document.getElementById('compteTitre')!,
     compteDetail: document.getElementById('compteDetail')!,
@@ -1152,26 +1230,41 @@ export class Menu {
 
   // ————— La boutique —————
 
-  /**
-   * Affiche la bourse partout où elle se montre : le bouton de l'écran-titre et
-   * l'en-tête de la boutique.
-   *
-   * `null` = pas de profil : serveur injoignable, OU base des comptes en panne
-   * alors que les courses, elles, tournent. Deux choses à ne PAS faire :
-   * · afficher 0 — un joueur qui a 300 mon et lit « 0 » croit qu'on l'a volé ;
-   * · cacher le bouton — c'est ce qu'on faisait, et la boutique a disparu pour
-   *   tout le monde le jour où la base est tombée. On la croyait retirée du jeu.
-   * On dit donc « fermée », sans chiffre.
-   */
-  setBourse(mon: number | null, hisui: number | null) {
+/**
+ * Affiche la bourse partout où elle se montre : le bouton de l'écran-titre et
+ * l'en-tête de la boutique.
+ *
+ * `null` = pas de profil : serveur injoignable, OU base des comptes en panne
+ * alors que les courses, elles, tournent. Deux choses à ne PAS faire :
+ * · afficher 0 — un joueur qui a 300 mon et lit « 0 » croit qu'on l'a volé ;
+ * · cacher le bouton — c'est ce qu'on faisait, et la boutique a disparu pour
+ *   tout le monde le jour où la base est tombée. On la croyait retirée du jeu.
+ *
+ * ⚠️ ET LE MOT EST « INDISPONIBLE », PLUS « FERMÉE ».
+ *
+ * « Fermée » disait la même chose qu'un rayon volontairement vide — c'est-à-dire
+ * que le jeu avait décidé de ne rien vendre. C'est faux, et le joueur ne peut
+ * pas le deviner : tout le catalogue est sur le serveur. Le même mot que
+ * l'écran de la boutique et que le classement, parce qu'un joueur qui lit
+ * « fermée » au titre puis « indisponible » dedans ne sait plus lequel croire.
+ */
+setBourse(mon: number | null, hisui: number | null) {
     const dispo = mon !== null && hisui !== null
     this.el.bourseRow.classList.toggle('ferme', !dispo)
+    /*
+     * ⚠️ ON REMPLIT LE `<b>`, JAMAIS LE PAVÉ.
+     *
+     * Le pavé contient maintenant deux blocs : le montant et le nom de la
+     * monnaie (cf. `.bourse-grande span b / small`). Écrire dedans par
+     * `replaceChildren` — ce qu'on faisait — aurait effacé le nom : il ne
+     * restait qu'un nombre, sans légende, dans une couleur qu'il faut apprendre.
+     */
     if (!dispo) {
-      this.el.bourse.textContent = 'Fermée pour l’instant'
+      this.el.bourse.textContent = 'Indisponible'
       // L'en-tête de la boutique perd ses soldes aussi : un chiffre d'avant la
       // panne, resté affiché, mentirait autant qu'un zéro.
-      this.el.bourseMon.textContent = '—'
-      this.el.bourseHisui.textContent = '—'
+      this.el.bourseMonVal.textContent = '—'
+      this.el.bourseHisuiVal.textContent = '—'
       return
     }
 
@@ -1182,15 +1275,49 @@ export class Menu {
       montant(hisui, 'hisui', 15)
     )
     // L'en-tête de la boutique : une monnaie par pavé, en plus gros
-    this.el.bourseMon.replaceChildren(montant(mon, 'mon', 20))
-    this.el.bourseHisui.replaceChildren(montant(hisui, 'hisui', 20))
+    this.el.bourseMonVal.replaceChildren(montant(mon, 'mon', 22))
+    this.el.bourseHisuiVal.replaceChildren(montant(hisui, 'hisui', 22))
   }
 
-  /** Remplit la boutique. `articles` vient du serveur — lui seul dit les prix. */
-  setBoutique(articles: ArticleVu[]) {
+/**
+ * Remplit la boutique. `articles` vient du serveur — lui seul dit les prix.
+ *
+ * ⚠️ `null` = INDISPONIBLE, `[]` = RAYON VIDE. Deux messages, deux causes.
+ *
+ * Un seul message pour les deux était le défaut : hors-ligne et serveur éteint
+ * affichaient « La boutique est fermée pour l'instant », comme si le jeu avait
+ * décidé de ne rien vendre. Le joueur ne peut pas deviner que tout le
+ * catalogue existe, et il ne songera pas d'y revenir. Le classement faisait
+ * depuis le début la distinction que la boutique ne faisait pas — même règle,
+ * mêmeraison, une seule version désormais.
+ */
+setBoutique(articles: ArticleVu[] | null) {
     const liste = this.el.boutiqueListe
     liste.replaceChildren()
-    this.el.boutiqueVide.classList.toggle('hidden', articles.length > 0)
+    this.el.boutiqueIndispo.classList.toggle('hidden', articles !== null)
+    this.el.boutiqueVide.classList.toggle('hidden', articles === null || articles.length > 0)
+    if (!articles) {
+      this.el.boutiquePossede.hidden = true
+      return
+    }
+
+    /*
+     * ⚠️ « TU POSSÈDES X SUR Y », PARCE QUE C'EST LA PREMIÈRE QUESTION.
+     *
+     * Dans une boutique, le premier chiffre que le joueur cherche n'est pas le
+     * prix du premier article : c'est ce qu'il a DÉJÀ. Sans cette ligne, il
+     * faut faire défiler toute la liste pour compter les « Acquis » — et il y en
+     * a dix, ce n'est pas long, mais c'est une corvée qui n'apporte rien.
+     *
+     * ⚠️ Le compte vient du CATALOGUE, pas d'un second appel : c'est le même
+     * tableau que la liste, donc il ne peut pas la contredire. Une seconde
+     * requête ouvrirait la fenêtre où l'un dit 3 et l'autre 4.
+     */
+    const Acquises = articles.filter((a) => a.possede)
+    this.el.boutiquePossede.hidden = Acquises.length === 0
+    this.el.boutiquePossede.textContent = Acquises.length
+      ? `Tu possèdes ${ Acquises.length } article${ Acquises.length > 1 ? 's' : '' } sur ${articles.length}.`
+      : ''
 
     for (const a of articles) {
       const carte = document.createElement('div')
@@ -1206,8 +1333,21 @@ export class Menu {
       // textContent : le nom vient de la base, on ne fabrique jamais de HTML avec
       nom.textContent = a.nom
       const prix = document.createElement('small')
+      /*
+       * ⚠️ UN ARTICLE SANS PRIX N'EST PAS UN ARTICLE GRATUIT.
+       *
+       * Le `?? 0` affichait « 0 Jade » pour une ligne dont les deux prix sont
+       * nuls — c'est-à-dire exactement le cas que le serveur refuse d'acheter
+       * ('indisponible'). Le bouton restait actif : on proposait donc un achat
+       * impossible, à un prix qui n'existait pas. Les deux cas sont rare, mais
+       * afficher un prix qu'on ne peut pas payer ment sur le seul chiffre que
+       * le joueur connaît : le prix.
+       */
+      const achetable = a.prix_mon !== null || a.prix_hisui !== null
       if (a.possede) {
         prix.textContent = 'Acquis'
+      } else if (!achetable) {
+        prix.textContent = 'Indisponible'
       } else if (a.prix_mon !== null) {
         prix.appendChild(montant(a.prix_mon, 'mon', 14))
       } else {
@@ -1217,9 +1357,9 @@ export class Menu {
 
       const bouton = document.createElement('button')
       bouton.className = 'ghost'
-      bouton.textContent = a.possede ? '✓' : 'Acheter'
-      bouton.disabled = a.possede
-      if (!a.possede) bouton.addEventListener('click', () => this.cb.onAcheter(a.code))
+      bouton.textContent = a.possede ? '✓' : achetable ? 'Acheter' : '—'
+      bouton.disabled = a.possede || !achetable
+      if (achetable && !a.possede) bouton.addEventListener('click', () => this.cb.onAcheter(a.code))
 
       carte.append(pastille, lignes, bouton)
       liste.appendChild(carte)
@@ -1244,8 +1384,25 @@ export class Menu {
     email: string | null
     googleDispo: boolean
     connecte: boolean
+    /**
+     * 🩺 Les comptes sont-ils UTILISABLES ? (le serveur répond, mais sa base est
+     * morte — cf. `saine` sur `/sante`).
+     *
+     * ⚠️ C'est un cas distinct de « hors ligne », et il était invisible.
+     *
+     * Le serveur répond 200 à tout, `/sante` compris : le joueur voyait donc le
+     * formulaire email et le bouton Google, il tapait son mot de passe, et ça
+     * échouait — sans qu'aucun mot ne dise pourquoi. Le serveur, lui,
+     * envoyait la raison dans la réponse ; le client ne la lisait pas.
+     *
+     * On ne montre donc AUCUNE voie de connexion quand les comptes sont morts :
+     * un bouton qui répond et qui échoue est pire que pas de bouton, parce
+     * qu'il fait perdre du temps au joueur ET fait douter du jeu.
+     */
+    comptesCasses: boolean
+    raison: string
   }) {
-    const { anonyme, email, googleDispo, connecte } = opts
+    const { anonyme, email, googleDispo, connecte, comptesCasses, raison } = opts
     const formulaire = [
       this.el.mailCompte.parentElement!,
       this.el.mdpCompte.parentElement!,
@@ -1265,6 +1422,33 @@ export class Menu {
       this.el.btnGoogle.classList.add('hidden')
       this.el.compteOu.classList.add('hidden')
       this.el.btnDeconnexion.classList.add('hidden')
+      this.el.compteAide.classList.add('hidden')
+      montrer(formulaire, false)
+      return
+    }
+
+    if (comptesCasses) {
+      /*
+       * 🩺 LE SERVEUR RÉPOND, MAIS LA BASE EST MORTE.
+       *
+       * C'est le cas le plus trompeur des trois : tout semble disponible, et rien
+       * ne marche. La boutique dit « indisponible », le classement dit
+       * « indisponible » — mais le formulaire de connexion, lui, restait là, à
+       * inviter le joueur à essayer.
+       *
+       * On ne masque pas le jeu pour autant : on joue très bien sans compte. On
+       * retire seulement les DEUX boutons de connexion, et on nomme la panne —
+       * avec la raison du serveur quand il en donne une, parce qu'elle est
+       * toujours plus juste que celle qu'on inventerait.
+       */
+      this.el.compteTitre.textContent = 'Comptes indisponibles'
+      this.el.compteDetail.textContent = raison
+        ? `Le serveur ne peut pas lire la base : ${raison}.`
+        : "Le serveur ne peut pas lire la base de comptes. Tu joues normalement, mais l'inscription est impossible pour l'instant."
+      this.el.compteAlerte.classList.add('hidden')
+      this.el.btnGoogle.classList.add('hidden')
+      this.el.compteOu.classList.add('hidden')
+      this.el.btnDeconnexion.classList.toggle('hidden', anonyme)
       this.el.compteAide.classList.add('hidden')
       montrer(formulaire, false)
       return
@@ -2022,8 +2206,27 @@ export class Menu {
     if (!this.preview) return // pas de WebGL pour le petit canvas : tant pis, on garde les vignettes
     clearFighter(this.preview.group)
     const parts = buildFighter(f)
-    this.apercu = parts[0] // on le fait courir sur place dans la vignette
-    this.fighterAffiche = f // c'est SA foulée qu'on joue : chacun la sienne
+    this.apercu = parts[0]
+    this.fighterAffiche = f
+    /*
+     * 🎭 LA POSTURE EST CHOISIE ICI, GUERRIER PAR GUERRIER.
+     *
+     * ⚠️ ELLE SE LIT DANS LE ROSTER, ELLE N'EST PAS DÉDUITE D'UN INDEX.
+     *
+     * On pourrait.number les cinq profils dans l'ordre du roster et prendre
+     * `index % 5`. Ce serait faux : le jour où quelqu'un ajoute un guerrier, ou
+     * en retire un, deux personnages voisins se retrouvent avec le même profil —
+     * et personne ne voit pourquoi. Une table lue par `id` coûte six lignes et
+     * ne peut pas se décaler toute seule.
+     *
+     * Le repli du perso est le profil « fluide », pas le premier de la liste :
+     * `customFighter` change l'apparence, pas la façon de se tenir.
+     */
+    this.posture = POSTURE_PAR_GUERRIER[f.id] ?? 'respirer'
+    // La phase, elle, sert à autre chose : que deux personnages du même profil
+    // ne se mettent pas à bouger ensemble. Elle est déduite de l'ID, donc stable.
+    this.phaseVie = (f.id.charCodeAt(0) % 7) / 7
+    if (this.branche) this.peindreCurseur(this.glisse)
     this.preview.group.add(...parts)
   }
 
@@ -2072,16 +2275,119 @@ export class Menu {
     p.camera.updateProjectionMatrix()
   }
 
-  /** Appelé à chaque image par la boucle de jeu : fait tourner l'aperçu. */
+  /** Appelé à chaque image par la boucle de jeu : anime et fait tourner l'aperçu. */
   update(dt: number) {
     if (this.current !== 'roster' || !this.preview) return
     this.resizePreview()
-    this.spin += dt * 0.7
+    this.temps += dt
+
+    /*
+     * 🎭 IL SE TIENT DEBOUT, IL NE COURS PAS.
+     *
+     * C'était `'course'` : le guerrier courait sur place dans une vignette. Dans
+     * un écran où l'on CHOISIT un personnage, on ne sait plus s'il court ou s'il
+     * attend — et le même raisonnement est déjà écrit dans `animerGuerrier`,
+     * où faire courir un coureur sur une grille de départ est qualifié de
+     * ridicule. La conclusion s'imposait : ici aussi.
+     *
+     * `'repos'` n'a pas de clip — il n'en existe aucun — et pose donc le
+     * guerrier debout, avec sa respiration.
+     */
+    animerGuerrier(this.apercu, this.fighterAffiche, this.anim, 'repos', dt, this.temps)
+    vieDeLobby(this.apercu, this.temps, this.posture, this.phaseVie)
+
+    this.brancherGlissement()
+
+    /*
+     * ⚠️ LA ROTATION, ET ELLE EST FAITE DE DEUX MOUVEMENTS ADDITIFS.
+     *
+     * `Math.sin(balayage) * 0.42` est le temps qui passe, `tirage` est ce que le
+     * doigt a ajouté. Les additionner, plutôt que les faire s'affronter, veut
+     * dire que le geste n'a jamais à « reprendre » le balayage : le joueur lâche
+     * au point qui lui plaît, et le personnage reste exactement là.
+     */
+    if (!this.glisse) this.balayage += dt * 0.42
+    this.spin = Math.sin(this.balayage) * 0.42 + this.tirage
     this.preview.group.rotation.y = this.spin
-    // Il court sur place pendant qu'on le regarde : une pose figée donnerait
-    // l'impression d'un mannequin, pas d'un coureur.
-    animerGuerrier(this.apercu, this.fighterAffiche, this.anim, 'course', dt, this.spin)
+
     this.preview.renderer.render(this.preview.scene, this.preview.camera)
+  }
+
+  /**
+   * 🖐️ Fait tourner l'aperçu sous le doigt, ou sous le bouton de la souris.
+   *
+   * ⚠️ UNE SEULE POINTEUSE POUR LES DEUX. Le tactile n'a pas de survol, donc
+   * « maintenir pendant qu'on glisse » est exactement le même geste que
+   * « maintenir le bouton pendant qu'on glisse » : pointer, puis glisser, puis
+   * relâcher. Deux implémentations pour deux synonymes, c'est deux occasions
+   * d'en casser une.
+   *
+   * ⚠️ ET LE GESTE EST PLACÉ SUR LE CANVAS, JAMAIS SUR L'ÉCRAN. Les vignettes,
+   * les palettes et les boutons du vestiaire doivent rester cliquables : un
+   * écouteur posé sur `#overlay` avalerait les changements de couleur.
+   */
+  private brancherGlissement() {
+    if (this.branche) return
+    this.branche = true
+    const cv = this.preview!.renderer.domElement
+
+    /*
+     * ⚠️ `touch-action: none`, SANS QUOI LA FEATURE N'EXISTE PAS SUR MOBILE.
+     *
+     * Le navigateur prend le doigt pour faire défiler la page : l'aperçu ne
+     * tourne pas du tout. C'est le genre d'oubli qui marche très bien sur un
+     * ordinateur et fait croire que le tactile est cassé.
+     */
+    cv.style.touchAction = 'none'
+    this.peindreCurseur(false)
+
+    cv.addEventListener('pointerdown', (e: PointerEvent) => {
+      this.glisse = true
+      this.pointeur = e.pointerId
+      this.dernierX = e.clientX
+      /*
+       * On capture le pointeur : sans cela, sortir du canvas en fin de geste —
+       * ce qu'on fait toujours — fait perdre le mouvement, et le guerrier
+       * s'arrête de tourner au milieu. C'est le geste le plus naturel du monde
+       * et il est toujours le plus mal géré.
+       */
+      cv.setPointerCapture(e.pointerId)
+      this.peindreCurseur(true)
+    })
+
+    const relacher = () => {
+      if (!this.glisse) return
+      this.glisse = false
+      this.pointeur = -1
+      this.peindreCurseur(false)
+    }
+    cv.addEventListener('pointerup', relacher)
+    cv.addEventListener('pointercancel', relacher)
+    // Et si la fenêtre perd le focus en plein geste — onglet changé, alert.
+    window.addEventListener('blur', relacher)
+
+    cv.addEventListener('pointermove', (e: PointerEvent) => {
+      if (!this.glisse || e.pointerId !== this.pointeur) return
+      this.tirage += (e.clientX - this.dernierX) * 0.012
+      this.dernierX = e.clientX
+    })
+  }
+
+  /**
+   * Le curseur : `grab` au repos, `grabbing` sous le doigt — et TEINTÉ.
+   *
+   * ⚠️ LA TEINTE EST CELLE DU GUERRIER, VOLONTAIREMENT.
+   *
+   * Le curseur est le seul élément de l'interface qui suit le doigt : sur mobile
+   * c'est lui, pas le bouton, qui dit « tu peux tourner ça ». Il porte donc la
+   * couleur du bandeau — celle que le joueur a choisie — pour que le geste et le
+   * personnage parlent du même sujet.
+   */
+  private peindreCurseur(actif: boolean) {
+    const cv = this.preview?.renderer.domElement
+    if (!cv) return
+    cv.style.cursor = actif ? 'grabbing' : 'grab'
+    cv.style.filter = actif ? `drop-shadow(0 0 7px ${cssColor(this.fighterAffiche.band)})` : ''
   }
 
   // ————— Les options —————

@@ -979,14 +979,137 @@ comptes tombée, elle a donc disparu **pour tout le monde** — au point qu'on l
 croyait retirée du jeu.
 
 Un bouton qui s'efface sans un mot se lit comme une fonction supprimée ; un bouton
-qui dit « fermée » se lit comme une fonction qui reviendra. Il reste donc toujours
-là, et affiche **« Fermée pour l'instant »** à la place du solde.
+qui dit « indisponible » se lit comme une fonction qui reviendra. Il reste donc
+toujours là, et affiche **« Indisponible »** à la place du solde.
 
 ⚠️ **Et surtout pas 0.** Un joueur qui a 300 mon et lit « 0 » croit qu'on l'a volé.
 Les deux soldes de l'en-tête retombent sur « — » pour la même raison : un chiffre
 d'avant la panne, resté affiché, mentirait autant qu'un zéro.
 
-⚠️ **Le message de la boutique vide ne dit plus « hors ligne ».** On peut très bien
+### 🐛 « La boutique est fermée » n'était pas la vérité
+
+Le bouton disait « fermée », et c'était déjà un mot trop fort : une boutique
+fermée est une boutique **décidée**, alors qu'il s'agissait d'une panne. Mais
+c'est l'écran de la boutique qui mentait le plus.
+
+Il n'y avait qu'un seul message, et deux causes opposées le produisaient :
+
+| ce qui se passe | `chargerBoutique()` renvoyait | ce qu'on lisait |
+|---|---|---|
+| pas de compte, serveur éteint, base morte | `[]` | « La boutique est fermée pour l'instant » |
+| le catalogue est vraiment vide | `[]` | « La boutique est fermée pour l'instant » |
+
+Le joueur en concluait qu'il n'y avait rien à acheter — et il avait tort, puisque
+tout le catalogue était là, sur le serveur, à quelques mètres. **Il ne pouvait
+pas le deviner**, et rien dans l'écran ne le lui disait.
+
+⚠️ **LE SERVEUR, LUI, DÉJÀ DISTINGUAIT.** `/api/boutique` répond `503` sans base,
+`401` sans session, `200` avec le catalogue — et un catalogue vide est un `200`
+honnête. L'information existait, elle repartait de trois lignes plus bas dans le
+client : c'est là qu'on la perdait.
+
+> **La leçon, et elle vaut pour tout l'écran :** le classement faisait la
+> distinction depuis le début (`lireClassement` rend `null` pour « indisponible »),
+> la boutique non. Deux écrans, deux vocabulaires pour la même panne — donc un
+> joueur qui lit « fermée » au titre, « indisponible » dans le classement et
+> « fermée » en boutique ne sait plus lequel croire. Il n'y a qu'une version.
+
+Trois corrections, dont une invisible à l'œil :
+
+- **`chargerBoutique()` rend `null` pour « indisponible »** et `[]` seulement si le
+  catalogue est réellement vide. ⚠️ Et sur une coupure réseau en pleine visite, il
+  **garde le catalogue précédent** : le rayon ne se vide pas sous les yeux du
+  joueur. Mais s'il n'a jamais rien chargé, le cache est vide — et rendre `[]`
+  dirait « rayon vide », ce qui est exactement le mensonge qu'on supprime.
+- **Deux messages dans `index.html`**, pas un message choisi en JavaScript :
+  « 📡 Boutique indisponible » et « Aucun article à vendre ». Les deux Causes
+  sont des pannes différentes, donc elles ne peuvent pas partager une phrase.
+- ⚠️ **On n'ouvre plus avec un cache vide.** Le cache est vide tant que le
+  catalogue n'a jamais été chargé ; le passer quand même affichait « aucun article »
+  pendant la fraction de seconde de l'appel réseau, puis « indisponible » —
+  deux messages dans l'ordre, pour une seule panne.
+
+### 💎 Ce que tu possèdes, écrit en toutes lettres
+
+La boutique montrait les deux soldes — mais **sans leur nom**. Un pavé doré et un
+pavé vert, deux nombres, et il faut déjà savoir que le vert est du jade. La
+couleur n'est pas une légende : elle ne s'apprend pas, et un joueur qui ne le
+sait pas n'a rien à quoi raccrocher.
+
+| | avant | après |
+|---|---|---|
+| en-tête | `[🪙] 1 200` · `[💎] 4` | **`[🪙] 1 200` / MON** · **`[💎] 4` / JADE** |
+| ce que tu possèdes | rien | **`Tu possèdes 3 articles sur 10.`** |
+
+⚠️ **LE MONTANT ET SON NOM SONT DEUX BLOCS, ET LE NOM NE SE COLORTE PAS.** Le
+pavé dit la matière, le mot dit le nom. Une étiquette à la couleur du montant se
+fond dedans au lieu de le nommer.
+
+> ⚠️ **Et le piège qu'on a failli y écrire soi-même :** `bourseMon` est le PAVÉ.
+> Faire `bourseMon.replaceChildren(montant(…))` — ce qu'on faisait — n'efface pas
+> que le chiffre, **ça efface le `<small>` qui porte le nom**. Le symptôme est
+> invisible en compilation et en build : le nombre s'affiche, juste sans sa
+> légende. On pointe donc le `<b>` directement, résolu une fois à la construction.
+
+⚠️ **LE COMPTE VIENT DU CATALOGUE, PAS D'UN SECOND APPEL.** C'est le même tableau
+que la liste, donc il ne peut pas la contredire ; une deuxième requête ouvrirait
+la fenêtre où l'un dit 3 et l'autre 4.
+
+> **Il n'y a que DEUX monnaies**, et c'est la base qui le dit : `profils.mon` et
+> `profils.hisui`, avec `check (>= 0)` en sécurité. Il n'y a pas d'« argent » à
+> côté. Ajouter une troisième monnaie, ce n'est pas une case dans `index.html` :
+> c'est une colonne, une contrainte, une migration, et le placeur qui la verse.
+
+## 🧹 Le ménage : six exports morts, et deux qui étaient des pièges
+
+`tsc --noUnusedLocals --noUnusedParameters` ne signalait **rien**. Le code mort
+n'était pas du code mort *visible* — c'était des exports que plus rien
+n'importait, et un scan des références dans `src/`, `tools/`, `server/src/` et les
+pages de banc en a sorti six :
+
+| supprimé | où | pourquoi |
+|---|---|---|
+| `AFFLICTIONS` | parchemin.ts | une liste **recopiée** — voir plus bas |
+| `possessions()` | boutique.ts | le drapeau `possede` vient du même `left join` |
+| `debiter()` | profil.ts | le débit est écrit dans la transaction de l'achat |
+| `nomPays()` | pays.ts | un accessor jamais appelé |
+| `authDispo()` | auth.ts | `avecSession` teste déjà `if (!auth)` |
+| `BIOMES_EN_PAUSE` | biomes.ts | l'étagère devenue vide : une liste, rien d'autre |
+
+⚠️ **DEUX DES SIX ÉTAIENT DES Pièges, PAS DU CODE INUTILE.**
+
+`AFFLICTIONS = ['kusarigama', 'fumigene', 'senbon']` disait ce que le
+🍵 **Thé Purificateur** nettoie. Personne ne la lisait : le thé mettait à zéro
+trois **minuteurs**, écrits à la main dans `main.ts`. Deux listes du même ensemble,
+dont une seule faisait le travail — et le jour où une affliction de plus est
+arrivée, on l'a ajoutée au minuteur et oubliée dans la table. Aucun test n'aurait
+vu la différence : la table ne servait à rien, elle ne pouvait rien faire.
+
+> Une recopie ne ment jamais quand on la relit ; elle ment quand on écrit **à
+> côté** d'elle — c'est-à-dire au moment précis où personne ne la relit.
+
+`debiter()` était le symétrique de `crediter()`, avec le même
+`update … where ${col} >= $1`. **La factorisation aurait cassé l'achat** : le
+débit ouvrirait sa propre connexion pendant que la boutique tient l'article en
+`for update`, et un refus en aval ne remonterait pas le débit. Le genre de
+refactorisation qui passe la revue parce qu'elle supprime du code, et qui ne se
+voit qu'en production, sur un double-achat refusé.
+
+Les deux avertissements sont désormais écrits **là où l'onIRA lire le code** —
+dans `acheter` et dans le bloc `the` de `main.ts` — et non dans les fichiers
+d'où le code a disparu. Un avertissement dans un fichier vide ne prévient
+personne.
+
+`montant(a.prix_hisui ?? 0, 'hisui', 14)` affichait **« 0 Jade »** pour une ligne
+dont les deux prix sont nuls — c'est-à-dire exactement le cas que le serveur
+refuse d'acheter (`raison: 'indisponible'`). Le bouton restait actif : on
+proposait donc un achat impossible, à un prix qui n'existait pas.
+
+Le cas est rare, mais il ment sur le seul chiffre que le joueur connaît — le
+prix, qui est la raison d'être de l'écran. Un article sans prix affiche désormais
+« Indisponible », bouton inactif.
+
+⚠️ **Le message de la boutique vide ne dit pas « hors ligne ».** On peut très bien
 courir en ligne pendant que les comptes, eux, sont en panne : le joueur lirait
 « hors ligne » en sortant d'une partie en ligne, et ne croirait plus rien d'autre.
 
@@ -3386,6 +3509,57 @@ reformulage de leur part.
 
 Sans les clés Google, **le bouton reste masqué** et le formulaire email suffit :
 un déploiement sans clés propose moins, il ne tombe pas en panne.
+
+### 🩺 Les trois états de l'écran du compte — et le quatrième qu'on ne Voyait pas
+
+Le serveur répond `200` à tout, `/sante` comprise. Un serveur joignable dont la
+base est morte est donc **indistinguable d'un serveur sain** pour tout ce qui
+l'interroge — et l'écran du compte montrait quand même le formulaire email et le
+bouton Google. Le joueur tapait son mot de passe, ça échouait, et **aucun mot ne
+disait pourquoi**.
+
+| état | ce que le joueur voit maintenant |
+|---|---|
+| serveur muet | « Hors ligne » — rien d'autre ne s'affiche |
+| **serveur vif, base morte** | **« Comptes indisponibles »**, avec la cause, et **ni formulaire ni bouton Google** |
+| tout va bien | le formulaire, et Google s'il est configuré |
+
+⚠️ **LE SERVEUR SAVAIT DEPUIS LE DÉBUT.** `/sante` envoyait `saine` **et**
+`raison` ; le client lisait `google` et jetait le reste. L'information existait,
+elle repartait neuf lignes plus bas. C'est le même arbitrage que la boutique : un
+écran qui ne dit pas pourquoi il ne marche pas renvoie à l'essai.
+
+> ⚠️ Et le serveur ne savait pas non plus, dans un cas : **sans `DATABASE_URL`**,
+> le bloc `if (baseDispo())` sautait l'appel à `tenterBase()` — la seule chose qui
+> note la raison. Il répondait `saine: false` sans rien derrière. Maintenant il
+> dit `raison: "DATABASE_URL absente"`, ce qui distingue « installe Postgres » de
+> « le mot de passe a changé » : deux réparations sans rapport.
+
+⚠️ **LA SONDE EST ATTENDUE, PLUS LÂCHÉE EN PASSING.** C'était un
+`void sonderServeur()` — un tir parallèle dont la réponse arrivait après que
+l'écran s'était peint. Le bouton Google restait donc masqué au premier
+affichage sur une machine lente, et l'avertissement « comptes cassés » n'arrivait
+qu'au lancement suivant. `sonderServeur` ne lève jamais, donc l'attendre ne peut
+pas faire échouer la connexion : il rend le résultat certain au moment où l'appelant
+met l'écran à jour.
+
+### L'ordre pour que Google marche
+
+Il est dans **[DEPLOY.md](DEPLOY.md)** ; il tient en quatre lignes, et **leordre
+est obligatoire** :
+
+| # | quoi | pourquoi |
+|---|---|---|
+| 1 | une base Postgres, et `DATABASE_URL` | sans elle, `auth` vaut `null` : **ni Google, ni email** — rien |
+| 2 | `AUTH_SECRET` | le serveur **refuse de démarrer** en déployé sans elle |
+| 3 | `server/.env` (copie de `.env.example`) puis `npm run dev` | les migrations Better Auth se jouent **au démarrage**, à la main ne s'est jamais fait |
+| 4 | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`, et l'URI de redirection enregistrée | sans elles, le bouton est masqué — c'est voulu |
+
+> ⚠️ **L'URI de redirection s'enregistre EXACTEMENT** :
+> `http://localhost:2567/api/auth/callback/google` en local. ⚠️ Et `PUBLIC_URL`
+> **vide en local** : y mettre l'adresse de production fait croire au serveur
+> qu'il est déployé, et Google redirige vers la production. Symptôme : *le bouton
+> ne fait rien*.
 
 ### La boutique
 

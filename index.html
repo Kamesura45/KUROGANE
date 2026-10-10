@@ -401,10 +401,35 @@
           <h2>Boutique</h2>
         </header>
 
-        <div class="bourse-grande">
-          <span id="bourseMon">—</span>
-          <span id="bourseHisui">—</span>
+        <!--
+  ⚠️ DEUX MONNAIES, PAS TROIS, ET LE MOT EST ÉCRIT SOUS CHACUNE.
+
+  Le joueur ne doit pas avoir à savoir que « le vert, c'est du jade » : la
+  couleur seule ne s'apprend pas, et une étiquette qui manque se lit comme un
+  décor. D'où le nom en toutes lettres sous chaque montant — c'est le seul
+  endroit du jeu où l'on écrit « Mon » et « Jade », parce que c'est le seul
+  endroit où l'on doit faire COMPRENDRE une monnaie à quelqu'un qui vient
+  d'arriver.
+
+  ⚠️ Il n'existe que DEUX monnaies : les Mon (gagnés en courant) et le jade
+  (acheté). Pas de troisième, pas d'« argent » à côté. Si un jour il y en a une
+  troisième, c'est une colonne de plus dans la table `profils` ET une migration —
+  pas une case dans cette page : un solde que la base ne garde pas ne serait
+  qu'un chiffre décoratif.
+-->
+<div class="bourse-grande">
+          <span id="bourseMon">
+            <b>—</b>
+            <small>Mon</small>
+          </span>
+          <span id="bourseHisui">
+            <b>—</b>
+            <small>Jade</small>
+          </span>
         </div>
+
+        <!-- Ce que le joueur POSSÈDE déjà — le premier chiffre qu'on cherche ici. -->
+        <p class="lead" id="boutiquePossede" hidden></p>
 
         <p class="lead">
           Des couleurs de maître pour ton guerrier perso. <b>Uniquement de
@@ -413,10 +438,34 @@
         </p>
 
         <div id="boutiqueListe" class="boutique"></div>
-        <!-- ⚠️ Pas « hors ligne » : on peut très bien courir en ligne pendant que
-             les comptes, eux, sont en panne. Le joueur lirait « hors ligne » en
-             sortant d'une partie en ligne, et ne croirait plus rien d'autre. -->
-        <p id="boutiqueVide" class="lead hidden">La boutique est fermée pour l'instant — reviens un peu plus tard.</p>
+        <!--
+          ⚠️ DEUX MESSAGES, ET ILS NE DISENT PAS LA MÊME CHOSE.
+
+          Le catalogue est-il VIDE, ou la boutique est-elle INDISPONIBLE ? La
+          boutique renvoyait `[]` dans les deux cas, donc ces deux lignes
+          s'affichaient pour la même panne : hors-ligne, serveur éteint, base
+          des comptes morte. Le joueur lisait « fermée », concluait qu'il n'y
+          avait rien à acheter, et ne revenait pas — alors que tout le
+          catalogue existait.
+
+          Le classement fait depuis le début la distinction que la boutique ne
+          faisait pas. Un joueur qui lit « fermée » pour un rayon vide et
+          « indisponible » pour une panne ne sait plus à quoi se fier : il faut
+          le même vocabulaire partout, ou aucun.
+
+          ⚠️ Pas « hors ligne » dans le message d'indisponibilité : on peut très
+          bien courir en ligne pendant que les comptes, eux, sont en panne. Le
+          joueur lirait « hors ligne » en sortant d'une partie en ligne, et ne
+          croirait plus rien d'autre.
+        -->
+        <p id="boutiqueIndispo" class="lead hidden">
+          📡 Boutique indisponible — pas de compte, ou serveur injoignable. Tes
+          articles et tes scores restent où ils sont : rien n'a été perdu.
+        </p>
+        <p id="boutiqueVide" class="lead hidden">
+          Aucun article à vendre pour l'instant. Reviens après une course en
+          ligne : la boutique se remplit à chaque victoire.
+        </p>
 
         <button class="primary" data-back>OK</button>
       </section>

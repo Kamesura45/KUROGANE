@@ -16,6 +16,7 @@
     "infini:test": "node --import ./tools/resolveur-ts.mjs tools/verifier-infini.ts",
     "glissade:test": "node --import ./tools/resolveur-ts.mjs tools/verifier-glissade.ts",
     "bambous:test": "node --import ./tools/resolveur-ts.mjs tools/verifier-bambous.ts",
+    "menu:test": "node --import ./tools/resolveur-ts.mjs tools/verifier-menu.ts",
     "sprint:test": "node --import ./tools/resolveur-ts.mjs tools/verifier-sprint.ts",
     "endurance": "node --import ./tools/resolveur-ts.mjs tools/mesurer-endurance.ts"
   },
