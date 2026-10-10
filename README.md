@@ -314,6 +314,10 @@ npm run sprint:test        # pendant le sprint, clavier et tactile se taisent
                            # pareil — et la zone est bien vide d'obstacles
 npm run bambous:test       # la forêt a un bord ? le couloir est-il libre ? les
                            # cinq crans de qualité gardent-ils leur lisière ?
+npm run fuites:test        # le feu ne reprogramme sa rampe qu'en CHANGEANT de
+                           # cible, et les cinq scans des plans coûtent 28 µs
+npm run image              # ce que la boucle pait HORS Track.update : collisions,
+                           # arcs de portail et animations — 37 µs sur 16 667
 ```
 
 ## ⛩️ Le portique et sa forme creuse
@@ -397,6 +401,47 @@ vaut un cinquième de pixel : invisible, et cinq fois moins d'écritures.
 une nouvelle course commence à « 0.0 s », et si la précédente s'était terminée
 sur cette valeur on sauterait l'écriture — l'écran garderait le chrono d'avant.
 
+### 🔥 Le feu ne reprogramme pas sa propre rampe
+
+```bash
+npm run fuites:test
+```
+
+`main.ts:5286` appelle `feuAmbiance()` à **chaque image**, et `main.ts:5272`
+rend `enCourse` vrai dès le décompte : la fonction tournait donc dans **tous**
+les états du jeu. Or sa dernière ligne posait une consigne sur l'AudioParam de
+la nappe — et `setTargetAtTime` ne régle pas un volume, il **dépose un
+événement dans la file d'automatisation** du thread audio.
+
+Le son entendu ne changeait pas. La file, elle, ne cessait de grossir.
+
+| segment | images | avant (à plat) | après |
+|---|---|---|---|
+| accueil, 30 s au silence | 1 800 | 1 800 | **0** |
+| décompte + préchauffe | 300 | 300 | **3** |
+| course de 1 920 m | 5 237 | 5 237 | **1** |
+| retour au menu, 30 s | 1 800 | 1 800 | **0** |
+| 20 km de sans fin | 54 546 | 54 546 | **28** |
+| **session entière** | **63 683** | 63 683 | **32** |
+
+**Une session sur mille, enfin.** Le correctif tient en une comparaison :
+`feuConsigne` retient la valeur **déjà confiée au thread audio**, et on ne
+reprogramme que si elle a changé.
+
+⚠️ **Reprogrammer la même cible ne sert à RIEN.** Une exponentielle qui vise
+une cible converge seule, quel que soit le moment où on la lance — relancer son
+démarrage 60 fois par seconde ne la fait pas converger plus vite, il enchaîne
+60 exponentielles vers la même asymptote. Le seul effet mesurable est le coût.
+C'est aussi pourquoi la rampe reste juste « même si le jeu perd des images »,
+comme le disait déjà le commentaire d'origine : une seule programmation suffit,
+et un changement de cible se relance aussitôt.
+
+⚠️ **`feuConsigne` n'est pas une valeur mise en cache à la manière du HUD.**
+Si l'appel sort avant de programmer (pas encore de contexte audio), la variable
+ne bouge pas — elle ne doit mentir que sur ce qui a **réellement** été remis au
+thread. C'est ce qui laisse `prechauffeFeu()` intact : ses deux appels, à 1
+puis au niveau voulu, changent tous les deux la consigne.
+
 ### Ce qui a été mesuré et laissé tel quel
 
 - **Le nombre de pixels** est déjà plafonné (`applyQuality`), sans ombres.
@@ -406,6 +451,76 @@ sur cette valeur on sauterait l'écriture — l'écran garderait le chrono d'ava
 - **Les allocations de `hitbox()`** — 15 petits objets par image. Les mutualiser
   aurait introduit un état partagé mutable pour un gain que le ramasse-miettes
   générationnel rend nul. On ne paie pas un risque de corruption pour rien.
+- **Les cinq scans linéaires des plans** (`murA`, `flancA`, `premierBarrage`,
+  `murAvale`, et `premierePlateforme` derrière). Chronométrés par
+  `npm run fuites:test` sur les plans **réels** d'une piste de 20 km — 1 879
+  obstacles, 339 plateformes, 100 murs — les quatre ensemble, **appelés à
+  chaque image**, coûtent 28 µs sur 16 667, soit **0,17 % d'une image**. Et
+  aucune ne tourne à chaque image : `murA`/`flancA` ne répondent que si le
+  coureur est sur une paroi, `premierBarrage` pendant le vol d'un portail,
+  `murAvale` à la pose d'une barrière. `supportSous`, elle, tourne bien à tous
+  les coups : moins de 1,5 µs. Rien à faire ici — et la mesure le dit.
+
+  Un seul sort du lot : `premierBarrage` à **25,8 µs**, une vingtaine de fois
+  `supportSous`, parce qu'elle reparcourt deux plans entiers et appelle
+  `biomeDe()` pour chaque plateforme. C'est le seul appel de piste du jeu qui
+  vaille un sixième de pour cent d'image — et il y reste largement.
+
+  > ⚠️ **Le banc passe une PASSE DE CHAUFFE avant de chronométrer.** Sans elle,
+  > le premier relevé mesure la compilation du JIT : retirée, la passe valait
+  > 74 µs puis 30 µs au lancer suivant — un écart de ×2,4 qui n'avait rien à
+  > voir avec la piste. Un chiffre qui bouge d'un lancer à l'autre ne peut pas
+  > servir de seuil.
+
+- **Ce que la boucle paie à côté de `Track.update`.** Rien de tout cela ne
+  passait dans `npm run endurance`, qui ne chronomètre que la piste. Un banc à
+  part, `npm run image`, chronomètre ce que `main.ts` appelle **à chaque
+  image** par-dessus : les quatre tests de collision (`ramasse`,
+  `hits`, `heurteTorii`, `heurteJarre`), les sept arcs tremblés d'un portail,
+  et l'animation des cinq coureurs.
+
+  **37 µs sur 16 667, soit 0,22 % d'une image.** Aucun des trois sujets
+  n'atteint seul un dixième de pour cent :
+
+  | ce qui est chronométré | µs/image | % de l'image |
+  |---|---|---|
+  | les 4 tests de collision, sur une vraie course de 3 km | 4,1 | 0,02 % |
+  | les 7 arcs d'un portail (`jitterArc`) | 7,0 | 0,04 % |
+  | 5 coureurs animés (joueur + 4 bots) | 26 à 28 | 0,16 % |
+
+  Trois suspects historiques, et la mesure acquitte les trois.
+
+  **`Box3.setFromObject`** remonte tout le sous-arbre d'un maillage, et c'est
+  cher : **3,4 µs par jarre**. Mais les quatre appels le placent **derrière** un
+  filtre sur `|z|` — il ne se paie que pour les deux ou trois objets réellement
+  devant le coureur, d'où les 4,1 µs du total. La réserve plafonne à 4 jarres
+  (relevé après 5 km), donc il n'y a même pas une longue liste à balayer.
+  `casseAuContact`, elle, ne tourne que pendant une frappe
+  (`main.ts:2551`) : 0,6 µs.
+
+  **`Object.keys(clip.pistes)`** alloue un tableau de dix chaînes par coureur
+  et par image — et coûte **0,04 µs**. Cinq coureurs pendant une seconde de
+  jeu, cela fait 13 µs par seconde. L'allocation existe, elle est mesurable, et
+  elle est sans conséquence.
+
+  **`poserAuSol()`** force un `updateMatrixWorld(true)` complet par coureur et
+  par image — **6 à 7 µs**, le plus gros poste des animations, devant
+  `anim.appliquer` (7 à 8 µs). C'est le seul chiffre du tableau qui mérite
+  d'être regardé : le rendu va en faire un second, sur la scène entière. Mais
+  à 0,04 % d'image pour un coureur, il faudrait une raison indépendante du
+  budget pour y toucher.
+
+  > ⚠️ **`jitterArc` ne mesure que le CPU.** Node n'a pas de GPU : le
+  > `needsUpdate = true` qui réécrit le tampon en mémoire vidéo ne se fait pas
+  > ici. Les 7 µs sont donc une **borne basse** ; le vrai coût est côté
+  > graphique, où sept tampons de 18 octets partent à chaque image d'un
+  > portail. Ce banc ne peut pas le chiffrer, et il ne prétend pas le faire.
+
+  > ⚠️ **Le relevé est repris trois fois, on garde le meilleur.** Mesuré une
+  > seule fois, le peloton d'un coureur rendait 23 µs et celui de cinq 28 µs ;
+  > enchaîné sans longue chauffe, le premier rendait 71 µs et le second 52 µs —
+  > cinq coureurs *moins chers qu'un*, ce qui n'a aucun sens et ne venait que
+  > de la compilation du JIT en cours de mesure.
 
 ## 👻 Le coureur fantôme
 
