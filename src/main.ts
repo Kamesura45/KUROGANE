@@ -4727,9 +4727,21 @@ function tick(now?: number) {
       // joueur compris : c'est ce qui rend l'entraînement mordant.
       const lance = b.jouerParchemin(time)
       if (!lance) return
-      const devant = [...botsEnCourse(), null].find(
-        (x) => x !== b && (x ? x.distance : distance) > b.distance
-      )
+      /*
+       * DEVANT qui ? Le premier rival actif qui le précède — sinon c'est nous.
+       *
+       * ⚠️ Le même tour de boucle qu'au portail, pour la même raison : on
+       * faisait `[...botsEnCourse(), null].find(...)`, soit deux tableaux neufs
+       * par coup lancé. Et `null` en bout de liste ne servait à rien : sa valeur
+       * de retour est la même que celle de l'absence de résultat, et le code
+       * juste en dessous traite déjà les deux de la même façon.
+       */
+      let devant: Bot | null = null
+      for (const x of bots) {
+        if (!x.actif || x === b || x.distance <= b.distance) continue
+        devant = x
+        break
+      }
       if (lance === 'onmyoji') {
         // Un bot ne vise pas mieux que nous : son portail part droit devant et
         // meurt au premier obstacle, exactement comme le nôtre.
@@ -4799,24 +4811,46 @@ function tick(now?: number) {
       // ⚠️ On passe sa hauteur DU MOMENT, pas une constante : en s'affaissant
       // elle rencontre les rampes de plus en plus bas, donc de plus en plus tôt.
       const mur = track.premierBarrage(portail.lane, lo, hi, portail.y)
-      // Qui croise-t-il dans sa ligne cette image ? Bots (solo) ET rivaux (en
-      // ligne) confondus — le PLUS PROCHE l'emporte. On teste le franchissement :
-      // à ~83 m/s il parcourt ~1,4 m par image, un test de proximité le raterait.
-      const botTouche = botsEnCourse()
-        .filter((b) => b.ligne === portail!.lane && b.distance > lo && b.distance <= hi)
-        .sort((a, b) => a.distance - b.distance)[0]
-      const rivalTouche = [...rivals.values()]
-        .filter(
-          (r) =>
-            // 👻 Pas un déconnecté : on échangerait sa place avec un joueur
-            // parti, et l'on se retrouverait téléporté sur une position figée
-            // pendant que lui ne reçoit rien.
-            r.connecte &&
-            r.opp.currentLane === portail!.lane &&
-            r.opp.distanceNow > lo &&
-            r.opp.distanceNow <= hi
-        )
-        .sort((a, b) => a.opp.distanceNow - b.opp.distanceNow)[0]
+      /*
+       * QUI croise-t-il dans sa ligne cette image ? Bots (solo) ET rivaux (en
+       * ligne) confondus — le PLUS PROCHE l'emporte. On teste le
+       * franchissement : à ~83 m/s il parcourt ~1,4 m par image, un test de
+       * proximité le raterait.
+       *
+       * ⚠️ Un SEUL tour de boucle par famille, et un minimum tenu à la main.
+       * On faisait `filter().sort()[0]` : deux tableaux neufs et deux tris par
+       * IMAGE, pour ne retenir que le plus petit des distances. Cinq allocations
+       * par image rien que pour la boule en vol — à 60 images/s, trois cents
+       * objets jetés à la poubelle par seconde pendant qu'elle file.
+       *
+       * Le minimum est indépendant de l'ordre : à distances égales, l'un ou
+       * l'autre revient au même — c'est la même distance, et les conséquences
+       * sont identiques.
+       */
+      let botTouche: Bot | null = null
+      let dBot = Infinity
+      for (const b of bots) {
+        if (!b.actif || b.ligne !== portail.lane) continue
+        if (b.distance <= lo || b.distance > hi) continue
+        if (b.distance < dBot) {
+          dBot = b.distance
+          botTouche = b
+        }
+      }
+      let rivalTouche: Rival | null = null
+      let dRival = Infinity
+      for (const r of rivals.values()) {
+        // 👻 Pas un déconnecté : on échangerait sa place avec un joueur parti,
+        // et l'on se retrouverait téléporté sur une position figée pendant que
+        // lui ne reçoit rien.
+        if (!r.connecte || r.opp.currentLane !== portail.lane) continue
+        const d = r.opp.distanceNow
+        if (d <= lo || d > hi) continue
+        if (d < dRival) {
+          dRival = d
+          rivalTouche = r
+        }
+      }
       // 🔮 En marche ARRIÈRE, la boule peut retomber sur son lanceur : c'est la
       // seule « cible » qu'elle n'échange pas — on ne troque pas sa place avec
       // soi-même. Elle s'y éteint, et la parade aura coûté un portail.
@@ -4824,8 +4858,7 @@ function tick(now?: number) {
         portail.sens === -1 && player.currentLane === portail.lane && distance >= lo && distance <= hi
 
       const dMur = mur ?? Infinity
-      const dBot = botTouche ? botTouche.distance : Infinity
-      const dRival = rivalTouche ? rivalTouche.opp.distanceNow : Infinity
+      // `dBot` et `dRival` sont déjà posés par les deux tours de boucle ci-dessus.
 
       if (dMur <= dBot && dMur <= dRival && dMur !== Infinity) {
         // 💥 Il éclate SUR la paroi : on prend la position du mur, pas celle du
@@ -5643,9 +5676,17 @@ resize()
 // servir pour tricher dans une vraie partie.
 if (import.meta.env.DEV) {
   ;(window as unknown as { __sorts?: unknown }).__sorts = {
-    /** Met `kind` en main, à la place de ce qu'on tenait. */
-    donner(kind: ParcheminKind) {
-      slots = [kind]
+    /**
+     * Met `kinds` en main, à la place de ce qu'on tenait.
+     *
+     * ⚠️ Variadique, et non mono-argument : c'est CE qui permet de tester le
+     * cumul. Deux rouleaux en main, c'est la règle normale du jeu
+     * (`SLOTS_MAX`) — et c'est précisément là que les sorts se déroutent : un
+     * portail renvoyé pendant qu'une armure tient, un poison posé pendant que
+     * le thé lave. On ne pouvait pas le reproduire en n'en donnant qu'un.
+     */
+    donner(...kinds: ParcheminKind[]) {
+      slots = kinds.slice(0, SLOTS_MAX)
       drawSlots()
     },
     /** Le lance tout de suite — comme la touche E. */
@@ -5685,6 +5726,17 @@ if (import.meta.env.DEV) {
       backToMenu()
     },
     /**
+     * 🏁 Démarre une course solo, sans passer par les menus.
+     *
+     * Sans elle, le banc de mesure ne peut pas tourner seul : il faudrait
+     * d'abord cliquer Jouer, puis un mode, puis Go — trois gestes qu'aucune
+     * page automatique ne sait faire. Et la trêve des cinq premières secondes
+     * se compte depuis ce départ.
+     */
+    demarrer() {
+      startRace(Math.floor(Math.random() * 2 ** 31))
+    },
+    /**
      * 🎓 La fin du tutoriel, sans courir le pont.
      *
      * Même raison que `fin` juste en dessous : il fallait sinon franchir 1 920 m
@@ -5721,6 +5773,46 @@ if (import.meta.env.DEV) {
         canReplay: true,
         canLobby: enLigne,
       })
+    },
+    /**
+     * 🧹 Efface TOUT ce qui te tombe dessus, d'un coup.
+     *
+     * ⚠️ Sans ça, impossible de mesurer un sort après le précédent. Le « r »
+     * du banc passait par le Thé — qui est lui-même un effet de trois
+     * secondes : on aurait mesuré le nettoyage à la place du sort suivant, et
+     * chaque ligne du tableau aurait traîné le rouleau d'avant.
+     *
+     * On remet les minuteurs à zéro et on éteint les maillages. Aucune
+     * allocation, aucune destruction : les pools restent prêts, c'est leur
+     * état « repos » normal.
+     */
+    oublier() {
+      ventFin = grueFin = theFin = kusarigamaFin = fumigeneFin = senbonFin = 0
+      miroirFin = 0
+      armure = 0
+      stumble = 0
+      portail = null
+      portailGroup.visible = false
+      impactGroup.visible = false
+      for (const b of brumes) {
+        b.actif = false
+        b.group.visible = false
+      }
+      for (const c of chaines) {
+        c.actif = false
+        c.group.visible = false
+      }
+      for (const p of projets) {
+        p.actif = false
+        p.mesh.visible = false
+      }
+      for (const f of fumeeZones) {
+        f.actif = false
+        f.disque.visible = false
+        f.dome.visible = false
+      }
+      slots = []
+      drawSlots()
     },
     /** Ce que le jeu retient de nous, pour l'afficher en direct. */
     etat() {

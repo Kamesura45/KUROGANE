@@ -119,6 +119,29 @@
       <div class="verdict" id="verdict" hidden></div>
     </div>
 
+    <div class="bloc">
+      <div class="titre">Un sort qui coûte, ou qui se déroutine</div>
+      <div class="note" style="margin-top:0; border-top:none; padding-top:0">
+        <b>Un sort ne se voit pas : il se compte.</b> La moitié des « sorts qui bug » ne
+        sont pas des fautes d'effet, ce sont des <b>chutes d'images</b> — un portail en vol
+        qui recalcule sa cible à chaque image, deux sorts qui se marchent dessus. La
+        deuxième moitié est un <b>problème de règle</b> : un rouleau qui part alors que la
+        trêve du départ le refuse, ou deux rouleaux en main dont le cumul ne tient pas.
+        <br /><br />
+        L'émulation vit sur <a class="retour" style="margin:0; padding:0"
+        href="/test-sorts.html">le banc d'essai des sorts</a>, et non ici — parce qu'elle
+        a besoin du <b>vrai jeu</b>, canvas, boucle d'images et CSS compris, et que ce CSS
+        s'applique à toute la page : chargé dans ce diagnostic, il cacherait ce rapport
+        sous un <code>overflow: hidden</code>.
+        <br /><br />
+        Le bouton <b>« Mesurer »</b> de ce banc rejoue les <b>dix sorts</b> un par un en
+        piste figée, mesure ce que chaque image coûte <b>AVEC</b> lui et compare à une
+        image de référence <b>SANS</b>, puis vérifie trois règles au passage : que chaque
+        sort s'applique vraiment, que <b>deux sortes tiennent ensemble</b> (armure +
+        poison), et que la <b>file FIFO</b> des deux slots lance bien le plus ancien.
+      </div>
+    </div>
+
     <div class="note">
       <b>Ce que le banc fait.</b> Il reconstruit la scène du jeu — même caméra, même brume,
       mêmes lumières, la vraie piste — puis la fait tourner à <b>trois configurations</b> :

@@ -91,6 +91,43 @@
         font-family: inherit;
         font-size: 0.72rem;
       }
+
+      /* ————— Le banc de mesure —————
+         Un sort qui coûte cher ne se voit pas : il se compte. Ce panneau
+         rejoue les dix sorts un par un, et compare ce que chaque image coûte
+         AVEC lui à ce qu'elle coûte SANS. C'est la moitié « diagnostic » de
+         cette page — l'autre moitié, c'est de regarder l'effet. */
+      #mesure {
+        position: fixed;
+        z-index: 31;
+        left: 12px;
+        top: 12px;
+        width: min(560px, calc(100vw - 24px));
+        padding: 10px;
+        border-radius: 10px;
+        background: rgba(13, 16, 28, 0.92);
+        border: 1px solid #3d4560;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-size: 0.78rem;
+        color: #9aa4c0;
+        display: none;
+      }
+      #mesure.on { display: block; }
+      #mesure table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+      #mesure th, #mesure td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3d4560; }
+      #mesure th { color: #6b7594; font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; }
+      #mesure td.num { text-align: right; }
+      #mesure tr.mauvais td { color: #e24b3a; }
+      #mesure tr.ok td:last-child { color: #5ef08a; }
+      #mesure .suite { color: #6b7594; padding: 4px 6px 0; line-height: 1.6; }
+      #mesure .entete { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+      #mesure .entete b { color: #f0e8d8; font-weight: 700; }
+      #mesure button {
+        margin-left: auto; padding: 3px 9px; border-radius: 6px; cursor: pointer;
+        border: 1px solid #e24b3a; background: rgba(226, 75, 58, 0.16); color: #f0e8d8;
+        font: inherit; font-size: 0.72rem;
+      }
+      #mesure button:disabled { opacity: 0.4; cursor: default; }
     </style>
   </head>
   <body>
@@ -272,6 +309,203 @@
           `<span class="v">${s.gele ? 'figée' : 'défile'}</span></div>`
       }
 
+      // ————— Le banc de mesure —————
+      /*
+       * Un sort qui coûte cher ne SE VOIT PAS : il se compte. On ne peut pas
+       * dire, à l'œil, que la brume coûte 0,4 ms de plus par image que la
+       * fumée du fumigène — on peut le mesurer.
+       *
+       * ⚠️ Mesure en piste FIGÉE, et c'est voulu : la piste qui défile ajoute
+       * du bruit (un mur qui s'approche, un saut), et le comparatif entre deux
+       * sorts n'a de sens que si tout le reste est identique. Les effets, eux,
+       * continuent d'animer : `gele` fige le monde, pas les minuteurs.
+       */
+      const IMAGES_MESURE = 40
+      let mesuresEnCours = false
+
+      const panneauMesure = document.createElement('div')
+      panneauMesure.id = 'mesure'
+      document.body.append(panneauMesure)
+
+      function dessinerMesure(lignes, etape) {
+        panneauMesure.classList.add('on')
+        panneauMesure.innerHTML =
+          `<div class="entete"><b>Coût des sorts</b>` +
+          `<button id="btnMesurer"${etape ? ' disabled' : ''}>${etape || 'Mesurer'}</button></div>` +
+          (lignes
+            ? `<table><thead><tr><th>Sort</th><th style="text-align:right">ms / image</th>` +
+              `<th style="text-align:right">Sursauts</th><th>Règle</th></tr></thead><tbody>${lignes}</tbody></table>`
+            : '') +
+          `<div class="suite">${etape || 'Piste figée, trêve passée. Chaque ligne compare ce que coûte une image AVEC le sort à ce qu’il coûte SANS.'}</div>`
+        const b = panneauMesure.querySelector('#btnMesurer')
+        if (b) b.addEventListener('click', () => mesurer())
+      }
+
+      /** Une image, chronométrée entre deux rAF. */
+      function uneImage() {
+        return new Promise((r) => {
+          const t0 = performance.now()
+          requestAnimationFrame(() => r(performance.now() - t0))
+        })
+      }
+
+      /** Attends que la trêve du départ soit finie, sinon les sorts partent en fumée. */
+      async function attendreTreve() {
+        for (let i = 0; i < 900; i++) {
+          if ((guichet.etat()?.treve ?? 0) <= 0) return true
+          await uneImage()
+        }
+        return false
+      }
+
+      /*
+       * ⚠️ DEUX pièges, tous deux découverts en mesurant — et ils faussaient
+       * le tableau entier.
+       *
+       * 1. LE MONTEUR NOUS LIMITE À 60 IMAGES/S. Les écarts tombent tous à
+       *    16,67 ms : le navigateur ATTEND la balayage, il ne travaille pas
+       *    plus longtemps. Un sort qui coûte 0,4 ms ne bouge donc RIEN, tant
+       *    qu'il ne fait pas déborder le budget. Chercher une différence sur la
+       *    médiane est stérile — c'est le SURALLOCATION qu'il faut compter.
+       *
+       * 2. UN SORT « SUR SOI » ne passe pas par `subir`. Vent, Grue, Armure,
+       *    Thé et Miroir sont des sorts que l'on LANCE : `subirSort` ne les
+       *    connaît pas et les refuse en silence. On mesurait alors le coût de
+       *    rien du tout, et le banc déclarait « refusé » cinq sorts sur dix —
+       *    le banc avait raison, c'est le banc qui les appelait mal.
+       */
+      async function chronometrer() {
+        for (let i = 0; i < 10; i++) await uneImage()
+        const e = []
+        for (let i = 0; i < IMAGES_MESURE; i++) e.push(await uneImage())
+        const s = [...e].sort((x, y) => x - y)
+        const med = s[s.length >> 1]
+        const p95 = s[Math.min(s.length - 1, Math.floor(s.length * 0.95))]
+        // Un « sursaut » = une image au moins 1,5× plus longue que la médiane.
+        // C'est ça, et non la médiane, que le joueur voit.
+        const seuil = med * 1.5
+        const sursauts = e.filter((v) => v > seuil).length
+        return { med, p95, sursauts }
+      }
+
+      const fmt = (v) => v.toFixed(2)
+
+      /** Est-ce que ce sort est encore en cours juste après son déclenchement ? */
+      function applique(k, s) {
+        if (!s) return false
+        if (k === 'onmyoji') return true // il échange et disparaît : rien à lire
+        if (k === 'kunai') return s.terre === true // la lame a marqué le sol
+        if (k === 'armure') return s.armure > 0
+        if (k === 'miroir') return s.miroir > 0
+        // Les cinq à durée : vent, grue, thé, kusarigama, fumigene, senbon
+        return (s[k] ?? 0) > 0
+      }
+
+      /** Un sort SUR SOI se lance, un sort SUR AUTRUI se subit. */
+      function declencherSort(k) {
+        guichet.donner(k)
+        if (PARCHEMINS[k].cible === 'soi') guichet.lancer()
+        else guichet.subir(k)
+      }
+
+      async function mesurer() {
+        if (mesuresEnCours) return
+        mesuresEnCours = true
+        const lignes = []
+
+        // On repart d'une page blanche : piste figée, rien qui te tombe dessus.
+        fige = true
+        guichet.geler(true)
+        guichet.oublier()
+        dessinerMesure(null, 'Attente de la trêve du départ…')
+        const passe = await attendreTreve()
+        if (!passe) {
+          dessinerMesure(null, '⛔ La trêve du départ ne se termine jamais — lance une course d\'abord.')
+          mesuresEnCours = false
+          return
+        }
+
+        // ——— Le silence : ce que coûte une image quand rien ne se passe ———
+        guichet.oublier()
+        const ref = await chronometrer()
+        lignes.push(
+          `<tr class="ok"><td>— rien (référence)</td><td class="num">${fmt(ref.med)}</td>` +
+            `<td class="num">${ref.sursauts}</td><td>référence</td></tr>`
+        )
+        dessinerMesure(lignes.join(''), `Mesure des sorts…`)
+
+        // ——— Chaque sort ———
+        let refuses = 0
+        for (const k of TIRAGE) {
+          guichet.oublier()
+          declencherSort(k)
+          const m = await chronometrer()
+          const p = PARCHEMINS[k]
+          const ok = applique(k, guichet.etat())
+          if (!ok) refuses++
+          const nomRegle = ok ? (p.cible === 'soi' ? 'lancé' : 'subi') : '⛔ refusé'
+          // Le verdict se joue sur le nombre de sursauts, pas sur la médiane.
+          const sur = m.sursauts - ref.sursauts
+          const verdict = sur > 2 ? `⛔ +${sur} sursauts` : sur > 0 ? `+${sur} sursaut` : 'propre'
+          lignes.push(
+            `<tr class="${sur > 2 || !ok ? 'mauvais' : ''}"><td>${p.icone} ${p.nom}</td>` +
+              `<td class="num">${fmt(m.med)}</td><td class="num">${verdict}</td><td>${nomRegle}</td></tr>`
+          )
+          dessinerMesure(lignes.join(''), `Mesure des sorts… ${TIRAGE.indexOf(k) + 1}/${TIRAGE.length}`)
+          guichet.oublier()
+        }
+
+        // ——— Le cumul : DEUX rouleaux en main, comme en vraie course ———
+        guichet.oublier()
+        guichet.donner('armure', 'senbon')
+        guichet.lancer() // l'armure : c'est un sort SUR SOI
+        guichet.subir('senbon') // le poison : c'est un sort SUR AUTRUI
+        const cum = await chronometrer()
+        const sc = guichet.etat()
+        /*
+         * ⚠️ Deux règles d'un coup. L'armure doit TENIR une charge et le
+         * poison doit tourner EN MÊME TEMPS — si l'un chasse l'autre, le
+         * cumul est cassé, et c'est EXACTEMENT le symptôme décrit : « j'ai un
+         * sort qui bug quand j'en ai deux ».
+         */
+        const cumulOk = (sc?.armure ?? 0) >= 1 && (sc?.senbon ?? 0) > 0
+        const surCum = cum.sursauts - ref.sursauts
+        lignes.push(
+          `<tr class="${cumulOk && surCum <= 2 ? '' : 'mauvais'}"><td>🛡️+☠️ cumul (2 sorts)</td>` +
+            `<td class="num">${fmt(cum.med)}</td><td class="num">${surCum > 0 ? `+${surCum} sursaut` : 'propre'}</td>` +
+            `<td>${
+              cumulOk
+                ? 'les deux tiennent'
+                : `⛔ armure=${sc?.armure} poison=${fmt(sc?.senbon ?? 0)}s`
+            }</td></tr>`
+        )
+
+        // ——— Le FIFO : on lance le plus ancien d'abord ———
+        guichet.oublier()
+        guichet.donner('vent', 'grue')
+        guichet.lancer()
+        const restant = guichet.etat()?.slots?.length ?? -1
+        const fifoOk = restant === 1
+        lignes.push(
+          `<tr class="${fifoOk ? '' : 'mauvais'}"><td>📜 FIFO des 2 slots</td>` +
+            `<td class="num">—</td><td class="num">—</td>` +
+            `<td>${fifoOk ? 'le plus ancien part' : `⛔ il en reste ${restant}`}</td></tr>`
+        )
+
+        guichet.oublier()
+        guichet.geler(fige)
+        dessinerMesure(
+          lignes.join(''),
+          `Référence ${fmt(ref.med)} ms/image, ${ref.sursauts} sursaut(s). ` +
+            `${refuses} sort(s) refusé(s), cumul ${cumulOk ? 'OK' : 'CASSÉ'}, FIFO ${fifoOk ? 'OK' : 'CASSÉ'}. ` +
+            `⚠️ Le moniteur plafonne à 60 images/s : un coût qui ne déborde pas le budget ne se voit pas ici, ` +
+            `il se voit en sursauts.`
+        )
+        mesuresEnCours = false
+      }
+
+      dessinerMesure(null)
+
       // On redonne le sort tenu à chaque nouvelle course : `startRace` vide les
       // slots, et sans ça on repartirait les mains vides sans comprendre.
       // On redonne le sort ET on refige à chaque nouvelle course : `startRace`
@@ -288,6 +522,21 @@
       appliquer()
       guichet.geler(fige)
       suivre()
+
+      /*
+       * `?auto=1` : la course démarre et la mesure s'enchaîne toute seule.
+       *
+       * C'est la porte des navigateurs de test — et la seule façon de vérifier
+       * ce banc sans cliquer à la main. Même idée que `diagnostic.html?auto=1`.
+       */
+      if (new URLSearchParams(location.search).has('auto')) {
+        guichet.demarrer()
+        setTimeout(() => {
+          fige = true
+          guichet.geler(true)
+          void mesurer()
+        }, 500)
+      }
     </script>
   </body>
 </html>

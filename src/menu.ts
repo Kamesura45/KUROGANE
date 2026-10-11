@@ -67,7 +67,13 @@ import {
   MAX_SCORES,
 } from './scores'
 import { PAYS, drapeau, regionsDe, niveauDe } from './pays'
-import { lireClassement, type LigneClassement } from './compte'
+import {
+  lireClassement,
+  compterLesJoueurs,
+  surNombreJoueurs,
+  joueursConnectes,
+  type LigneClassement,
+} from './compte'
 
 /** Les trois lectures du classement, cf. buildScores. */
 type OngletScore = 'mondial' | 'local' | 'recentes'
@@ -426,6 +432,7 @@ boutiqueListe: document.getElementById('boutiqueListe')!,
     mdpCompte: document.getElementById('mdpCompte') as HTMLInputElement,
     btnInscription: document.getElementById('btnInscription')!,
     btnConnexionMail: document.getElementById('btnConnexionMail')!,
+    enLigne: document.getElementById('enLigne')!,
   }
 
   constructor(cb: MenuCallbacks) {
@@ -657,6 +664,26 @@ boutiqueListe: document.getElementById('boutiqueListe')!,
     this.buildOptions()
     this.buildSalon()
     this.applyFighter(this.settings.fighter)
+
+    /*
+     * 👥 Le compteur des connectés.
+     *
+     * On s'abonne UNE fois ici ; c'est `show()` qui ouvre et ferme le robinet.
+     * Le chiffre arrive par le même aller-retour que la santé du serveur — pas
+     * d'appel réseau en plus.
+     *
+     * ⚠️ `joueursConnectes()` au démarrage : sans lui, un serveur qui aurait
+     * déjà répondu AVANT la création du menu laisserait le compteur vide
+     * jusqu'à la prochaine cadence. Et `null` = on ne sait PAS : le compteur
+     * reste alors invisible plutôt que d'afficher un faux `CO:000`.
+     */
+    const majEnLigne = (n: number) => {
+      this.el.enLigne.textContent = `CO:${String(n).padStart(3, '0')}`
+      this.el.enLigne.hidden = false
+    }
+    surNombreJoueurs(majEnLigne)
+    const dejaVu = joueursConnectes()
+    if (dejaVu !== null) majEnLigne(dejaVu)
     // 🌀 L'enseigne n'est plus lancée ici : cf. showTitle().
   }
 
@@ -1079,6 +1106,12 @@ boutiqueListe: document.getElementById('boutiqueListe')!,
     // L'aperçu 3D ne tourne que quand on le regarde : inutile de faire chauffer
     // le téléphone pour un canvas caché.
     if (name === 'roster') this.resizePreview()
+    /*
+     * 👥 Le compteur ne sonde que depuis l'écran qui l'affiche. Partout ailleurs
+     * personne ne le regarde, et une requête toutes les trente secondes
+     * n'aurait d'autre effet que de réveiller le serveur pour rien.
+     */
+    compterLesJoueurs(name === 'title')
   }
 
   /**
@@ -1174,6 +1207,8 @@ boutiqueListe: document.getElementById('boutiqueListe')!,
     // Une course démarre : le 2ᵉ contexte WebGL passe la main. Il ne dessine
     // RIEN pendant la course, et pourtant il reste ouvert toute la session.
     this.libererPreview()
+    // 👥 Plus rien à l'écran : le compteur cesse de sonder.
+    compterLesJoueurs(false)
   }
 
   /**

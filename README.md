@@ -1468,7 +1468,113 @@ plus les 568 kB de three.js pour tout le monde.
 sous Chrome headless sans `panne-rendu` — les 14 écrans et le `#boutiqueCache`
 y sont toujours présents.
 
+## 👥 `CO:000`, et le coût réel d'un sort
+
+Trois demandes d'un coup : un compteur de connectés dans le coin, des effets de
+sorts optimisés, et une émulation des sorts dans le diagnostic. Elles se
+croisent — le compteur vient du serveur, le reste du rendu.
+
+### Le compteur du menu
+
+Dans le coin haut-droit de l'écran-titre, en tout petit, un chiffre :
+**`CO:014`**. Pas de légende, pas d'explication, pas de pastille de couleur.
+C'est le nombre de joueurs connectés, **en temps réel**.
+
+Le serveur le renvoie avec `/sante` (champ `joueurs`), tenu par **Colyseus
+lui-même** — `matchMaker.stats.local.ccu`, incrémenté à chaque `onJoin` et
+décrémenté à chaque `onLeave`, sur **toutes** les salons, lobby compris. Un
+compteur tenu à la main dans nos deux rooms aurait raté la salle d'attente, et
+un déconnecté sans `onLeave` l'aurait laissé gonfler jusqu'au redémarrage.
+
+Côté client, la sonde tourne **toutes les 30 s, et seulement pendant que
+l'écran-titre est à l'écran**. Ailleurs personne ne le regarde, et une requête
+en rafale n'aurait d'autre effet que de réveiller Railway pour rien. Un onglet
+en arrière-plan ne sonde pas non plus — c'est ce qui empêche un onglet oublié
+toute la nuit de maintenir le serveur debout.
+
+> ⚠️ Le compteur est **invisible tant que le serveur n'a rien répondu**. Un
+> `CO:000` affiché dès le premier rendu mentirait trois secondes à chaque
+> lancement, et un joueur qui se connecte au même instant croirait le jeu vide.
+> `joueursConnectes()` renvoie donc `null` tant qu'on ne sait pas — et le
+> serveur de production, **qui n'a pas encore été redéployé**, ne renvoie pas
+> encore le champ : le compteur reste discret plutôt que de mentir.
+
+### Les effets : cinq allocations par image, supprimées
+
+Le portail en vol devait savoir, **chaque image**, qui il croisait dans sa
+ligne. On faisait `filter().sort()[0]` — et `[...rivals.values()]` juste
+après. Soit **cinq tableaux neufs et deux tris par image**, pour ne retenir que
+le plus petit des distances. À 60 images/s : trois cents objets jetés à la
+poubelle par seconde pendant que la boule file. La visée des bots faisait de
+même, avec `[...botsEnCourse(), null].find(...)`.
+
+Un **seul tour de boucle** par famille, avec un minimum tenu à la main, donne
+exactement le même résultat — le minimum est indépendant de l'ordre.
+
+| | avant | après |
+|---|---|---|
+| portail (collision) | 452 ns/image | **284 ns/image** (×1,6) |
+| visée d'un bot | 394 ns/image | **172 ns/image** (×2,3) |
+| tableaux jetés, portail en vol | 5 par image | **0** |
+
+*(Micro-benchmark isolé, 500 000 itérations, 10 bots dont 9 actifs et 9 rivaux.
+Confirmé sur trois exécutions : portail 323-536 → 178-331 ns, visée 340-404 →
+61-65 ns.)*
+
+Le `null` en bout de la liste de visée ne servait à rien : sa valeur de retour
+est la même que celle de l'absence de résultat, et le code juste en dessous
+traite déjà les deux de la façon identique.
+
+### Un sort qui bug : on le compte, on ne le devine pas
+
+« Un sort qui bug ou qu'on cumule », ça se vérifie — et ça ne se voyait pas.
+`test-sorts.html` gagne un bouton **« Mesurer »** qui rejoue les **dix sorts**
+un par un en piste figée, mesure ce que chaque image coûte **AVEC** lui, et
+compare à une image de référence **SANS**. Puis il vérifie trois règles :
+
+| vérifié | verdict observé |
+|---|---|
+| chaque sort s'applique vraiment | **10/10**, aucun refus |
+| **deux sortes tiennent ensemble** (🛡️ + ☠️) | **les deux tiennent** |
+| la **file FIFO** des deux slots | **le plus ancien part** |
+
+Deux pièges, tous deux découverts *en mesurant* — le banc était faux avant :
+
+> 1. **Le moniteur plafonne à 60 images/s.** Tous les écarts tombaient à
+>    16,67 ms : le navigateur **attend** la balayage, il ne travaille pas plus
+>    longtemps. Un sort qui coûte 0,4 ms ne bouge donc rien tant qu'il ne fait
+>    pas déborder le budget. Chercher une différence sur la médiane est stérile
+>    — le banc compte désormais les **sursauts** (images ≥ 1,5× la médiane),
+>    c'est ça, et non la médiane, que le joueur voit.
+> 2. **Un sort « sur soi » ne passe pas par `subir`.** Vent, Grue, Armure, Thé
+>    et Miroir sont des sorts que l'on **lance** : `subirSort` ne les connaît
+>    pas et les refuse en silence. Le banc déclarait donc « refusé » cinq sorts
+>    sur dix — et mesurait le coût de rien du tout. Désormais : `cible ===
+>    'soi'` → `lancer()`, sinon → `subir()`.
+
+Le guichet de test gagne deux méthodes : `donner(...)` est devenu
+**variadique** (c'est ce qui permet de mettre deux rouleaux en main, la règle
+normale du jeu, et donc de tester le cumul), et **`oublier()`** remet tous les
+effets à zéro d'un coup. Sans ce dernier, le nettoyage passait par le Thé — qui
+est lui-même un effet de trois secondes : chaque ligne du tableau aurait
+traîné le rouleau d'avant, et on aurait mesuré le nettoyage à la place du sort
+suivant. `demarrer()` ouvre enfin la porte aux bancs automatiques, et
+`test-sorts.html?auto=1` enchaîne la course et la mesure sans clic.
+
+**Où vit l'émulation ?** Sur `test-sorts.html`, et non dans `diagnostic.html`
+— qui y renvoie pourtant. Le diagnostic reconstruit sa propre scène sans le
+jeu ; l'émulation a besoin du **vrai** jeu, canvas et boucle compris, et
+`main.ts` importe `style.css` en global : chargé dans le diagnostic, ce CSS
+poserait un `overflow: hidden` sur `<body>` et cacherait le rapport sous la
+première ligne. La page de banc EST le diagnostic des sorts.
+
+Vérifié : `tsc --noEmit` vert, build vert, **13 bancs au vert**, et le banc de
+mesure tourne sous Chrome (protocole DevTools — le headless `--dump-dom` ne
+service pas `requestAnimationFrame`, le DOM y reste figé sur la première image)
+sans **une seule erreur console**.
+
 ## 🧹 Le ménage : six exports morts, et deux qui étaient des pièges
+
 
 
 `tsc --noUnusedLocals --noUnusedParameters` ne signalait **rien**. Le code mort

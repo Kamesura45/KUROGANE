@@ -165,6 +165,80 @@ let googleDispo = false
  */
 let serveurSaine = true
 let serveurRaison = ''
+
+/*
+ * 👥 Combien de joueurs sont en ligne, à la seconde où on le demande.
+ *
+ * Le serveur le renvoie avec `/sante` (champ `joueurs`, tenu par Colyseus lui-
+ * même). On le range ICI et non dans menu.ts : le compteur a besoin du même
+ * aller-retour que la santé, et les deux doivent voyager ensemble — une
+ * seconde requête pour un entier serait une politesse de trop.
+ *
+ * ⚠️ `null` tant qu'on n'a rien reçu. Ce n'est pas « personne ne joue », c'est
+ * « on ne sait pas ». La distinction est TOUT le sujet : `CO:000` affiché dès
+ * le premier rendu mentirait trois secondes durant à chaque lancement, et un
+ * joueur qui se connecte au même moment croirait le jeu vide.
+ */
+let joueursEnLigne: number | null = null
+export function joueursConnectes() {
+  return joueursEnLigne
+}
+
+/** Qui veut être prévenu quand ce nombre change. Ne se déclenche qu'après la 1ʳᵉ réponse. */
+const abonnesJoueurs: ((n: number) => void)[] = []
+export function surNombreJoueurs(cb: (n: number) => void) {
+  abonnesJoueurs.push(cb)
+}
+function prevenirLesJoueurs() {
+  if (joueursEnLigne === null) return
+  for (const cb of abonnesJoueurs) {
+    try {
+      cb(joueursEnLigne)
+    } catch {
+      // Un abonné qui crache n'empêche pas les autres d'être prévenus.
+    }
+  }
+}
+
+/*
+ * ————— Le compteur du menu —————
+ *
+ * On ne sonde QUE quand le menu principal est à l'écran. Ailleurs, personne ne
+ * regarde, et une requête toutes les trente secondes n'aurait d'autre effet
+ * que de réveiller Railway.
+ *
+ * Trente secondes, et non deux : ce sont des personnes, pas un chrono. Le
+ * chiffre rajeunit assez pour qu'on le voie bouger quand un ami se connecte,
+ * assez lentement pour ne pas faire du serveur une machine à garder éveillée.
+ */
+const CADENCE_MENU = 30_000
+let cadenceMenu: ReturnType<typeof setInterval> | null = null
+
+/**
+ * Ouvre ou ferme le robinet.
+ *
+ * ⚠️ On ne touche PAS à la veille de `/sante` : si le serveur est endormi,
+ * cette cadence ne doit pas le réveiller pour un chiffre que personne ne lira.
+ * Le premier aller-retour de `connecter()` donne déjà le chiffre du jour ; la
+ * cadence ne fait que le tenir à jour quand le serveur répond déjà.
+ */
+export function compterLesJoueurs(ouvert: boolean) {
+  if (ouvert) {
+    if (cadenceMenu) return
+    void sonderServeur()
+    cadenceMenu = setInterval(() => {
+      // Un onglet en arrière-plan ne regarde rien : on ferme le robinet dès
+      // que la page disparaît. C'est ce qui empêche un onglet oublié toute la
+      // nuit de maintenir le serveur debout.
+      if (typeof document !== 'undefined' && document.hidden) return
+      void sonderServeur()
+    }, CADENCE_MENU)
+  } else if (cadenceMenu) {
+    clearInterval(cadenceMenu)
+    cadenceMenu = null
+  }
+}
+
 export function googleActif() {
   return googleDispo
 }
@@ -240,6 +314,18 @@ export async function sonderServeur(): Promise<void> {
     // `saine` absent = serveur d'une version plus ancienne : on ne casse rien.
     serveurSaine = d?.saine !== false
     serveurRaison = typeof d?.raison === 'string' ? d.raison : ''
+    /*
+     * Le champ peut manquer (serveur d'avant l'addition, ou proxy qui a
+     * ralenti). On garde alors le nombre précédent plutôt que de remettre à
+     * zéro : un chiffre figé est moins faux qu'un `CO:000` qui clignote.
+     */
+    if (typeof d?.joueurs === 'number') {
+      const vu = Math.max(0, Math.floor(d.joueurs))
+      if (vu !== joueursEnLigne) {
+        joueursEnLigne = vu
+        prevenirLesJoueurs()
+      }
+    }
   } catch {
     googleDispo = false
     serveurSaine = false

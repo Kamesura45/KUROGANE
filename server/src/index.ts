@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { Server, LobbyRoom, WebSocketTransport } from 'colyseus'
+import { Server, LobbyRoom, WebSocketTransport, matchMaker } from 'colyseus'
 import { toNodeHandler } from 'better-auth/node'
 import { RaceRoom } from './RaceRoom.js'
 import { auth, GOOGLE_DISPO, BASE_URL, migreAuth } from './auth.js'
@@ -739,6 +739,21 @@ gameServer.listen(port).then(() => {
           raison: baseRaison || undefined,
           comptes: authHandler !== null,
           google: GOOGLE_DISPO,
+          /*
+           * 👥 Combien sont-ils, là, tout de suite.
+           *
+           * `matchMaker.stats.local.ccu` n'est pas le nôtre : c'est Colyseus
+           * qui l'incrémente à chaque `onJoin` et le décrémente à chaque
+           * `onLeave`, sur TOUTES les salons — lobby compris. Un compteur tenu
+           * à la main dans nos deux rooms aurait raté la salle d'attente, et un
+           * joueur déconnecté sans `onLeave` l'aurait laissé gonfler jusqu'au
+           * redémarrage.
+           *
+           * ⚠️ Cet entier est la SEULE raison pour laquelle le menu affiche
+           * quelque chose. Un serveur qui ne le renvoie pas laisse le client à
+           * zéro — jamais à une fausse valeur.
+           */
+          joueurs: matchMaker.stats.local.ccu,
         },
         req
       )

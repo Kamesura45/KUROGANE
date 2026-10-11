@@ -656,6 +656,29 @@ html.qualite-basse .tutobox {
   display: none;
 }
 
+/*
+ * 👥 Le compteur des connectés, en petit, dans le coin.
+ *
+ * Rien d'autre : pas de légende, pas de pastille, pas de couleur d'état. Un
+ * chiffre qu'on glisse dans le coin et qu'on oublie — comme le nombre de
+ * joueurs sur une borne d'arcade.
+ *
+ * `pointer-events: none` parce qu'il est posé AU-DESSUS des boutons du coin
+ * haut-droit : sans ça, il avalerait leur clic.
+ */
+#enLigne {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  font: 600 11px/1 ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
+  letter-spacing: 0.16em;
+  /* Assez pâle pour qu'on ne le lise qu'en cherchant. */
+  color: rgba(255, 255, 255, 0.32);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 /* ————————————————————————————————————————————————————————————
    🌀 L'ENSEIGNE — le titre est PEINT, pas affiché
    ————————————————————————————————————————————————————————————

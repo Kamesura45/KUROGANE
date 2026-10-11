@@ -203,6 +203,16 @@
         justement lui éviter.
       -->
       <section id="scr-title" class="screen hidden">
+        <!-- 👥 Combien de joueurs sont en ligne, tout de suite.
+             Un compteur, rien de plus : pas de légende, pas d'explication. Il
+             est en `position: fixed` et non `absolute` pour deux raisons — il
+             se cale sur le coin de la fenêtre plutôt que sur l'écran de 430 px,
+             et il disparaît DU COUP que `#scr-title` passe en `display: none`
+             (un ancêtre masqué masque ses descendants, même en fixed).
+             Masqué tant que le serveur n'a rien dit : `CO:000` signifierait
+             « personne ne joue » alors qu'on ne sait tout simplement rien. -->
+        <span id="enLigne" hidden>CO:000</span>
+
         <!-- ————— L'enseigne : shuriken, encre, pinceau —————
              Le titre n'est pas écrit, il est PEINT à l'ouverture. Tout est
              piloté par la classe `joue` posée par menu.ts : sans elle, rien ne
