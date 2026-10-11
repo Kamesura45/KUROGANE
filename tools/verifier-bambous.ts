@@ -33,7 +33,7 @@
  *   node tools/verifier-bambous.ts
  */
 import * as THREE from 'three'
-import { BIOMES, setDensiteDecor, densiteCourante } from '../src/biomes.ts'
+import { BAMBOUS, setDensiteDecor, densiteCourante } from '../src/biomes.ts'
 import { mulberry32 } from '../src/track.ts'
 import { installerOiseaux, majOiseaux } from '../src/oiseaux.ts'
 import { NIVEAUX, ORDRE_QUALITE } from '../src/settings.ts'
@@ -44,11 +44,15 @@ function verifier(titre: string, ok: boolean, detail = '') {
   console.log(`  ${ok ? 'ok  ' : 'ECHEC'} ${titre}${detail ? '  → ' + detail : ''}`)
 }
 
-const bambous = BIOMES.find((b) => b.kanji === '竹')
-if (!bambous) {
-  console.log('ECHEC : la bambouseraie n est plus dans la course.')
-  process.exit(1)
-}
+/*
+ * ⚠️ CE BANC NE DEMANDE PLUS SI LA BAMBOUSERAIE EST DANS LA COURSE.
+ *
+ * Elle ne l'est plus, et ce n'est pas un échec : elle est retirée de `BIOMES`
+ * mais EXPORTÉE, donc toujours compilée, toujours typée, toujours mesurable.
+ * Le banc la prend à la source. Le jour où elle revient, un nom remonte dans
+ * `BIOMES` — et rien ici n'aura bougé.
+ */
+const bambous = BAMBOUS
 
 const GRAINES = Array.from({ length: 24 }, (_, i) => 101 + i * 977)
 const BOX = new THREE.Box3()
@@ -62,7 +66,7 @@ type Mesure = {
 }
 
 function mesurer(graine: number): Mesure {
-  const groupe = bambous!.fabriqueDecor(mulberry32(graine), 1)
+  const groupe = bambous.fabriqueDecor(mulberry32(graine), 1)
   let portee = 0
   let degagement = Infinity
   let hauteur = 0

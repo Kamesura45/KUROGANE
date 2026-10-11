@@ -342,11 +342,11 @@ console.log('\n————— 🗺️ Les decors sont tires au sort ———�
    * ⚠️ LE NOM EST TIRÉ DE LA TABLE, JAMAIS ÉCRIT ICI.
    *
    * Ce test vérifie `s[0] === 0` — le premier créneau porte le PREMIER biome.
-   * Il disait « le village en flammes » parce que le village occupait la
-   * première place ; la bambouseraie revenue en tête, l'étiquette serait devenue
-   * fausse alors que la règle, elle, tient toujours. Un test qui ment sur ce
-   * qu'il mesure est pire que pas de test : on le lit, on se fie, et on corrige
-   * le code alors que c'est le test qui était périmé.
+   * Il disait « le village en flammes » parce que le village occupe la
+   * première place ; un nom écrit en dur ferait mentir l'étiquette au premier
+   * réordonnancement de `BIOMES`, alors que la règle, elle, tient toujours. Un
+   * test qui ment sur ce qu'il mesure est pire que pas de test : on le lit, on
+   * se fie, et on corrige le code alors que c'est le test qui était périmé.
    */
   ok(
     suites.every((s) => s[0] === 0),

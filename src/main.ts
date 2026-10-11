@@ -5542,11 +5542,11 @@ function tick(now?: number) {
    *
    * ⚠️ Hors course, `biomeIci` vaut `null` — donc pas d'oiseaux dans le ciel du
    * titre. C'est le comportement qui a été écrit, et il est discutable : hors
-   * course, le décor EST la bambouseraie (`indexBiome` retombe sur le premier
-   * biome, et la bambouseraie est revenue en tête), alors qu'on n'y verrait pas
-   * un oiseau. Un décor qui se fige au moment où l'on quitte la course se lit
-   * comme un arrêt de la machine ; on fait donc comme pour le son : le biome du
-   * DÉCOR, pas celui de la course.
+   * course, le biome du DÉCOR est le premier de la liste (`indexBiome` retombe
+   * sur `BIOMES[0]` — aujourd'hui le village en flammes), et l'on n'y verrait
+   * pas un oiseau. Un décor qui se fige au moment où l'on quitte la course se
+   * lit comme un arrêt de la machine ; on fait donc comme pour le son : le biome
+   * du DÉCOR, pas celui de la course.
    */
   const oiseauxIci = (enCourse ? biomeIci : BIOMES[track.biomeA(-1)])?.ambiance === 'oiseaux'
   oiseauxAmbiance(biomeIci?.ambiance === 'oiseaux' ? 1 : 0, dt)

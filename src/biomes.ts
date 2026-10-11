@@ -8,13 +8,15 @@ import type { Kind } from './track'
  *
  * La fiche de jeu décrit la course comme « une traversée des forêts de bambous,
  * villages en flammes, ponts au clair de lune et flancs enneigés du Fuji ».
- * Ce fichier en fait une réalité : la piste change de peau quatre fois.
+ * Ce fichier en fait une réalité — quatre biomes ÉCRITS, dont trois en course.
+ * La bambouseraie 竹 est retirée de la liste, et le motif de ce retrait est
+ * écrit au bas du fichier, à côté de `BIOMES`.
  *
- * Pourquoi ça compte au-delà du joli : sur 1 920 m de couloir uniforme, on perd
- * la notion d'avancement. Le chrono dit qu'on progresse, l'œil dit qu'on fait du
- * surplace. Quatre décors, c'est quatre repères — « je suis dans les flammes,
- * donc à la moitié » — et un final qui EXPLOSE en blanc après trois biomes
- * sombres. La lisibilité de la course passe par là.
+ * Pourquoi ça compte au-delà du joli : sur près de deux kilomètres de couloir
+ * uniforme, on perd la notion d'avancement. Le chrono dit qu'on progresse,
+ * l'œil dit qu'on fait du surplace. Trois décors en course, c'est trois
+ * repères — « je suis dans les flammes, donc au tiers » — et un final qui
+ * EXPLOSE en blanc. La lisibilité de la course passe par là.
  *
  * ⚠️ Les frontières sont des FRACTIONS, pas des mètres : la longueur de course
  * peut bouger (menu, mode entraînement), le découpage doit suivre tout seul.
@@ -1023,7 +1025,22 @@ export function densiteCourante() {
   return densiteDecor
 }
 
-const BAMBOUS: Biome = {
+/**
+ * La bambouseraie 竹 — ÉCRITE, mais hors course (cf. `BIOMES`, plus bas).
+ *
+ * ⚠️ ELLE EST EXPORTÉE, ET C'EST SA SEULE RAISON D'ÊTRE ICI.
+ *
+ * Retirée de `BIOMES`, elle ne serait plus tirée par rien dans le jeu. Sans
+ * cette exportation, elle serait une constante orpheline : `noUnusedLocals`
+ * ferait échouer le build, et l'unique recours serait de la commenter — donc
+ * de la laisser pourrir hors compilation jusqu'au jour où il faudrait la
+ * réécrire entièrement.
+ *
+ * Exportée, elle reste TYPÉE, vérifiée à chaque build, et `npm run bambous:test`
+ * la mesure toujours, où qu'elle soit. Le jour où elle revient, un nom remonte
+ * dans `BIOMES`, et rien d'autre n'a bougé.
+ */
+export const BAMBOUS: Biome = {
   nom: 'Forêt de bambous',
   kanji: '竹',
   brume: 0x1c2e24,
@@ -3354,26 +3371,27 @@ const FUJI: Biome = {
 /**
  * Dans l'ordre de la course.
  *
- * ⚠️ ————— LE PREMIER BIOME OUVRE LA COURSE, ET IL EST DONC LE MENU —————
+ * ⚠️ ————— LE PREMIER BIOME OUVRE LA COURSE —————
  *
  * `BIOMES[0]` n'est pas une fissure dans le découpage, c'est une convention
  * dont trois choses dépendent, et il ne faut pas le déplacer à la légère :
  *
  *  · `indexBiome` partage la course en `BIOMES.length` fractions. Les
  *    frontières sont donc des FRACTIONS, pas des mètres : rallonger la course
- *    rééquilibre les quatre parts tout seul.
+ *    rééquilibre les parts tout seul.
  *
  *  · Hors course, `distance` vaut `-1` et l'ambiance retombe sur ce premier
- *    biome. Le menu est donc la bambouseraie — et il doit l'être : c'est le
- *    décor le plus calme des quatre, et l'on y attend.
+ *    biome — donc sur le village en flammes. Cela ne se voit plus : le menu
+ *    ne montre pas la scène, il montre un fond de couleur (`backToMenu`).
  *
  *  · En course sans fin, le créneau 0 est ce même biome (`ordreSlot`). Les
- *    trois autres défilent ensuite dans un ordre tiré au sort.
+ *    deux autres défilent ensuite dans un ordre tiré au sort.
  *
- * ————— ⚠️ LE PROPRE BIOME RETIRÉ DE LA COURSE —————
+ * ————— ⚠️ LA FORÊT DE BAMBOUS EST RETIRÉE DE LA COURSE —————
  *
- * La bambouseraie 竹 a vécu ici une saison, retirée de `BIOMES` pendant qu'on
- * lui cherchait un problème. Elle est revenue, et ce qu'elle a appris est resté.
+ * Deuxième retrait. Elle a vécu ici une saison, revenue, et ce qu'elle avait
+ * appris est resté — la lisière, les touffes, ses volées d'oiseaux : rien de
+ * tout cela n'existe ailleurs que dans ce fichier.
  *
  * La règle qu'elle a laissée, et qui vaut pour le prochain :
  *
@@ -3383,11 +3401,21 @@ const FUJI: Biome = {
  * > dans six mois du code qui ne compile plus — un biome qu'on croyait « en
  * > pause » et qu'il faudrait en fait réécrire.
  *
- * Concrètement : on le laisse dans ce fichier, et on le retire de la SEULE
- * liste qui le fait exister en course — celle-ci. Il n'y a pas de seconde liste
- * à tenir, et c'est pour ça qu'il n'y en a pas.
+ * Concrètement : elle reste dans ce fichier, EXPORTÉE (`export const BAMBOUS`),
+ * et on la retire de la SEULE liste qui la fait exister en course — celle-ci.
+ * `npm run bambous:test` l'importe directement au lieu de la chercher dans la
+ * course : il n'y a pas de seconde liste à tenir, et c'est pour ça qu'il n'y en
+ * a pas.
+ *
+ * ————— Ce que ce retrait change —————
+ *
+ *   · la course commence au village en flammes, en TIERS au lieu de quarts ;
+ *   · les 🐦 oiseaux ne se font plus voir ni entendre — la bambouseraie était
+ *     le seul biome à porter `ambiance: 'oiseaux'` ;
+ *   · ses deux radeaux (le plein et celui sur pilotis) ne se croisent plus en
+ *     piste. Les trois autres biomes ont les leurs, le tunnel existe toujours.
  */
-export const BIOMES: readonly Biome[] = [BAMBOUS, VILLAGE, PONT, FUJI]
+export const BIOMES: readonly Biome[] = [/* BAMBOUS, */ VILLAGE, PONT, FUJI]
 
 /** L'ambiance à un instant donné : deux biomes et le fondu entre eux. */
 export interface Ambiance {

@@ -226,6 +226,11 @@ node --import ./tools/resolveur-ts.mjs tools/mesurer-scene.ts tous
 
 ## 🎋 Les plateformes arrêtent — et la bambouseraie en a DEUX
 
+> ⚠️ **HORS COURSE.** La bambouseraie 竹 a été retirée de `BIOMES` : ce qui suit
+> décrit un décor qui n'est plus tiré par rien en course. Il reste compilé,
+> typé, et son banc le mesure toujours — cf. `## 🎋 La bambouseraie quitte la
+> course`.
+
 Une plateforme **pleine** arrête le corps *et* les sorts. La bambouseraie, elle,
 bâtit deux radeaux — et c'est la **rampe** qui les sépare :
 
@@ -3014,42 +3019,48 @@ d'asset — zéro octet à télécharger. Trois détails qui font qu'elle vit :
 ⚠️ **Six positions, et chacune pilote DEUX leviers — plus les pixels.**
 
 C'était le défaut du réglage à deux positions : il ne jouait que sur le nombre
-de pixels, ce qui est le plus gros coût sur mobile… et le seul que la bambouseraie
-**ne paie pas**. La forêt coûte en **appels de dessin** (deux par massif, une
-vingtaine de massifs dans le champ) et en **triangles**. Un joueur qui divisait
-la densité d'écran par deux gardait ses 148 maillages visibles : il ne gagnait
-rien.
+de pixels, ce qui est le plus gros coût sur mobile… et le seul que la forêt de
+bambous **ne paie pas**. Elle coûte en **appels de dessin** (deux par massif,
+une vingtaine de massifs dans le champ) et en **triangles**. Un joueur qui
+divisait la densité d'écran par deux gardait ses maillages visibles : il ne
+gagnait rien.
 
 | Réglage | Pixels | Écartement | Matière | **Pic d'appels** |
 |---|---|---|---|---|
-| **Auto** | selon l'appareil | → *Moyen* (mobile) / *Maxi* (ordinateur) | | 138 / 148 |
-| **Ultra** | ×3 | ×0,85 | ×1,25 | **160** |
-| **Maxi** | ×2 | ×1 | ×1,05 | 148 |
-| **Moyen** | ×1,5 | ×1,15 | ×0,9 | 138 |
-| **Faible** | ×1,25 | ×1,35 | ×0,72 | 129 |
-| **Fluide** | ×1 | ×1,7 | ×0,5 | **118** |
+| **Auto** | selon l'appareil | → *Moyen* (mobile) / *Maxi* (ordinateur) | | 116 / 120 |
+| **Ultra** | ×3 | ×0,85 | ×1,25 | **124** |
+| **Maxi** | ×2 | ×1 | ×1,05 | 120 |
+| **Moyen** | ×1,5 | ×1,15 | ×0,9 | 116 |
+| **Faible** | ×1,25 | ×1,35 | ×0,72 | 111 |
+| **Fluide** | ×1 | ×1,7 | ×0,5 | **106** |
 
-*Mesuré sur la même course et la même graine : `node tools/mesurer-scene.ts tous`.*
+*Mesuré sur la même course et la même graine : `node tools/mesurer-scene.ts
+tous`. ⚠️ Ces chiffres sont ceux de la course à **TROIS biomes** : la
+bambouseraie 竹, qui était la plus coûteuse en appels, a été retirée de la
+liste (cf. plus bas, `## 🎋`). Avec elle, les pics montaient de 118 à 160.*
 
 ⚠️ **LE LEVIER QUI MARCHE EST L'ÉCARTEMENT, PAS LA MATIÈRE.** Un massif visible
 = deux appels de dessin, et le nombre de massifs dans le champ est inversement
-proportionnel à leur écartement. C'est donc lui qui baisse le pic — de 148 à 118,
-soit **un cinquième du budget de dessin en moins**. Les triangles, eux, ne bougent
-que de **−15 %** entre Ultra et Fluide : le gros du décor (le rideau de fond, les
-tiges ornées) est structurel, et le couper se verrait. Le réglage qui aide un
-téléphone est donc « Fluide », pas « Faible ».
+proportionnel à leur écartement. C'est donc lui qui baisse le pic — de 120 à
+106, soit **un huitième du budget de dessin en moins**. Les triangles, eux, ne
+suivent pas : le gros du décor (le rideau de fond, les tiges ornées) est
+structurel, et le couper se verrait. Le réglage qui aide un téléphone est donc
+« Fluide », pas « Faible ».
 
-⚠️ **« ULTRA » EST LE SEUL CRAN AU-DESSUS DU PLAFOND DE CONFORT (~150).** Il
-passe à 160 appels : c'est le prix demandé, et il n'a de sens que sur un appareil
-qui tiendrait 60 images à ×2. **« Fluide » est le cran de la sécurité** — c'est
-lui qu'on propose à un téléphone qui saccade, et son nom dit « ça passe » avant
-de dire « c'est moins beau ».
+⚠️ **AUCUN CRAN NE FRANCHIT MAINTENANT LE PLAFOND DE CONFORT (~150).** Quand la
+forêt de bambous était en course, « Ultra » culminait à **160** appels, seul au
+dessus du plafond ; il plafonne aujourd'hui à **124**. « Ultra » reste le cran
+le plus exigeant, et il n'a de sens que sur un appareil qui tiendrait 60 images
+à ×2. **« Fluide » est le cran de la sécurité** — c'est lui qu'on propose à un
+téléphone qui saccade, et son nom dit « ça passe » avant de dire « c'est moins
+beau ».
 
 ⚠️ **LA DENSITÉ A UN PLANCHER DE 55 TIGES À LA LISIÈRE ET 90 LAMES À LA
 CANOPÉE.** On pourrait, à « Fluide », se passer de lisière : les 24 m du rideau
 suffiraient à une pixélisation grossière. Le vide de 24 à 44 m ne se voit pas
 « moins » en moins de pixels — il se voit moins, c'est tout. `npm run bambous:test`
-garde ces deux planchers.
+garde ces deux planchers — **sur le biome, même hors course** : c'est lui qui
+garantit que la forêt reviendra telle qu'elle est partie.
 
 ⚠️ **CHANGER DE CRAN PURGE LE POOL DE DÉCOR.** Un massif est bâti une fois puis
 recyclé sur toute la course : sans la purge, le nouveau réglage ne s'appliquerait
@@ -3995,8 +4006,8 @@ insupportable au bout de trente.
 - [x] 🎌 Le menu : écran-titre, choix du guerrier, options (pseudo, qualité), aide
 - [x] 🥷 Le roster en entraînement : Hana, Oni-Maru, Tamae, et le boss Kurokumo
 - [x] 📜 Les 10 parchemins de la fiche, et des rivaux qui les jouent aussi
-- [x] 🎋 La bambouseraie 竹 remise en course, avec sa lisière, ses cinq
-      caractères de massif et ses oiseaux
+- [x] 🎋 La bambouseraie 竹 écrite entièrement — puis retirée de la course,
+      vivante et mesurée (cf. `## 🎋 La bambouseraie quitte la course`)
 - [x] 🎚️ Six crans de qualité, qui pilotent les pixels **et** le décor
 - [ ] 🔊 **Le son** — il n'y en a aucun pour l'instant. À faire avant d'ajouter
       l'option « Son » au menu : un interrupteur qui ne coupe rien serait pire
@@ -4011,6 +4022,49 @@ insupportable au bout de trente.
 > ([DEPLOY.md](DEPLOY.md)), et Kurokumo est `pickable: true`. Les garder
 > cochées ici serait une liste qui ment — c'est-à-dire une liste à laquelle on
 > ne se fie plus. Ce qui reste est en dessous.
+
+## 🎋 La bambouseraie quitte la course, une deuxième fois
+
+**La forêt de bambous 竹 n'est plus dans la course.** Elle est retirée de la
+SEULE liste qui la fait exister — `BIOMES`, dans `src/biomes.ts` :
+
+```ts
+export const BIOMES: readonly Biome[] = [/* BAMBOUS, */ VILLAGE, PONT, FUJI]
+```
+
+⚠️ **ELLE EST RETIRÉE, PAS SUPPRIMÉE — ET LA DIFFÉRENCE TIENT À UN SEUL MOT :
+`export`.** Sept cents lignes de texte mort cesseraient d'être compilées : elles
+ne suivraient plus les changements de l'interface `Biome`, et l'on retrouverait
+dans six mois un biome qu'on croyait « en pause » et qu'il faudrait en fait
+réécrire. `export const BAMBOUS` la garde VIVANTE : typée, vérifiée à chaque
+build, et `npm run bambous:test` la mesure toujours — le banc l'importe
+désormais directement au lieu de la chercher dans la course. Il n'y a pas de
+seconde liste (`BIOMES_EN_PAUSE`) à tenir, et c'est pour ça qu'il n'y en a pas.
+
+**Ce que le retrait change, mesuré** (`node tools/mesurer-scene.ts tous`, même
+graine, même course) :
+
+| | avec la forêt | sans elle |
+|---|---|---|
+| Pic d'appels, **Ultra** | **160** | **124** |
+| Pic d'appels, **Maxi** | 148 | 120 |
+| Pic d'appels, **Moyen** | 138 | 116 |
+| Pic d'appels, **Faible** | 129 | 111 |
+| Pic d'appels, **Fluide** | 118 | 106 |
+| Biomes en course | 4, en quarts | **3, en tiers** |
+
+Trois conséquences, dont une visible :
+
+- la course **commence au village en flammes** — elle s'ouvrait sur l'aube verte ;
+- les 🐦 **oiseaux disparaissent**, du son et de l'image : la bambouseraie était
+  le seul biome à porter `ambiance: 'oiseaux'` ;
+- ses **deux radeaux** (le plein, et celui sur pilotis) ne se croisent plus en
+  piste. Les trois autres biomes ont les leurs, le tunnel existe toujours.
+
+⚠️ **CE N'EST PAS UNE SUPPRESSION, DONC REVENIR TIENT EN UN MOT.** Remettre
+`BAMBOUS` dans `BIOMES` — ou le décommenter — rend la forêt telle qu'elle est
+partie : même lisière, mêmes touffes, mêmes volées. Rien d'autre à toucher,
+et aucun banc à corriger.
 
 ## 📜 L'univers
 
@@ -4030,18 +4084,24 @@ Des décors qui changent, ce sont des repères — « je suis dans les flammes, 
 
 | Part | Biome | Brume | Portée | Décor |
 |---|---|---|---|---|
-| 0–25 % | **Forêt de bambous** 竹 | vert sombre | 26 → **68** | Touffes, canopée, litière |
-| 25–50 % | **Village en flammes** 火 | orange, fumée | 26 → **72** | Masures et braises |
-| 50–75 % | **Pont au clair de lune** 月 | indigo | 30 → 92 | Rambardes, lanternes |
-| 75–100 % | **Flancs du Fuji** 雪 | **gris clair** | 38 → **105** | Rochers neigeux, pins |
+| 0–33 % | **Village en flammes** 火 | orange, fumée | 26 → 72 | Masures et braises |
+| 33–66 % | **Pont au clair de lune** 月 | indigo | 30 → 92 | Rambardes, lanternes |
+| 66–100 % | **Flancs du Fuji** 雪 | **gris clair** | 38 → **105** | Rochers neigeux, pins |
+| — | **Forêt de bambous** 竹 | vert sombre | 26 → 68 | **HORS COURSE** — écrite, exportée, mesurée, pas tirée |
 
 ⚠️ **`BIOMES[0]` n'est pas une fissure dans le découpage.** Trois choses en
 dépendent, et il ne se déplace pas à la légère : le partage en
-`BIOMES.length` fractions, le **menu** — hors course `distance` vaut `-1`, donc
-l'ambiance retombe sur ce premier biome, et le menu est la bambouseraie — et le
+`BIOMES.length` fractions, l'**ambiance hors course** — `distance` vaut `-1`,
+donc elle retombe sur ce premier biome, aujourd'hui le village en flammes, dont
+on ne voit plus rien au menu puisque le menu est un fond de couleur — et le
 **créneau 0 de la course sans fin**, que `ordreSlot` force sur lui.
 
 ### 🎋 La bambouseraie est revenue, et ce que son retour a coûté
+
+> ⚠️ **HORS COURSE AUJOURD'HUI.** Ce chapitre raconte son PREMIER retour : il a
+> eu lieu, et ce qu'il a appris est toujours dans le fichier. Elle a été retirée
+> une deuxième fois, sans `BIOMES_EN_PAUSE` cette fois — l'export suffit.
+> Cf. `## 🎋 La bambouseraie quitte la course`.
 
 Elle avait été retirée de la course, **pas supprimée** : tout son code vivait dans
 `BIOMES_EN_PAUSE`, ce qui la gardait typée et vérifiée à chaque build. Sept cents
@@ -4211,14 +4271,18 @@ d'horizon, plus de différence entre le ciel et la forêt lointaine.
 
 ⚠️ **La piste possède la brume, le fond et les sols**, pas `main.ts` — seule
 elle sait où on se trouve sur la course. Hors course, `distance` vaut `-1` :
-le menu est explicitement la forêt de bambous. Sans ça, la brume gardait la
-couleur du dernier endroit traversé, et finir sur le Fuji laissait un menu tout
-blanc.
+l'ambiance retombe sur le premier biome de la liste. Sans ça, la brume gardait
+la couleur du dernier endroit traversé, et finir sur le Fuji laissait un menu
+tout blanc.
 
 ## 🎋 Faire croire à une GRANDE forêt
 
+> ⚠️ **HORS COURSE.** Ce qui suit s'applique au biome `BAMBOUS`, qui a quitté
+> `BIOMES` mais reste compilé et mesuré (`npm run bambous:test`). Rien ici n'est
+> à jeter : c'est ce qui fait qu'elle reviendra telle qu'elle est partie.
+
 Une forêt de bambous depuis la première image, et elle ne l'était pas. Deux
-mesures, deux causes — et ni l'une ni l'autre n'avaitTrait à la densité, qui
+mesures, deux causes — et ni l'une ni l'autre n'avait trait à la densité, qui
 était déjà juste et déjà comptée en tiges par m².
 
 | | avant | après |
@@ -4299,6 +4363,12 @@ du personnage.
 
 ### 🐦 Des oiseaux qui volent
 
+> ⚠️ **PLUS AUCUN OISEAU EN COURSE.** La bambouseraie était le seul biome à
+> porter `ambiance: 'oiseaux'`, et elle a quitté la liste : le chant et les
+> volées restent écrits, appelés à chaque image, et reçoivent tous les deux
+> `0`. Le jour où un autre biome portera `oiseaux`, ils reviendront sans une
+> ligne de code ajoutée.
+
 Le son existait déjà : la bambouseraie est le seul biome à porter `ambiance:
 'oiseaux'`. On entendait donc des chants dans un ciel parfaitement vide.
 
@@ -4308,12 +4378,13 @@ porte-t-il `oiseaux` — donc l'image et le bruit ne peuvent pas se contredire.
 Ajouter `oiseaux` à un autre biome lui donnerait des oiseaux sans écrire une
 ligne de plus.
 
-⚠️ **Hors course, le décor EST la bambouseraie** — donc des oiseaux traversent
-le ciel derrière le titre, et c'est voulu : un décor qui se fige au moment où
-l'on quitte la course se lit comme un arrêt de la machine. C'est aussi ce que le
-son fait déjà. *(À noter : le son, lui, reste coupé hors course. Les deux
-choix sont défendables ; ils sont séparés parce que l'oreille est moins
-têtue que l'œil.)*
+⚠️ **Hors course, le décor est le PREMIER biome — aujourd'hui le village en
+flammes.** Il n'y a donc pas d'oiseaux derrière le titre. Un décor qui se fige
+au moment où l'on quitte la course se lit comme un arrêt de la machine, et
+c'est la raison d'être du calcul `BIOMES[track.biomeA(-1)]` : il suivra le
+premier biome, quel qu'il soit. *(Le menu ne montre plus la scène du tout — un
+fond de couleur — mais le calcul tient toujours, et il n'a pas de raison
+d'être faussé.)*
 
 ⚠️ **Une volée = UN maillage, et les sommets sont réécrits à la main.** Un
 oiseau en `Group` pour animer ses ailes coûterait deux appels de dessin pièce :
