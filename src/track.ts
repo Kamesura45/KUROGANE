@@ -489,6 +489,79 @@ export class Track {
   private biomeImpose = -1
   /** La graine de la course, gardée pour bâtir les tronçons suivants. */
   private graine = 0
+
+  /**
+   * ————— 🎚️ LE RÉGLAGE DE DÉCOR —————
+   *
+   * Un module, pas une classe : la piste est la seule à savoir combien de
+   * massifs sont visibles, donc la seule à pouvoir dire combien on en veut. Et
+   * le décor doit être construit APRÈS le réglage, jamais avant — voir
+   * `viderDecor`.
+   */
+  /**
+   * ⚠️ UN MODULE, ET CE N'EST PAS FUSION POUR RIEN.
+   *
+   * La piste est la seule à savoir combien de massifs tiennent dans le champ.
+   * Mais `fabriqueDecor` — qui les bâtit — vit dans `biomes.ts`, qui
+   * importerait la piste pour lire ce nombre : le cycle serait immédiat
+   * (`track` importe déjà `BIOMES`). D'où la variable de module : elle porte un
+   * nombre, pas une dépendance.
+   *
+   * Elle est bornée comme sa jumelle `densiteDecor` : au-delà de 1,7 le décor
+   * devient un mur (et le décor ne masque JAMAIS un obstacle), en dessous de
+   * 0,6 la forêt s'éclaircit au point de laisser voir le sol nu.
+   */
+  private budget = 1
+
+  /**
+   * Change l'écartement des massifs.
+   *
+   * ⚠️ VIDER LE POOL EST L'APPELANT QUI LE DOIT, ET C'EST À LUI DE LE SAVOIR.
+   *
+   * Un massif est bâti une fois puis recyclé sur toute la course. Changer le
+   * réglage ne change donc rien à ceux qui existent : sans cette purge, le
+   * nouveau réglage mettrait plusieurs centaines de mètres à se voir — et le
+   * joueur conclurait que le bouton ne marche pas.
+   *
+   * Reconstruire coûte quelques dizaines de millisecondes par massif. C'est
+   * gratuit au menu, qui est le seul endroit où l'on change de qualité, et c'est
+   * pour ça que la décision reste ici plutôt que dans la méthode.
+   */
+  setBudgetDecor(k: number, reconstruire = true) {
+    this.budget = Math.min(1.7, Math.max(0.6, k))
+    if (reconstruire) this.viderDecor()
+  }
+
+  /** L'écartement courant — pour savoir s'il faut vider le pool (cf. `applyQuality`). */
+  budgetDecor() {
+    return this.budget
+  }
+
+  /**
+   * Jette tous les massifs de bordure.
+   *
+   * ⚠️ ET LES GÉOMÉTRIES SONT LIBÉRÉES À LA MAIN.
+   *
+   * `clear()` — le détachement des maillages — ne rend pas la mémoire au
+   * navigateur : sans `dispose()`, chaque massif reconstruit laisse son tampon
+   * de positions en place. Changer de qualité cinq fois dans les options
+   * laisserait cinq pools de géométries vivantes, et c'est exactement le genre
+   * de fuite qu'on ne voit qu'après une demi-heure de menu.
+   */
+  viderDecor() {
+    for (const d of this.decors) {
+      this.scene.remove(d.mesh)
+      d.mesh.traverse((o) => {
+        const m = o as THREE.Mesh
+        if (m.geometry) m.geometry.dispose()
+      })
+    }
+    this.decors.length = 0
+    // Le semis repart de zéro : sans ça, `prochainDecor` continuerait d'avancer
+    // par bonds et le premier massif reconstruit tomberait à n'importe quelle
+    // distance du joint.
+    this.prochainDecor = 0
+  }
   /** Jusqu'où le plan est bâti, en mètres. */
   private bord = 0
   /** Combien de tronçons ont été cousus : chacun a sa propre graine. */
@@ -530,8 +603,48 @@ export class Track {
   private brume: THREE.Fog
   private fond: THREE.Color
 
+  /**
+   * 🎨 Le TERRAIN est-il dessiné ?
+   *
+   * ⚠️ UN SEUL GROUPE, ET NON UNE LISTE DE MAILLAGES À CACHER.
+   *
+   * La première version énumérait ce qu'elle croyait être tout : les sols, les
+   * massifs, les barrières. Le banc a trouvé **18 maillages encore visibles** au
+   * menu — les repères entre les lignes, les torii, l'arche d'arrivée, les
+   * plateformes, les murs, les jarres, les obstacles. Sept réserves oubliées,
+   * donc sept listes à tenir, et la prochaine qui naîtra le sera aussi.
+   *
+   * Un seul parent règle la question : la visibilité d'un enfant est multipliée
+   * par celle de ses ancêtres, donc tout ce qui est dedans disparaît d'un coup,
+   * et **rien à l'intérieur ne peut se rallumer tout seul** — ce qui est
+   * exactement le piège de `spawnDecor`, qui remettait `visible = true` à chaque
+   * réutilisation. Les maillages continuent de tenir leur propre comptabilité
+   * entre eux ; le menu n'a plus qu'une seule décision à prendre.
+   */
+  private groupe = new THREE.Group()
+
+  /**
+   * Affiche ou efface tout le terrain : piste, sol de forêt, décor, barrières,
+   * obstacles, murs, plateformes, jarres, torii, ligne d'arrivée.
+   *
+   * Le fond de scène, lui, n'est PAS touché : c'est une couleur, et c'est
+   * précisément ce qu'on garde.
+   */
+  setTerrain(v: boolean) {
+    this.groupe.visible = v
+  }
+
   constructor(scene: THREE.Scene) {
     this.scene = scene
+    /*
+     * 🎨 TOUT LE TERRAIN VIT DANS CE GROUPE, et lui seul.
+     *
+     * C'est le seul objet de la scène que la piste ajoute directement : tout le
+     * reste passe par `this.groupe.add(…)`. Une seule porte à fermer au menu
+     * (cf. `setTerrain`), au lieu d'une liste de réserves à tenir à jour — et la
+     * liste aurait déjà été fausse sept fois (cf. le commentaire de `setTerrain`).
+     */
+    scene.add(this.groupe)
 
     /*
      * La brume appartient à la PISTE, pas à la scène de main.ts.
@@ -588,7 +701,7 @@ export class Track {
       g.rotation.x = -Math.PI / 2
       g.position.z = -90
       g.renderOrder = m === this.matSol ? 0 : 1
-      scene.add(g)
+      this.groupe.add(g)
     }
     this.matSolHaut.visible = false
 
@@ -618,7 +731,7 @@ export class Track {
     foret.rotation.x = -Math.PI / 2
     foret.position.set(0, -0.03, -110)
     foret.renderOrder = -1 // toujours dessiné avant la piste
-    scene.add(foret)
+    this.groupe.add(foret)
 
     /*
      * Les quatre matières sont peintes MAINTENANT, au chargement.
@@ -688,20 +801,20 @@ export class Track {
     }
     this.pointilles = new THREE.Mesh(mergeGeometries(traits, false)!, this.matLigne)
     for (const t of traits) t.dispose()
-    scene.add(this.pointilles)
+    this.groupe.add(this.pointilles)
 
     // Des torii rouges enjambent la piste (décor, pas de collision)
     for (let i = 0; i < 3; i++) {
       const t = makeTorii()
       t.position.z = -40 - i * 70
       this.toriis.push(t)
-      scene.add(t)
+      this.groupe.add(t)
     }
 
     // Le torii SACRÉ : la ligne d'arrivée, tout en or
     this.finish = makeFinishGate()
     this.finish.position.z = -99999 // caché tant que la course n'a pas commencé
-    scene.add(this.finish)
+    this.groupe.add(this.finish)
   }
 
   /**
@@ -844,20 +957,30 @@ export class Track {
    *
    * Trois règles, et chacune répare un défaut qu'on verrait tout de suite :
    *
-   *  · LE PREMIER EST TOUJOURS LE VILLAGE EN FLAMMES. On commence là où le
-   *    joueur s'attend à commencer ; ouvrir sur la neige un coup sur trois
-   *    donnerait l'impression de tomber au hasard dans une partie déjà entamée.
+   *  · LE PREMIER EST TOUJOURS LE BIOME QUI OUVRE LA COURSE (`BIOMES[0]`, la
+   *    bambouseraie). On commence là où le joueur s'attend à commencer ;
+   *    ouvrir sur un autre décor donnerait l'impression de tomber au hasard dans
+   *    une partie déjà entamée.
+   *
+   *    ⚠️ La règle ne dit pas « le village » mais « le PREMIER BIOME ». Les
+   *    deux écritures disaient la même chose tant que le village en flammes
+   *    occupait la première place, et ont cessé de dire la même chose le jour
+   *    où la bambouseraie lui a rendu sa place. Un `return 0` lit l'index, pas
+   *    le nom : il suffit de ne pas horner le nom à côté.
    *
    *  · JAMAIS DEUX FOIS LE MÊME D'AFFILÉE. Deux créneaux identiques, ce sont
-   *    1 280 m du même décor — ça ne se lit pas comme du hasard, ça se lit
-   *    comme un bug d'affichage.
+   *    deux quarts de cycle du même décor — 960 m sur une course de 1 920 m —
+   *    et ça ne se lit pas comme du hasard, ça se lit comme un bug
+   *    d'affichage. Le nombre suit `COURSE_LENGTH / BIOMES.length × 2` : il
+   *    était écrit en dur à 1 280 m, valeur vraie tant qu'on était en tiers,
+   *    et fausse dès le retour de la bambouseraie.
    *
    *  · TIRÉ DE LA GRAINE, pas de `Math.random`. La piste doit rester une pure
    *    fonction de sa graine : c'est ce qui la rend rejouable, et identique pour
    *    deux joueurs qui la partageraient.
    */
   private ordreSlot(k: number): number {
-    if (k <= 0) return 0 // 🔥 le village en flammes ouvre toujours
+    if (k <= 0) return 0 // 🎋 le premier biome ouvre toujours
     /*
      * ⚠️ MÉMORISÉ, parce que chaque créneau dépend du précédent : sans cache,
      * `biomeDe` refait toute la chaîne depuis zéro à chaque appel — et il est
@@ -1519,10 +1642,10 @@ export class Track {
      * ⚠️ Le décor imposé vaut AUSSI hors course.
      *
      * Sur la grille de départ, l'ambiance retombait sur `ambianceA(0, 1)` —
-     * donc sur le premier biome, le village en flammes. Vu à l'écran : le
-     * tutoriel expliquait le départ canon devant un village orange, puis
-     * basculait sur la neige au premier mètre. Un décor qui change au moment
-     * où l'on part se lit comme un défaut d'affichage.
+     * donc sur le premier biome, la bambouseraie. Vu à l'écran : le tutoriel
+     * expliquait le départ canon devant une forêt, puis basculait sur la neige
+     * au premier mètre. Un décor qui change au moment où l'on part se lit
+     * comme un défaut d'affichage.
      */
     const amb =
       this.biomeImpose >= 0
@@ -1585,15 +1708,31 @@ export class Track {
      * Semer dès `parcouru - 10` (un peu derrière, pour couvrir ce qu'on voit
      * aussi en se retournant) fait exister la forêt dès le premier instant.
      */
-    if (this.prochainDecor === 0) this.prochainDecor = parcouru - 10
+if (this.prochainDecor === 0) this.prochainDecor = parcouru - 10
     while (this.prochainDecor <= parcouru + LOOKAHEAD) {
+      /*
+       * ⚠️ L'ÉCARTEMENT EST LE LEVIER DES APPELS DE DESSIN.
+       *
+       * Un massif_visible = deux appels de dessin (le solide, le feuillage), et
+       * le nombre de massifs dans le champ est inversement proportionnel à
+       * l'écartement. C'est donc LE seul réglage qui baisse réellement le pic —
+       * le nombre de pixels, lui, ne change rien à un appel de dessin.
+       *
+       * ⚠️ Et l'écartement ne peut pas non plus être le SEUL levier : en
+       * doublant l'écart, on ne fait pas que réduire le nombre de massifs, on
+       * ÉLOIGNE le décor de la caméra et on fait disparaître les tiges
+       * proches — celles qui donnent la densité au premier plan. Les deux
+       * briquetés ensemble : l'écartement pour les appels, `densiteDecor` pour
+       * la matière.
+       */
+      const ecart = biome.ecartDecor * this.budget
       // Un élément de chaque côté, mais jamais à la même distance : deux rangées
       // symétriques feraient une allée de cimetière, pas une forêt.
       for (const cote of [-1, 1]) {
-        const d = this.prochainDecor + (cote < 0 ? 0 : biome.ecartDecor * 0.5)
+        const d = this.prochainDecor + (cote < 0 ? 0 : ecart * 0.5)
         this.spawnDecor(devant, cote, -(d - parcouru))
       }
-      this.prochainDecor += biome.ecartDecor
+this.prochainDecor += ecart
     }
 
     /*
@@ -1724,7 +1863,7 @@ export class Track {
         active: false,
       }
       this.decors.push(dec)
-      this.scene.add(dec.mesh)
+      this.groupe.add(dec.mesh)
     }
     /*
      * ⚠️ 5,6 m du centre, pas 7.
@@ -1752,11 +1891,22 @@ export class Track {
      * l'éclairage, et retourne aussi la profondeur : la même touffe recyclée à
      * droite puis à gauche ne se lit pas comme un copier-coller.
      */
-    dec.mesh.rotation.y = cote < 0 ? Math.PI : 0
+dec.mesh.rotation.y = cote < 0 ? Math.PI : 0
+    /*
+     * ⚠️ LE GROUPÉ NE REMPLACE PAS CE `visible = true`.
+     *
+     * Le groupe règle le MENU ; ici, on parle du RECYCLAGE, qui est une autre
+     * affaire : un massif réutilisé sortait de sa réserve `visible = false`, et
+     * sans cette ligne il y resterait. La forêt perdrait ses massifs au fil de
+     * la course — un par un, sans bruit.
+     *
+     * Les deux cohabitent : si le groupe est caché (au menu), l'enfant peut
+     * dire `visible = true` sans rien montrer, puisque la visibilité se
+     * MULTIPLIE de proche en proche. C'est tout l'intérêt d'un parent unique.
+     */
     dec.mesh.visible = true
     dec.active = true
   }
-
   private spawnPlateforme(p: PlannedPlateforme, z: number) {
     const biome = this.biomeDe(p.d)
     /*
@@ -1791,7 +1941,7 @@ export class Track {
         active: false,
       }
       this.plateformes.push(pf)
-      this.scene.add(pf.mesh, pf.rampe, pf.nez)
+      this.groupe.add(pf.mesh, pf.rampe, pf.nez)
     }
     pf.plan = p
     // Le maillage est bâti sur 1 m de long, centré : on l'étire et on le recule
@@ -1831,7 +1981,7 @@ export class Track {
       const habille = BIOMES[biome].fabriqueMur
       m = { mesh: habille ? habille() : makeMurMesh(biome), biome, active: false }
       this.murs.push(m)
-      this.scene.add(m.mesh)
+      this.groupe.add(m.mesh)
     }
     // Le maillage est bâti sur 1 m : on l'étire à la longueur voulue. Il est
     // centré en z, d'où le décalage d'une demi-longueur.
@@ -1857,9 +2007,10 @@ export class Track {
     if (!b) {
       b = { mesh: habille(), biome, active: false }
       this.barrieres.push(b)
-      this.scene.add(b.mesh)
+      this.groupe.add(b.mesh)
     }
-    b.mesh.position.set(cote * MUR_X, 0, z)
+b.mesh.position.set(cote * MUR_X, 0, z)
+    // Même raison que pour les massifs : ici c'est le recyclage, pas le menu.
     b.mesh.visible = true
     b.active = true
   }
@@ -1905,7 +2056,7 @@ export class Track {
         active: false,
       }
       this.jarres.push(j)
-      this.scene.add(j.mesh)
+      this.groupe.add(j.mesh)
     }
     j.parchemin = p.parchemin
     // Le trésor suit le plan, pas le maillage recyclé : deux pots verts d'une
@@ -1994,7 +2145,7 @@ export class Track {
     if (!r) {
       r = { mesh: makeRouleauMesh(), active: false }
       this.rouleaux.push(r)
-      this.scene.add(r.mesh)
+      this.groupe.add(r.mesh)
     }
     r.mesh.position.x = LANES[lane]
     r.mesh.position.z = z
@@ -2038,7 +2189,7 @@ export class Track {
         active: false,
       }
       this.obstacles.push(o)
-      this.scene.add(o.mesh)
+      this.groupe.add(o.mesh)
     }
     o.mesh.position.x = LANES[lane]
     o.mesh.position.z = z

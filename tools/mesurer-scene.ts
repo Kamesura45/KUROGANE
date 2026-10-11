@@ -15,11 +15,40 @@
 
 import * as THREE from 'three'
 import { Track } from '../src/track.ts'
+import { setDensiteDecor } from '../src/biomes.ts'
+import { NIVEAUX, ORDRE_QUALITE, resoudreQualite, type Quality } from '../src/settings.ts'
 
 const LONGUEUR = 1920
-const scene = new THREE.Scene()
-const track = new Track(scene)
-track.reset(LONGUEUR, 1234)
+
+/**
+ * ⚠️ LE CRAN SE LIT SUR LA LIGNE DE COMMANDE, ET IL EST OPTIONNEL.
+ *
+ * `node tools/mesurer-scene.ts` mesure « Maxi » — le réglage de référence, et le
+ * seul qui serve de comparatif. `node tools/mesurer-scene.ts fluide` enchaîne
+ * alors les cinq crans sur la même course et la même graine, ce qui est le seul
+ * moyen de comparer : deux mesures prises sur des graines différentes ne
+ * veulent rien dire.
+ *
+ * ⚠️ `settings.ts` lit `matchMedia` et `navigator` pour « Auto ». On n'appelle
+ * donc jamais `resoudreQualite` ici — il n'y a pas de navigateur, et le banc ne
+ * teste que les crans manuels.
+ */
+const arg = process.argv[2] as Quality | 'tous' | undefined
+const crans: Exclude<Quality, 'auto'>[] =
+  arg === 'tous' ? ORDRE_QUALITE : arg && arg in NIVEAUX ? [arg as Exclude<Quality, 'auto'>] : ['maxi']
+
+for (const cran of crans) {
+  const n = NIVEAUX[cran]
+  setDensiteDecor(n.densite)
+  mesurer(cran)
+}
+
+function mesurer(cran: Exclude<Quality, 'auto'>) {
+  const n = NIVEAUX[cran]
+  const scene = new THREE.Scene()
+  const track = new Track(scene)
+  track.setBudgetDecor(n.decor, false)
+  track.reset(LONGUEUR, 1234)
 
 function compter() {
   let objets = 0, meshes = 0, visibles = 0
@@ -40,7 +69,7 @@ function compter() {
   return { objets, meshes, visibles, mats: mats.size, geos: geos.size }
 }
 
-console.log('\n————— La scene, au fil de la course —————')
+console.log(`\n————— ${n.nom} : pixels ×${n.pixels}, décor ×${n.decor}, matière ×${n.densite} —————`)
 console.log('  distance   objets   meshes   VISIBLES   materiaux   geometries')
 const VITESSE = 30, PAS = 2
 let d = 0, pire = 0, pireD = 0
@@ -71,3 +100,4 @@ console.log(
   `\n  → chaque mesh visible = au moins 1 appel de dessin.\n` +
   `    Les meshes caches coutent 0 a dessiner, mais restent en memoire.\n`
 )
+}

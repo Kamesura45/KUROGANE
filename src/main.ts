@@ -61,6 +61,8 @@ import {
   estAnonyme,
   monEmail,
   googleActif,
+  comptesCasses,
+  raisonServeur,
   inscriptionEmail,
   connexionEmail,
   verserPots,
@@ -75,8 +77,9 @@ import {
   prechauffeFeu,
   couperLeSon,
 } from './sfx'
-import { BIOMES } from './biomes'
-import type { Quality } from './settings'
+import { BIOMES, setDensiteDecor } from './biomes'
+import { installerOiseaux, majOiseaux } from './oiseaux'
+import { niveauDe, type Quality } from './settings'
 import { Musique } from './audio'
 
 // La longueur de la course vit dans track.ts — le module qui possède la piste.
@@ -232,6 +235,21 @@ scene.add(ambient, moon)
 
 const player = new Player(scene)
 const track = new Track(scene)
+/*
+ * 🎨 LE JEU S'OUVRE SUR UN FOND DE COULEUR, PAS SUR UNE PISTE.
+ *
+ * ⚠️ ICI, ET PAS DANS `backToMenu` SEULEMENT.
+ *
+ * Le premier écran s'affiche avant toute course : il n'y a donc encore personne
+ * pour passer par le retour au menu, et le terrain se voyait — piste au sol,
+ * bambous de part et d'autre, coureur planté au milieu. On tient la même règle
+ * qu'après une course : fond de couleur, et rien d'autre.
+ *
+ * C'est le même couple qu'ailleurs dans ce fichier : le terrain revient avec le
+ * coureur, et jamais l'un sans l'autre.
+ */
+track.setTerrain(false)
+player.mesh.visible = false
 
 // ————— Les adversaires en ligne (jusqu'à 9 avatars) —————
 // Un pool d'avatars fantômes qu'on ASSIGNE aux joueurs présents dans le salon.
@@ -351,19 +369,47 @@ function rivalDevant(): Rival | undefined {
 const bots = PROFILS.map((p) => new Bot(scene, p))
 
 /**
- * La qualité graphique ne joue QUE sur le nombre de pixels dessinés — c'est de
- * loin le plus gros coût sur mobile, et diviser par 2 le pixelRatio, c'est 4
- * fois moins de pixels.
+ * La qualité graphique, en trois leviers.
  *
- * On ne touche SURTOUT pas à la brume : c'est elle qui décide à quelle distance
- * on découvre les obstacles. La rapprocher pour gagner des images/s donnerait
- * moins de temps pour réagir — ce serait un réglage de difficulté déguisé en
- * réglage graphique, et un désavantage en duel.
+ * ⚠️ LES PIXELS NE SONT PLUS LE SEUL LEVIER, ET C'ÉTAIT LE PROBLÈME.
+ *
+ * Ce réglage ne jouait que sur le nombre de pixels dessinés — de loin le plus
+ * gros coût sur mobile. Mais la bambouseraie ne coûte pas en pixels : elle coûte
+ * en **appels de dessin** (deux par massif, ~20 massifs visibles au pic) et en
+ * **triangles**. Un joueur qui divisait la densité d'écran par deux gardait donc
+ * ses 148 appels de dessin, et ne gagnait rien.
+ *
+ * Le même réglage descend donc maintenant jusqu'à la matière du décor :
+ *
+ *  · `pixels`  — le plafond de `pixelRatio`, inchangé.
+ *  · `decor`   — l'écartement des massifs : le levier des appels de dessin.
+ *  · `densite` — la matière dans un massif : le levier des triangles.
+ *
+ * ⚠️ ON NE TOUCHE SURTOUT PAS À LA BRUME : c'est elle qui décide à quelle
+ * distance on découvre les obstacles. La rapprocher pour gagner des images/s
+ * donnerait moins de temps pour réagir — ce serait un réglage de difficulté
+ * déguisé en réglage graphique, et un désavantage en duel.
  */
 function applyQuality(q: Quality) {
-  const mobile = matchMedia('(pointer: coarse)').matches
-  const cap = q === 'bas' ? 1 : q === 'haut' ? 2 : mobile ? 1.5 : 2
-  renderer.setPixelRatio(Math.min(devicePixelRatio, cap))
+  const n = niveauDe(q)
+  renderer.setPixelRatio(Math.min(devicePixelRatio, n.pixels))
+  setDensiteDecor(n.densite)
+  /*
+   * ⚠️ LE POOL EST VIDÉ, ET C'EST LA SEULE FAÇON QUE ÇA SE VOIE.
+   *
+   * Un massif est bâti une fois puis recyclé sur toute la course. Sans la purge,
+   * le nouveau réglage ne s'appliquerait qu'aux massifs construits plus tard —
+   * plusieurs centaines de mètres plus loin — et le joueur conclurait que le
+   * bouton ne marche pas.
+   *
+   * ⚠️ ET SI LE RÉGLAGE N'A PAS CHANGÉ, ON NE PURGE RIEN : les massifs sont
+   * reconstruits à l'identique (une graine, un tirage), donc les vider
+   * coûterait le même décor au prix de la reconstruction. Le bouton « Auto »
+   * rapporterait le même niveau qu'au chargement, et le joueur verrait la forêt
+   * disparaître une seconde — pour rien.
+   */
+  const change = track.budgetDecor() !== n.decor
+  track.setBudgetDecor(n.decor, change)
   resize() // setSize doit être rappelé après un changement de pixelRatio
   // Le flou des voiles n'est pas gratuit : le navigateur le refait dès que
   // l'image du dessous bouge, en plein écran. En qualité basse, le voile garde
@@ -1472,6 +1518,19 @@ for (let i = 0; i < 40; i++) {
 let petalesActifs = false // on ne fait NAÎTRE de nouveaux pétales qu'au départ
 let ventPhase = 0 // l'horloge de la rafale (le chrono, lui, est figé au décompte)
 
+/*
+ * 🐦 Le défilement de l'image, mémorisé.
+ *
+ * `updateEffets` le reçoit en paramètre et le donne à tout ce qui vole ou tombe.
+ * Les oiseaux, eux, sont rappelés depuis la boucle — là où se décide leur
+ * `ambiance`, donc à un autre endroit — et ils en ont besoin aussi. Plutôt que
+ * de réécrire `speed * dt` à un second endroit (et de risquer la règle
+ * « le monde défille avec la vitesse du joueur, pas avec le temps »), on garde
+ * la valeur au moment où elle est calculée : une source, deux lecteurs.
+ */
+let scrollImage = 0
+installerOiseaux(scene)
+
 /**
  * (Re)lâche un pétale. `neuf` : au tout premier souffle on en sème déjà EN
  * TRAVERS de l'écran — sinon la première seconde est vide, le temps qu'ils
@@ -2178,6 +2237,19 @@ function lancerParchemin() {
     // renvoyant un sort (cf. subirSort). C'est une garde, pas un minuteur.
     miroirFin = Infinity
   } else if (kind === 'the') {
+    /*
+     * ⚠️ CES TROIS LIGNES SONT LA LISTE DES AFFLICTIONS. Pas une table ailleurs.
+     *
+     * Il existait un `AFFLICTIONS = ['kusarigama', 'fumigene', 'senbon']` dans
+     * parchemin.ts, jamais lu : le thé mettait à zéro trois minuteurs écrits
+     * ici. Deux listes du même ensemble, dont une seule faisait le travail — et
+     * le jour où une affliction de plus est arrivée, on l'a ajoutée ici sans la
+     * mettre là-bas. Aucun test n'aurait vu la différence : la table serve à
+     * rien, elle ne pouvait rien faire.
+     *
+     * Ajouter une affliction, c'est donc ajouter ICI un minuteur, et le guest
+     * du bloc « the » plus bas. Le parchemin n'a plus de liste à tenir.
+     */
     // 🍵 Le thé lave TOUT d'un coup — y compris ce qu'on vient d'encaisser
     kusarigamaFin = 0
     fumigeneFin = 0
@@ -2202,6 +2274,13 @@ function lancerParchemin() {
     // On ne se vante que s'il y avait quelque chose à laver : annoncer une
     // guérison quand on courait déjà net ferait douter de ce que fait le thé.
     if (modeInfini && pesait > 0) toast('🍵 Le poids des jarres s\'en va — pleine vitesse')
+    /*
+     * ⚠️ LE THÉ EST LE SEUL LAVEUR DU JEU, ET SA LISTE EST JUSTE AU-DESSUS.
+     *
+     * Rien d'autre ne nettoie une affliction : ni le kunai, ni la Course du
+     * Nord. Une affliction ajoutée ici doit donc être lavée ICI, ou elle devient
+     * définitive — et le joueur n'a aucun moyen de s'en débarrasser.
+     */
   }
   // ————— 🔮 Le portail : il part, il ne vise pas —————
   else if (kind === 'onmyoji') {
@@ -2639,6 +2718,26 @@ function inSprintZone() {
 function backToMenu(banner?: string) {
   state = 'menu'
   online = false
+  /*
+   * 🎨 AU MENU, IL N'Y A PAS DE PISTE — IL Y A UN FOND DE COULEUR.
+   *
+   * Le menu ne montre plus ni la piste, ni le sol de forêt, ni les bambous : la
+   * scène 3D se réduit à son fond, et l'interface flotte dessus. C'est un parti
+* pris esthétique autant qu'un gain : une piste qui défile derrière un menu
+   * donne le mouvement à l'interface, et l'œil ne sait plus s'il regarde un
+   * décor ou un écran.
+   *
+   * ⚠️ LE COUREUR PART AVEC LE TERRAIN. Le laisser visible le ferait flotter
+   * au-dessus du vide — un personnage sans sol se lit comme une erreur, pas
+   * comme une affiche. L'aperçu 3D du choix de guerrier, lui, n'est pas
+   * concerné : il a sa PROPRE scène et son propre canvas (cf. `Preview` dans
+   * menu.ts), et il tourne toujours.
+   *
+   * ⚠️ Et le fond, lui, n'est pas touché : c'est une couleur. C'est même
+   * exactement ce qu'on garde.
+   */
+  track.setTerrain(false)
+  player.mesh.visible = false
   // ♾️ On quitte le mode infini en même temps que la course : sans ça, le
   // brasier resterait allumé derrière le menu, et la course suivante hériterait
   // d'une règle qu'on n'a pas choisie.
@@ -3193,6 +3292,20 @@ function startRace(seed: number) {
   } else {
     track.reset(COURSE_LENGTH, seed, online || modeInfini, modeInfini)
   }
+  /*
+   * 🎨 LE TERRAIN REVIENT, ET LE COUREUR AVEC LUI.
+   *
+   * Au menu, la scène ne montre qu'un fond de couleur : `setTerrain(false)` y
+   * laisse le décor faire semblant de ne pas exister. Il faut donc les deux
+   * reminders ici — le terrain ET le coureur, qui flottait au-dessus du vide
+   * depuis qu'on avait retiré le sol sous lui.
+   *
+   * ⚠️ Les deux ensemble, jamais l'un sans l'autre : un coureur seul sur un fond
+   * de couleur se lit comme un bug d'affichage, et un terrain sans coureur se lit
+   * comme une piste abandonnée. C'est le même couple qu'au menu.
+   */
+  track.setTerrain(true)
+  player.mesh.visible = true
   time = 0
   distance = 0
   speed = 0
@@ -3809,9 +3922,16 @@ const menu = new Menu({
   // ————— La boutique —————
   onBoutique() {
     menu.showBoutique()
-    // On ouvre TOUT DE SUITE avec ce qu'on a déjà, puis on rafraîchit : ouvrir
-    // un écran vide en attendant le réseau donne l'impression que ça rame.
-    menu.setBoutique(mesArticles())
+    /*
+     * ⚠️ ON N'OUVRE AVEC LE CACHE QUE S'IL Y A QUELQUE CHOSE DEDANS.
+     *
+     * Le cache est vide tant que le catalogue n'a jamais été chargé. Le passer
+     * quand même affichait « aucun article à vendre » pendant la fraction de
+     * seconde de l'appel réseau — puis « indisponible ». Deux messages, dans
+     * l'ordre, pour une seule panne : le joueur voit le jeu se contredire.
+     */
+    const connues = mesArticles()
+    if (connues.length > 0) menu.setBoutique(connues)
     void chargerBoutique().then((articles) => {
       menu.setBoutique(articles)
       majAffichageBourse()
@@ -3931,11 +4051,13 @@ async function majBourse() {
 
 /** Reflète l'état du compte dans son écran. */
 function majCompte() {
-  menu.setCompte({
+menu.setCompte({
     anonyme: estAnonyme(),
     email: monEmail(),
     googleDispo: googleActif(),
     connecte: monProfil() !== null,
+    comptesCasses: comptesCasses(),
+    raison: raisonServeur(),
   })
 }
 
@@ -4429,6 +4551,7 @@ function tick(now?: number) {
     // 🌸 Les pétales tombent pendant tout le décompte (monde immobile : dz = 0)
     petalesActifs = true
     updateEffets(dt, 0)
+    scrollImage = 0
 
     /*
      * La piste doit vivre PENDANT le décompte, à vitesse nulle.
@@ -4903,7 +5026,8 @@ function tick(now?: number) {
     // 🌸💥💨 On ne fait plus naître de pétales passé les 2,5 premières secondes ;
     // ceux déjà en l'air finissent de tomber pendant que le cerisier s'éloigne.
     petalesActifs = time < 2.5
-    updateEffets(dt, speed * dt)
+    scrollImage = speed * dt
+    updateEffets(dt, scrollImage)
     // 💨 Après que TOUT LE MONDE a bougé : qui vient de retomber au sol ?
     detecterAtterrissages()
 
@@ -5412,7 +5536,20 @@ function tick(now?: number) {
    */
   const feuPoursuite = modeInfini && enCourse ? 0.25 + 0.75 * (degats / DEGATS_MAX) : 0
   feuAmbiance(Math.max(feuPoursuite, biomeIci?.ambiance === 'feu' ? 1 : 0), dt)
+  /*
+   * 🐦 Les oiseaux suivent EXACTEMENT la même information que leur chant.
+   *
+   * ⚠️ Hors course, `biomeIci` vaut `null` — donc pas d'oiseaux dans le ciel du
+   * titre. C'est le comportement qui a été écrit, et il est discutable : hors
+   * course, le décor EST la bambouseraie (`indexBiome` retombe sur le premier
+   * biome, et la bambouseraie est revenue en tête), alors qu'on n'y verrait pas
+   * un oiseau. Un décor qui se fige au moment où l'on quitte la course se lit
+   * comme un arrêt de la machine ; on fait donc comme pour le son : le biome du
+   * DÉCOR, pas celui de la course.
+   */
+  const oiseauxIci = (enCourse ? biomeIci : BIOMES[track.biomeA(-1)])?.ambiance === 'oiseaux'
   oiseauxAmbiance(biomeIci?.ambiance === 'oiseaux' ? 1 : 0, dt)
+  majOiseaux(dt, scrollImage, oiseauxIci)
 
   // La caméra suit en douceur la ligne du joueur
   camera.position.x += (player.mesh.position.x * 0.55 - camera.position.x) * Math.min(1, dt * 5)

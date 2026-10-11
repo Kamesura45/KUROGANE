@@ -401,10 +401,35 @@
           <h2>Boutique</h2>
         </header>
 
-        <div class="bourse-grande">
-          <span id="bourseMon">—</span>
-          <span id="bourseHisui">—</span>
+        <!--
+  ⚠️ DEUX MONNAIES, PAS TROIS, ET LE MOT EST ÉCRIT SOUS CHACUNE.
+
+  Le joueur ne doit pas avoir à savoir que « le vert, c'est du jade » : la
+  couleur seule ne s'apprend pas, et une étiquette qui manque se lit comme un
+  décor. D'où le nom en toutes lettres sous chaque montant — c'est le seul
+  endroit du jeu où l'on écrit « Mon » et « Jade », parce que c'est le seul
+  endroit où l'on doit faire COMPRENDRE une monnaie à quelqu'un qui vient
+  d'arriver.
+
+  ⚠️ Il n'existe que DEUX monnaies : les Mon (gagnés en courant) et le jade
+  (acheté). Pas de troisième, pas d'« argent » à côté. Si un jour il y en a une
+  troisième, c'est une colonne de plus dans la table `profils` ET une migration —
+  pas une case dans cette page : un solde que la base ne garde pas ne serait
+  qu'un chiffre décoratif.
+-->
+<div class="bourse-grande">
+          <span id="bourseMon">
+            <b>—</b>
+            <small>Mon</small>
+          </span>
+          <span id="bourseHisui">
+            <b>—</b>
+            <small>Jade</small>
+          </span>
         </div>
+
+        <!-- Ce que le joueur POSSÈDE déjà — le premier chiffre qu'on cherche ici. -->
+        <p class="lead" id="boutiquePossede" hidden></p>
 
         <p class="lead">
           Des couleurs de maître pour ton guerrier perso. <b>Uniquement de
@@ -413,10 +438,34 @@
         </p>
 
         <div id="boutiqueListe" class="boutique"></div>
-        <!-- ⚠️ Pas « hors ligne » : on peut très bien courir en ligne pendant que
-             les comptes, eux, sont en panne. Le joueur lirait « hors ligne » en
-             sortant d'une partie en ligne, et ne croirait plus rien d'autre. -->
-        <p id="boutiqueVide" class="lead hidden">La boutique est fermée pour l'instant — reviens un peu plus tard.</p>
+        <!--
+          ⚠️ DEUX MESSAGES, ET ILS NE DISENT PAS LA MÊME CHOSE.
+
+          Le catalogue est-il VIDE, ou la boutique est-elle INDISPONIBLE ? La
+          boutique renvoyait `[]` dans les deux cas, donc ces deux lignes
+          s'affichaient pour la même panne : hors-ligne, serveur éteint, base
+          des comptes morte. Le joueur lisait « fermée », concluait qu'il n'y
+          avait rien à acheter, et ne revenait pas — alors que tout le
+          catalogue existait.
+
+          Le classement fait depuis le début la distinction que la boutique ne
+          faisait pas. Un joueur qui lit « fermée » pour un rayon vide et
+          « indisponible » pour une panne ne sait plus à quoi se fier : il faut
+          le même vocabulaire partout, ou aucun.
+
+          ⚠️ Pas « hors ligne » dans le message d'indisponibilité : on peut très
+          bien courir en ligne pendant que les comptes, eux, sont en panne. Le
+          joueur lirait « hors ligne » en sortant d'une partie en ligne, et ne
+          croirait plus rien d'autre.
+        -->
+        <p id="boutiqueIndispo" class="lead hidden">
+          📡 Boutique indisponible — pas de compte, ou serveur injoignable. Tes
+          articles et tes scores restent où ils sont : rien n'a été perdu.
+        </p>
+        <p id="boutiqueVide" class="lead hidden">
+          Aucun article à vendre pour l'instant. Reviens après une course en
+          ligne : la boutique se remplit à chaque victoire.
+        </p>
 
         <button class="primary" data-back>OK</button>
       </section>
@@ -490,10 +539,19 @@
           <label>Qualité graphique</label>
           <div class="seg" id="optQuality">
             <button data-q="auto">Auto</button>
-            <button data-q="haut">Belle</button>
-            <button data-q="bas">Fluide</button>
+            <button data-q="ultra">Ultra</button>
+            <button data-q="maxi">Maxi</button>
+            <button data-q="moyen">Moyen</button>
+            <button data-q="faible">Faible</button>
+            <button data-q="fluide">Fluide</button>
           </div>
-          <small>« Fluide » dessine moins de pixels : à essayer si ça saccade.</small>
+          <!-- ⚠️ LE TEXTE EST ÉCRIT ICI ET NULLE PART AILLEURS.
+               Les cinq crans ne se contentent pas de dessiner moins de pixels :
+               chacun écarte aussi les massifs de décor, ce qui baisse le nombre
+               d'appels de dessin — le vrai coût de la forêt. C'est pour ça que
+               le texte est un <span> rempli par NIVEAUX : le décrire en dur
+               ici l'aurait fait mentir au premier réglage modifié. -->
+          <small id="optQualityAide"></small>
         </div>
 
         <!--
@@ -892,41 +950,29 @@
           rejoint le seul écran qui les rassemble tous.
         -->
         <div class="modes">
-          <button id="btnVSE" class="mode">
-            <span class="em">⚔️</span>
-            <b>Course VS.E</b>
-            <small>Contre de vrais joueurs</small>
+          <!-- ⚠️ Le seul des trois dessins qui ne porte pas son nom : c'est une
+               scène, pas une pancarte. On l'écrit donc par-dessus, au pinceau. -->
+          <button id="btnVSE" class="mode dessine" aria-label="Course VS.E, contre de vrais joueurs">
+            <b class="pinceau nom">Course VS.E</b>
           </button>
           <!-- ♾️ En vert, comme demandé : sur une tuile qu'on vise du pouce
                sans relire, la couleur dit lequel des modes on va lancer. -->
-          <button id="btnInfini" class="mode vert">
-            <span class="em">♾️</span>
-            <b>Course Infinity</b>
-            <small>Jusqu'aux flammes</small>
-          </button>
+          <!-- Le dessin porte déjà son nom et son ruban NEW : rien à écrire
+               par-dessus. Le libellé vit dans `aria-label`. -->
+          <button id="btnInfini" class="mode dessine" aria-label="Course Infinity, jusqu'aux flammes"></button>
           <!-- 🚧 Annoncé plutôt que caché, exactement comme au classement : un
                joueur qui voit qu'il en vient un autre attend ; celui à qui
                l'on n'a rien dit croit avoir fait le tour. -->
-          <button id="btnDev" class="mode" disabled>
-            <span class="em">🚧</span>
-            <b>En cours de Dev…</b>
-            <small>Le troisième mode</small>
-          </button>
+          <button id="btnDev" class="mode dessine" disabled aria-label="Le troisième mode, en cours de développement"></button>
           <!-- 🥷 Le vestiaire est ICI, et en grand : on change de guerrier en
                pensant à la course qui vient, jamais en passant. -->
-          <button id="btnRoster" class="large ghost">
+          <!-- ⚠️ L'avis de recherche a une place VIDE à gauche : c'est là que va
+               le nom du guerrier choisi. Le dessin a été fait pour ça. -->
+          <button id="btnRoster" class="large dessine" aria-label="Changer de guerrier">
             <span class="jp-mini" id="pickJp">弥助</span>
-            <span class="lines">
-              <small>Ton guerrier</small>
-              <b id="pickName">Yasuke</b>
-            </span>
-            <span class="chev">🥷</span>
+            <b class="pinceau nom" id="pickName">Yasuke</b>
           </button>
-          <button id="btnSolo" class="mode large secondary">
-            <span class="em">🏋️</span>
-            <b>Entraînement</b>
-            <small>Seul, contre des rivaux</small>
-          </button>
+          <button id="btnSolo" class="mode large dessine" aria-label="Entraînement, seul contre des rivaux"></button>
         </div>
       </section>
 
@@ -953,11 +999,20 @@
           <button id="btnQuick" class="primary"><span class="ic">⚡</span> PARTIE RAPIDE</button>
           <button id="btnCreate" class="secondary"><span class="ic">🏮</span> CRÉER UN SALON</button>
         </div>
+        <!--
+          🔑 LA PLAQUE « CODE » : le champ rose porte la saisie, le sceau jaune
+          sert de bouton.
+
+          ⚠️ Le libellé au-dessus est MUET pour l'œil, pas pour le lecteur
+          d'écran : le sceau dit déjà « Code », et deux fois le même mot à dix
+          pixels d'écart fait bégayer l'écran.
+        -->
         <div class="field">
-          <label for="joinCode">Rejoindre par code</label>
-          <div class="row">
+          <label for="joinCode" class="muet">Rejoindre par code</label>
+          <div class="row plaquecode">
             <input
               id="joinCode"
+              class="pinceau"
               type="text"
               maxlength="6"
               placeholder="CODE"
@@ -965,7 +1020,7 @@
               autocapitalize="characters"
               spellcheck="false"
             />
-            <button id="btnJoinCode" class="ghost">OK</button>
+            <button id="btnJoinCode" class="sceau" aria-label="Rejoindre le salon de ce code">OK</button>
           </div>
         </div>
         <div class="field">
@@ -973,7 +1028,7 @@
             <label>Salons ouverts</label>
             <button id="btnRefresh" class="ghost" aria-label="Rafraîchir"><span class="ic">↻</span></button>
           </div>
-          <div id="salonList" class="salonlist"></div>
+          <div id="salonList" class="salonlist bois"></div>
         </div>
       </section>
 

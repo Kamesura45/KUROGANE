@@ -196,11 +196,6 @@ export async function migreAuth(): Promise<void> {
   console.log(`🔐 tables d'identité créées : ${[...new Set(tables)].join(', ')}`)
 }
 
-/** L'authentification est-elle disponible ? (elle exige la base) */
-export function authDispo() {
-  return auth !== null
-}
-
 /**
  * À quel compte appartient ce jeton ? `null` s'il est absent, expiré ou inventé.
  *

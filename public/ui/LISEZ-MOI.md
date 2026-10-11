@@ -37,6 +37,18 @@ liseré pâle tout autour.
 une entrée orpheline, c'est un 404 à chaque ouverture du jeu, dans la console de
 quiconque cherchera un vrai problème.
 
+## Deux dossiers, deux mécaniques
+
+Ce dossier-ci (`public/ui/`) ne porte plus que **le bouton pause**, posé par
+JavaScript (`peindre()` dans `src/menu.ts`) : l'image est chargée AVANT d'être
+posée, donc un fichier absent laisse un bouton ordinaire au lieu d'un trou.
+
+Les dessins du menu — les tuiles de Jouer, les bandeaux, la flèche de retour, la
+plaque du code, la planche des salons — vivent dans **`src/ui/`** et sont cités
+par la feuille de style. Vite les prend en charge : il réécrit leur adresse, y
+met une empreinte, et refuse de compiler si l'un d'eux manque. C'est ce qui les
+met à l'abri du piège décrit juste en dessous.
+
 ## ⚠️ Chargée ne veut pas dire affichée
 
 `peindre()` rend l'adresse **absolue** avant de la glisser dans `--art`. Un

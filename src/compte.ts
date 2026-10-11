@@ -114,6 +114,16 @@ async function creerCompteAnonyme(): Promise<boolean> {
 
 /** Google est-il configuré côté serveur ? (sinon on masque le bouton) */
 let googleDispo = false
+
+/**
+ * Le serveur répond-il, et ses comptes fonctionnent-ils ?
+ *
+ * Ce sont DEUX questions, et les confondre est exactement le défaut qu'on vient
+ * de corriger : un serveur joignable dont la base est morte répond 200 à tout,
+ * y compris à `/sante` — et le joueur ne peut pas s'y inscrire.
+ */
+let serveurSaine = true
+let serveurRaison = ''
 export function googleActif() {
   return googleDispo
 }
@@ -175,14 +185,43 @@ function retenirIdentite() {
   email = profil?.email ?? null
 }
 
-/** Demande au serveur ce qu'il sait faire (Google configuré ou non). */
+/**
+ * Demande au serveur ce qu'il sait faire — et, surtout, **si ses comptes
+ * marchent**.
+ *
+ * ⚠️ ON LISSAIT `google` ET ON JETAIT LE RESTE. Le serveur envoyait déjà
+ * `saine` et `raison` (cf. la route `/sante`), c'est-à-dire exactement ce qui
+ * explique qu'une connexion échoue ; le client ne le prenait pas.
+ *
+ * Conséquence, et c'est le pire cas : le serveur répond, mais sa base est morte.
+ * Le joueur voit le formulaire email et le bouton Google — le jeubentement
+ * respond — il tape son mot de passe, et ça échoue. Sans explication. Le serveur
+ * avait la réponse dans la réponse ; c'est le client qui a choisi de ne pas la
+ * lire.
+ *
+ * C'est le même arbitrage que la boutique : un écran qui ne dit pas POURQUOI il
+ * ne marche pas renvoie le joueur à l'essai, et l'essai est le chemin le plus
+ * long vers la cause réelle.
+ */
+export function comptesCasses() {
+  return !serveurSaine
+}
+export function raisonServeur() {
+  return serveurRaison
+}
+
 async function sonderServeur() {
   try {
     const r = await fetch(`${API}/sante`)
     const d = await r.json()
     googleDispo = d?.google === true
+    // `saine` absent = serveur d'une version plus ancienne : on ne casse rien.
+    serveurSaine = d?.saine !== false
+    serveurRaison = typeof d?.raison === 'string' ? d.raison : ''
   } catch {
     googleDispo = false
+    serveurSaine = false
+    serveurRaison = ''
   }
 }
 
@@ -197,7 +236,19 @@ export async function connecter(): Promise<Profil | null> {
   // Un retour de Google l'emporte sur le jeton déjà en mémoire : c'est le
   // nouveau compte, éventuellement fusionné avec l'ancien anonyme.
   const retour = lireRetourConnexion()
-  void sonderServeur()
+  /*
+   * ⚠️ ON ATTEND LA SONDE, ET ON NE LA LÂCHAIT PAS EN PASSANT.
+   *
+   * C'était un `void sonderServeur()` — un tir parallèle, dont la réponse
+   * arrivait après que l'écran du compte s'était peint. Conséquence : le bouton
+   * Google restait masqué au premier affichage sur une machine lente, et
+   * l'avertissement « comptes cassés » n'apparaissait qu'au lancement suivant.
+   *
+   * `sonderServeur` n lève jamais (son `catch` avale tout), donc l'attendre ne
+   * peut pas faire échouer la connexion : il rend seulement le résultat CERTAIN
+   * au moment où l'appelant met l'écran à jour.
+   */
+  await sonderServeur()
 
   if (retour !== 'ok') {
     try {
@@ -464,15 +515,45 @@ export async function verserPots(recolte: {
   }
 }
 
-/** Ouvre la boutique : le catalogue ET le solde, d'un seul appel. */
-export async function chargerBoutique(): Promise<Article[]> {
-  if (!jeton) return []
+/**
+ * Ouvre la boutique : le catalogue ET le solde, d'un seul appel.
+ *
+ * ⚠️ `null` ET `[]` NE VEULENT PAS DIRE LA MÊME CHOSE.
+ *
+ * La boutique renvoyait `[]` dans les deux cas, et l'écran ne pouvait donc pas
+ * les distinguer : hors-ligne, serveur éteint ou base en panne affichaient
+ * « La boutique est fermée pour l'instant », exactement comme un rayon
+ * volontairement vide. Le joueur en concluait qu'il n'y avait rien à acheter —
+ * et il avait tort, puisque tout le catalogue était là, sur le serveur, à
+ * quelques mètres.
+ *
+ * Le classement distingue déjà les deux depuis le début (`lireClassement` rend
+ * `null` pour « indisponible ») ; la boutique est le seul endroit qui ne le
+ * faisait pas. C'est le même arbitrage, et il ne peut pas y en avoir deux
+ * versions : un joueur qui lit « fermée » pour un rayon vide et « indisponible »
+ * pour une panne ne sait plus à quoi se fier.
+ *
+ *  · `null` → indisponible : pas de compte, ou le serveur n'a pas répondu.
+ *  · `[]`   → le catalogue est RÉELLEMENT vide. Ça n'arrive presque jamais.
+ */
+export async function chargerBoutique(): Promise<Article[] | null> {
+  // Pas de compte : ce n'est pas une boutique vide, c'est une boutique absente.
+  if (!jeton) return null
   try {
     const r = await appel('/api/boutique')
     profil = r.profil
     articles = r.articles
   } catch {
-    // On laisse le catalogue précédent : mieux qu'un écran vide
+    /*
+     * ⚠️ ON GARDE LE CATALOGUE PRÉCÉDENT, ET C'EST LE SEUL CAS OÙ IL COMPTE.
+     *
+     * Une coupure réseau au milieu de la visite ne doit pas effacer ce qu'on
+     * affichait une seconde plus tôt : le joueur verrait le rayon se vider
+     * sous ses yeux. Mais si l'on n'a JAMAIS rien chargé, il n'y a rien à
+     * garder — et rendre `[]` dirait « rayon vide », ce qui est le mensonge
+     * qu'on est en train de supprimer.
+     */
+    return articles.length > 0 ? articles : null
   }
   return articles
 }

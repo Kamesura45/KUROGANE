@@ -46,15 +46,14 @@ export async function catalogue(joueur: string): Promise<Article[]> {
   return rows
 }
 
-/** Ce que le joueur possède — juste les codes, pour appliquer ses déblocages. */
-export async function possessions(joueur: string): Promise<string[]> {
-  if (!pool) return []
-  const { rows } = await pool.query<{ article: string }>(
-    'select article from deblocages where joueur = $1',
-    [joueur]
-  )
-  return rows.map((r) => r.article)
-}
+/*
+   * ⚠️ LE DRAPEAU `possede` VIENT DE LA MÊME REQUÊTE, ET C'EST DÉLIBÉRÉ.
+   *
+   * Il y avait un `possessions(joueur)` séparé, qui rendait la liste des codes.
+   * Il a été supprimé : interroger deux fois la base pour savoir la même chose
+   * ouvrirait une fenêtre où le catalogue dit « à acheter » et la liste dit
+   * « acquis ». Un seul `left join` ne peut pas se contredire.
+   */
 
 /**
  * Achète un article.
@@ -66,6 +65,15 @@ export async function possessions(joueur: string): Promise<string[]> {
  *
  * Conséquence voulue : deux achats lancés en même temps (double-tap) ne peuvent
  * pas débiter deux fois. Le second bute sur l'une des deux barrières.
+ *
+ * ⚠️ LE DÉBIT EST ÉCRIT ICI, ET IL NE DOIT PAS DEVENIR UN APPEL.
+ *
+ * Il existed `profil.ts::debiter`, qui faisait exactement ce `update … where
+ * ${col} >= $1` — sur un `pool.query`, donc hors de la transaction. L'appeler
+ * d'ici paraîtrait un factorisation évidente et CASSERAIT L'ACHAT : le débit
+ * ouvrirait sa propre connexion pendant qu'on tient `for update` sur l'article,
+ * et la rollback du refus ne remonterait pas le débit. Il a été supprimé, et
+ * cette ligne est écrite pour qu'on ne le réécrive pas.
  */
 export async function acheter(
   joueur: string,
