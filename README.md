@@ -481,6 +481,10 @@ contexte n'a été perdu pendant la mesure.
 > comptage) interrompent un tour où le rendu n'aurait pas lieu : sans eux, une
 > mesure en erreur laissait un verdict triumphant.
 
+Depuis les options du jeu, un bouton **« Tester ma machine »** pose une autre
+question — « est-ce que ça va tourner chez moi ? » — et y répond en une phrase
+(voir plus loin, sous la qualité graphique).
+
 ### 🪟 Le menu ne paie plus le flou qu'il fabrique
 
 Le voile des menus pose `backdrop-filter: blur(6px)` **en plein écran**, et le
@@ -503,8 +507,10 @@ chaque image, donc il se lève de lui-même au départ d'une course — où
 `track.reset()` a de toute façon tiré la piste à neuf — et à la reprise après
 pause. La boule reprend exactement là où elle s'était arrêtée.
 
-**En qualité basse, le flou des voiles part** (`html.qualite-basse`, posée par
-`applyQuality`, sur `#overlay`, `#pause` et la fiche du tutoriel). Le voile garde
+**En qualité « Fluide » — le cran le plus économique, celui de la machine qui a
+besoin de tout ce qui reste — le flou des voiles part** (`html.qualite-basse`,
+posée par `applyQuality`, sur `#overlay`, `#pause` et la fiche du tutoriel). Le
+voile garde
 son opacité : c'est elle qui masque. À 86 %, 92 % et 93 % opaque, le flou n'était
 qu'une décoration qu'on payait à chaque image qui bouge dessous.
 
@@ -3075,6 +3081,60 @@ ombres, et on ne touche **surtout pas à la brume** : c'est elle qui décide à
 quelle distance on découvre les obstacles. Moins de brume = moins de temps pour
 réagir. Ce serait un réglage de **difficulté déguisé en réglage graphique** — et un
 désavantage en duel.
+
+### 🩺 « Tester ma machine », sous le sélecteur de qualité
+
+⚠️ **UNE MESURE, PAS UNE OPINION — ET SANS CHAUFFE, ELLE MENTIRAIT.** Le bouton
+chronomètre **20 rendus de la vraie scène**, précédés d'un rendu de chauffe et
+d'un `gl.finish()`. Sans la chauffe, le premier rendu compile les programmes :
+le chronomètre mesurerait alors le compilateur du navigateur, et la machine la
+plus lente serait celle qui « compile » le plus longtemps — soit exactement
+l'inverse de ce qu'on veut savoir. La chauffe écarte ce coût, les 20 images qui
+suivent ne mesurent que le rendu.
+
+⚠️ **ON DESSINE NOUS-MÊMES : LES GARDES DE VOILE NE S'APPLIQUENT PAS.** La
+boucle du jeu ne dessine plus rien quand un menu est ouvert (voir plus haut),
+et c'est voulu. Mais le bouton répond à « est-ce que cette machine tient ? »,
+pas à « que s'est-il passé décidé au moment du clic ? ». Il appelle donc
+`renderer.render()` directement, et il dit ce que la carte sait faire.
+
+⚠️ **LE VERDICT EST UNE PHRASE, PAS UN RAPPORT.** Trois plafonds, trois
+réponses :
+
+| Mesure | Verdict | Réponses |
+|---|---|---|
+| ≤ 8 ms | **Ça passe** (vert) | 1 : « gardez Auto » |
+| ≤ 16,7 ms | **Juste, mais ça passe** (ambre) | 2 |
+| au-delà | **Ça saccade** (rouge) | 3 |
+
+16,7 ms, c'est une image à 60 images/s. Un rapport détaillé, personne ne le lit :
+trois conseils ordonnés, si, et le plus important en premier — la qualité, le
+reste à fermer, la résolution de l'écran.
+
+⚠️ **LES CONSEILS S'ADAPTENT AU RÉGLAGE DÉJÀ EN PLACE.** Déjà sur « Fluide », le
+premier le dit plutôt que de renvoyer vers un réglage fait. « Fluide » est le
+seul cran que le jeu peut proposer comme remède : c'est lui qui divise le plus
+le travail, et son nom dit « ça passe ».
+
+⚠️ **SI LA MESURE ÉCHOUE, LE VERDICT L'AVOUE.** `renderer.render()` peut lever
+une exception si le contexte a été perdu entre-temps : le verdict dit alors
+qu'il n'a rien mesuré, au lieu d'inventer un chiffre rassurant.
+
+⚠️ **LE GPU EST RÉDUIT À UN NOM LISIBLE.** Le navigateur rend la chaîne
+`ANGLE (NVIDIA, NVIDIA GeForce GT 320 (0x…) Direct3D11 vs_5_0 ps_5_0)` — utile
+pour qui sait la lire, illisible pour les trois quarts des joueurs. `nomGpu()`
+garde le nom de la carte. Les cœurs et la mémoire annoncée
+(`hardwareConcurrency`, `deviceMemory`) viennent en détail, sous la mesure.
+
+Les réponses sont construites en `createElement` + `textContent` : rien n'est
+injecté en HTML, et un pseudo coupé au retour à la ligne ne peut pas atterrir
+dans le verdict.
+
+⚠️ **CE N'EST PAS LE BANC, ET C'EST VOULU.** Le banc (`diagnostic.html`, en
+développement) compare **trois configurations** et s'intéresse au GPU, un à un ;
+il répond à « quelle partie est lente ? ». Le bouton répond à une autre
+question, celle du joueur : « est-ce que ça va tourner chez moi ? ». Un seul
+verdict, une seule phrase.
 
 ## ⚔️ Le combat : le 2ᵉ acte
 
