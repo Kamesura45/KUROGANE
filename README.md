@@ -1405,7 +1405,71 @@ ok  aucun solde de profil
 > pas sous Node — or tous les bancs importent des modules du jeu. Un `?.` suffit,
 > et Vite, lui, remplit toujours l'objet.
 
+## 📦 Ce que le build emballait pour rien
+
+Le dépôt n'avait **aucune** `vite.config.ts`. Chaque `*.html` à la racine était
+une entrée, et tout le reste suivait les défauts. Deux choses méritaient mieux,
+et les mesures sont faites avant/après sur un `npm run build` identique.
+
+### Les commentaires HTML voyageaient en production
+
+`index.html` fait **55 845 octets**, dont **20 835 de commentaires HTML** —
+**37,4 %**. Ce sont de longs blocs d'explication écrits au fil des corrections
+(la mémoire du dépôt, la même que ce fichier) : le joueur les téléchargeait à
+chaque visite, trois fois rien en compression mais trois fois rien de répété.
+
+On les retire **au build**. Un plugin maison de trois lignes
+(`transformIndexHtml` + une regex, zéro dépendance) le fait pour `index.html`
+et pour toutes les autres pages : **la source les garde tous**, le README aussi.
+Rien n'est perdu, seul l'empaquetage s'allège.
+
+> ⚠️ On ne touche pas au contenu des `<script>` ni des `<style>`. Le seul
+> `<script>` inline d'`index.html` est vide (un simple `<script type="module"
+> src="…">`), et la regex s'arrête au premier `-->` : elle ne peut pas
+> traverser un bloc.
+
+### Le bundle en trois morceaux, et ce que ça change vraiment
+
+**Le premier téléchargement ne réduit pas, et c'est voulu.** Le menu est une
+scène 3D : `main.ts` crée son `WebGLRenderer` au démarrage et `menu.ts` montre
+un aperçu du guerrier. Three.js est requis dès la première image — on ne peut
+pas le renvoyer à plus tard.
+
+Ce que le découpage change, c'est la **suite** :
+
+| | avant | après |
+|---|---|---|
+| `dist/index.html` | 55 845 B / 17 450 gzip | **35 161 B / 9 400 gzip** (−37 % / −46 %) |
+| JavaScript | **un** bloc de 1 005 901 B | `three` 567 799 · `jeu` 332 186 · `colyseus` 104 491 |
+| JavaScript gzip | 284 990 B | 286 370 B — **le même poids total** |
+| requêtes | 1 | 3, donc **parallèles** sur HTTP/2 |
+| après une modif du jeu | **tout** le Mo renvoyé | seul le chunk du jeu change de hachage |
+
+C'est la mise à jour qui coûte, pas la première visite : un commit ne rejoue
+plus les 568 kB de three.js pour tout le monde.
+
+### Les trois pièges rencontrés
+
+> 1. **Vite 8 ne parle plus Rollup.** Il embarque **rolldown** : l'option
+>    s'appelle `build.rolldownOptions.output.codeSplitting.groups`, et
+>    `output.manualChunks` est dépréqué. La liste des entrées, elle, vient
+>    toujours de Vite — on ne redéfinit **jamais** `input` ici.
+> 2. **`test` doit utiliser `[\\/]` et non `/`.** Sous Windows le séparateur
+>    est un antislash : un motif écrit à la main ne matcherait plus rien, et
+>    `three` repartirait dans le gros chunk sans un mot.
+> 3. J'ai nommé la variable `groupes` (français) et l'ai référencée en
+>    `codeSplitting: { groups }` — le raccourci d'objet cherche une variable
+>    `groups`. `ReferenceError: groups is not defined` au chargement de la
+>    config. Il faut `codeSplitting: { groups: groupes }`.
+
+`tsc --noEmit` vert, build vert (16,09 Mo / 22 fichiers), **13 bancs au vert**
+(`anims`, `nav`, `torii`, `plateformes`, `mur`, `infini`, `glissade`, `sprint`,
+`bambous`, `menu`, `fuites`, `serveur`, `image`), et la page livrée s'ouvre
+sous Chrome headless sans `panne-rendu` — les 14 écrans et le `#boutiqueCache`
+y sont toujours présents.
+
 ## 🧹 Le ménage : six exports morts, et deux qui étaient des pièges
+
 
 `tsc --noUnusedLocals --noUnusedParameters` ne signalait **rien**. Le code mort
 n'était pas du code mort *visible* — c'était des exports que plus rien
