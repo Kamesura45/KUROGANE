@@ -66,6 +66,8 @@ import {
   inscriptionEmail,
   connexionEmail,
   verserPots,
+  surRepriseDuServeur,
+  boutiqueDuCache,
 } from './compte'
 import {
   souffleDeVent,
@@ -3934,7 +3936,11 @@ const menu = new Menu({
     const connues = mesArticles()
     if (connues.length > 0) menu.setBoutique(connues)
     void chargerBoutique().then((articles) => {
-      menu.setBoutique(articles)
+      // `boutiqueDuCache` dit si le serveur a répondu. Non, et des articles
+      // affichés : c'est le catalogue conservé sur l'appareil, et l'écran doit
+      // le dire — les prix sont vraisemblables, mais c'est le serveur qui
+      // décidera au moment de l'achat.
+      menu.setBoutique(articles, boutiqueDuCache())
       majAffichageBourse()
     })
   },
@@ -4061,6 +4067,38 @@ menu.setCompte({
     raison: raisonServeur(),
   })
 }
+
+/**
+ * ————— Le retour du serveur —————
+ *
+ * Railway met le serveur en SOMMEIL dès que personne ne joue. Le premier
+ * appel le réveille, et pendant les trois premières secondes il répond AVANT
+ * que sa base soit joignable : `/sante` dit alors « non saine ». Le serveur
+ * se soigne tout seul en moins d'une minute.
+ *
+ * Ce qui manquait, c'était le CLIENT qui s'en aperçoive : il ne sondait
+ * qu'une fois, au lancement, et rangeait « injoignable » pour toute la
+ * session. La boutique restait « indisponible » et le compte restait absent,
+ * jusqu'au rechargement — alors que le serveur était revenu depuis longtemps.
+ *
+ * D'où ce rappel : quand la sonde repasse au vert, on reprend le compte, le
+ * solde et le catalogue. Sans F5.
+ */
+surRepriseDuServeur(() => {
+  majCompte()
+  void connecter().then(async () => {
+    majAffichageBourse()
+    majCompte()
+    if (!monProfil()) return
+    const catalogue = await chargerBoutique()
+    majAffichageBourse()
+    menu.setCouleursDebloquees(couleursDebloquees())
+    // La boutique est peut-être ouverte sous les yeux du joueur : on la
+    // remplit, mais seulement s'il y a quelque chose à montrer — un `[]`
+    // affiché alors qu'on vient de se connecter serait un faux « rayon vide ».
+    if (catalogue && catalogue.length > 0) menu.setBoutique(catalogue)
+  })
+})
 
 /**
  * La connexion au démarrage : compte anonyme si c'est la première fois, sinon

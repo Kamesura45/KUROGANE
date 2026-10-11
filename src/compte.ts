@@ -25,6 +25,28 @@ import { WS_URL } from './net'
 const API = WS_URL.replace(/^ws/, 'http')
 
 const CLE_JETON = 'kurogane-jeton'
+const CLE_BOUTIQUE = 'kurogane-boutique'
+
+/*
+ * ————— Les délais —————
+ *
+ * Le SERVEUR attend 10 secondes avant d'abandonner une base muette
+ * (`connectionTimeoutMillis`, server/src/db.ts). Si le CLIENT attend aussi
+ * 10 secondes, chaque tentative coûte 10 secondes de gel — et sur une
+ * machine lente, une boutique qui met 10 secondes à dire « indisponible »
+ * est une boutique qui a l'air plantée.
+ *
+ * On rend donc la main AVANT le serveur : 5 secondes en lecture, 8 en
+ * mutation (un achat ou un versement mérite un poil plus de patience). Le
+ * joueur voit un résultat en moins de 5 secondes, le serveur continue de
+ * travailler de son côté, et la reprise arrive par la sonde — pas par un
+ * écran gelé.
+ *
+ * ⚠️ `AbortSignal.timeout` existe depuis Chrome 103 / Firefox 100 / Safari 16.
+ * Le jeu exige déjà WebGL2 et Three.js 0.185 : on est bien au-dessus.
+ */
+const DELAI_LECTURE = 5_000
+const DELAI_MUTATION = 8_000
 
 export interface Profil {
   joueur: string
@@ -76,17 +98,33 @@ export function monJeton(): string | null {
 
 /** Un appel à notre serveur, avec le jeton s'il y en a un. */
 async function appel(route: string, corps?: unknown): Promise<any> {
-  const r = await fetch(API + route, {
-    method: corps === undefined ? 'GET' : 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...(jeton ? { authorization: `Bearer ${jeton}` } : {}),
-    },
-    body: corps === undefined ? undefined : JSON.stringify(corps),
-  })
-  const data = await r.json().catch(() => null)
-  if (!r.ok) throw Object.assign(new Error(data?.erreur ?? 'erreur'), { statut: r.status, data })
-  return data
+  const lecture = corps === undefined
+  try {
+    const r = await fetch(API + route, {
+      method: lecture ? 'GET' : 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(jeton ? { authorization: `Bearer ${jeton}` } : {}),
+      },
+      body: lecture ? undefined : JSON.stringify(corps),
+      signal: AbortSignal.timeout(lecture ? DELAI_LECTURE : DELAI_MUTATION),
+    })
+    const data = await r.json().catch(() => null)
+    if (!r.ok) throw Object.assign(new Error(data?.erreur ?? 'erreur'), { statut: r.status, data })
+    return data
+  } catch (e: any) {
+    /*
+     * ⚠️ `statut` = le serveur a répondu et a REFUSÉ : ce n'est pas une panne,
+     * c'est une décision (401, 402 fonds insuffisants, 429 trop d'achats…).
+     *
+     * Un `fetch` qui casse — délai dépassé, réseau coupé, service en sommeil —
+     * ne porte AUCUN `statut`. C'est exactement là qu'on note la panne et qu'on
+     * remet la veille en route : c'est ce qui fait revenir la boutique et les
+     * comptes sans que le joueur recharge la page.
+     */
+    if (!e?.statut) noterPanne()
+    throw e
+  }
 }
 
 /** Crée un compte anonyme et garde son jeton sur l'appareil. */
@@ -96,6 +134,9 @@ async function creerCompteAnonyme(): Promise<boolean> {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: '{}',
+      // Mutation : 8 s. Le serveur crée un compte dans la base, ce qui prend
+      // un peu plus qu'une lecture.
+      signal: AbortSignal.timeout(DELAI_MUTATION),
     })
     const data = await r.json()
     if (!data?.token) return false
@@ -126,6 +167,124 @@ let serveurSaine = true
 let serveurRaison = ''
 export function googleActif() {
   return googleDispo
+}
+
+/*
+ * ————— La veille du serveur —————
+ *
+ * Railway met le service en SOMMEIL dès que personne ne joue. Le premier
+ * appel le réveille, et pendant les trois premières secondes il répond AVANT
+ * que sa base soit joignable : `/sante` dit alors « non saine », et une
+ * requête Postgres casse en `ENOTFOUND`. Le serveur se soigne tout seul en
+ * moins d'une minute (boucle `insister()` de server/src/index.ts : 2, 5, 10,
+ * 20, 30, 60 s).
+ *
+ * Ce qui manquait n'était donc pas le serveur : c'était le CLIENT, qui ne
+ * sondait qu'UNE FOIS, au lancement, et rangeait « injoignable » pour toute
+ * la session. La boutique restait « indisponible » jusqu'au rechargement,
+ * alors que le serveur était revenu depuis longtemps.
+ *
+ * D'où la veille : on re-sonde tant que c'est cassé, et quand ça repasse au
+ * vert on prévient ceux qui ont besoin de se rafraîchir.
+ */
+const DELAI_SONDE = 4_000
+/*
+ * Dix secondes entre deux essais, et non trente : le serveur se remet en 10
+ * à 30 secondes, et le joueur attend en ouvrant la boutique. Toutes les 30 s
+ * on l'aurait laissé « indisponible » une bonne minute de trop.
+ *
+ * C'est une requête d'un kilo-octet, lancée UNIQUEMENT tant que c'est cassé,
+ * et annulée dès que ça va mieux — pas une charge, une politesse.
+ */
+const RETRY_SONDE = 10_000
+
+let sondeEnCours = false
+let veilleur: ReturnType<typeof setTimeout> | null = null
+const reprises: (() => void)[] = []
+
+/**
+ * Le serveur ne répond plus. On le note et on remet la veille en route.
+ *
+ * On ne fait QUE ça : pas de message, pas de toast. Une requête qui manque
+ * (wifi qui décroche, service qui se rendort) n'est pas un événement — c'est
+ * la reprise silencieuse qui compte.
+ */
+function noterPanne() {
+  serveurSaine = false
+  serveurRaison = ''
+  googleDispo = false
+  programmerSonde()
+}
+
+/** Reprogramme la prochaine sonde. Une seule à la fois, jamais plus rapprochée. */
+function programmerSonde() {
+  if (veilleur) return // une veille tourne déjà
+  veilleur = setTimeout(
+    () => {
+      veilleur = null
+      void sonderServeur()
+    },
+    RETRY_SONDE
+  )
+}
+
+/** Demande au serveur s'il va bien — et surtout si ses COMPTES vont bien. */
+export async function sonderServeur(): Promise<void> {
+  if (sondeEnCours) return
+  sondeEnCours = true
+  const avant = serveurSaine
+  try {
+    const r = await fetch(`${API}/sante`, { signal: AbortSignal.timeout(DELAI_SONDE) })
+    const d = await r.json()
+    googleDispo = d?.google === true
+    // `saine` absent = serveur d'une version plus ancienne : on ne casse rien.
+    serveurSaine = d?.saine !== false
+    serveurRaison = typeof d?.raison === 'string' ? d.raison : ''
+  } catch {
+    googleDispo = false
+    serveurSaine = false
+    serveurRaison = ''
+  } finally {
+    sondeEnCours = false
+  }
+
+  if (serveurSaine) {
+    if (veilleur) {
+      clearTimeout(veilleur)
+      veilleur = null
+    }
+    // On était cassé et on ne le sommes plus : c'est LA reprise.
+    if (!avant) rappelerLesReprises()
+  } else {
+    programmerSonde()
+  }
+}
+
+/**
+ * Le serveur vient de REVENIR. On prévient ceux qui doivent se rafraîchir.
+ *
+ * C'est ce qui remet le solde, le catalogue et l'écran du compte à jour sans
+ * que le joueur recharge la page.
+ */
+function rappelerLesReprises() {
+  for (const cb of reprises) {
+    try {
+      cb()
+    } catch {
+      // Un abonné qui crache ne doit pas empêcher les autres d'être prévenus.
+    }
+  }
+}
+
+/**
+ * S'abonne au retour du serveur. Appelé une fois, au démarrage, par le jeu.
+ *
+ * Le rappel peut survenir n'importe quand pendant la session : il doit donc
+ * être léger et jamais lancer deux rafraîchissements qui se marchent dessus
+ * (c'est `connecter()` qui se protège de lui-même contre la concurrence).
+ */
+export function surRepriseDuServeur(cb: () => void) {
+  reprises.push(cb)
 }
 
 /** Es-tu un compte anonyme (donc perdable) ou un vrai compte ? */
@@ -210,46 +369,42 @@ export function raisonServeur() {
   return serveurRaison
 }
 
-async function sonderServeur() {
-  try {
-    const r = await fetch(`${API}/sante`)
-    const d = await r.json()
-    googleDispo = d?.google === true
-    // `saine` absent = serveur d'une version plus ancienne : on ne casse rien.
-    serveurSaine = d?.saine !== false
-    serveurRaison = typeof d?.raison === 'string' ? d.raison : ''
-  } catch {
-    googleDispo = false
-    serveurSaine = false
-    serveurRaison = ''
-  }
-}
-
-/**
+/*
  * Se connecte au démarrage : on réutilise le jeton de l'appareil s'il est
  * encore valable, sinon on ouvre un compte anonyme.
  *
  * Ne lève JAMAIS : serveur éteint, hors-ligne, base en panne — le jeu doit
  * rester jouable. On se retrouve simplement sans solde ni boutique.
+ *
+ * ⚠️ ON NE RENONCE PLUS POUR TOUTE LA SESSION.
+ *
+ * Un appel qui échoue HORS 401 laissait le jeton en mémoire (bien) mais
+ * `return null` clôturait la tentative : rien ne la reprenait plus, jamais,
+ * jusqu'au rechargement. Or le serveur se répare tout seul — c'est même sa
+ * façon normale de fonctionner après un sommeil. Il suffisait que le client
+ * retente à la prochaine reprise ; c'est la veille qui le déclenche.
  */
+let connexionEnCours: Promise<Profil | null> | null = null
+
 export async function connecter(): Promise<Profil | null> {
+  /*
+   * Une reprise du serveur peut tomber au milieu d'une connexion déjà en vol.
+   * Deux tentatives en parallèle se marcheraient sur le jeton et créeraient
+   * deux comptes anonymes : on ne lance jamais deux à la fois.
+   */
+  if (connexionEnCours) return connexionEnCours
+  connexionEnCours = tenterConnexion()
+  try {
+    return await connexionEnCours
+  } finally {
+    connexionEnCours = null
+  }
+}
+
+async function tenterConnexion(): Promise<Profil | null> {
   // Un retour de Google l'emporte sur le jeton déjà en mémoire : c'est le
   // nouveau compte, éventuellement fusionné avec l'ancien anonyme.
   const retour = lireRetourConnexion()
-  /*
-   * ⚠️ ON ATTEND LA SONDE, ET ON NE LA LÂCHAIT PAS EN PASSANT.
-   *
-   * C'était un `void sonderServeur()` — un tir parallèle, dont la réponse
-   * arrivait après que l'écran du compte s'était peint. Conséquence : le bouton
-   * Google restait masqué au premier affichage sur une machine lente, et
-   * l'avertissement « comptes cassés » n'apparaissait qu'au lancement suivant.
-   *
-   * `sonderServeur` n lève jamais (son `catch` avale tout), donc l'attendre ne
-   * peut pas faire échouer la connexion : il rend seulement le résultat CERTAIN
-   * au moment où l'appelant met l'écran à jour.
-   */
-  await sonderServeur()
-
   if (retour !== 'ok') {
     try {
       jeton = localStorage.getItem(CLE_JETON)
@@ -258,19 +413,52 @@ export async function connecter(): Promise<Profil | null> {
     }
   }
 
+  /*
+   * ⚠️ LA SONDE PART TOUT DE SUITE, PENDANT QU'ON CHERCHE LE PROFIL.
+   *
+   * C'était un `await sonderServeur()` au tout début, avant toute requête.
+   * Résultat sur un serveur qui se RÉVEILLE (Railway, 3,4 s de froid mesurés)
+   * : sonde 3,4 s, puis profil 3,4 s — six secondes pour un compte qui existe
+   * depuis toujours. Les deux appels n'ont rien à attendre l'un de l'autre.
+   *
+   * On attend la sonde juste APRÈS : l'écran du compte doit peindre avec le
+   * verdict certain (c'était le défaut d'origine de ce `await`), seulement
+   * sans payer deux réveils l'un après l'autre.
+   */
+  const sante = sonderServeur()
+  let jetonRefuse = false
+
   if (jeton) {
     try {
       profil = await appel('/api/profil')
       retenirIdentite()
-      return profil
     } catch (e: any) {
       // 401 = jeton périmé ou révoqué : on repart d'un compte neuf. Toute autre
       // panne (serveur éteint) n'est PAS une raison de jeter le jeton — il
-      // resservira au prochain lancement.
-      if (e?.statut !== 401) return null
-      jeton = null
+      // resservira au prochain lancement, et à la prochaine reprise.
+      jetonRefuse = e?.statut === 401
+      if (jetonRefuse) jeton = null
     }
   }
+
+  await sante
+
+  if (profil) return profil
+  // Jeton gardé mais serveur injoignable : on ne crée surtout PAS un compte
+  // anonyme par-dessus — ce serait jeter un portefeuille pour un coup de wifi.
+  if (jeton && !jetonRefuse) return null
+  /*
+   * ⚠️ LE SERVEUR A DIT QUE SES COMPTES NE MARCHAIENT PAS : ON NE TENTE RIEN.
+   *
+   * Lui demander un compte anonyme coûterait 8 secondes de délai pour un
+   * échec certain — il vient de le dire lui-même, une seconde plus tôt. On
+   * attend la reprise : la veille re-sonde, et quand `/sante` repasse au vert
+   * elle rappelle ce module, qui retente tout seul.
+   *
+   * C'est ce qui fait passer un premier lancement sans réseau de 12 secondes
+   * à 4 : le seul appel qui reste est la sonde.
+   */
+  if (comptesCasses()) return null
 
   if (!(await creerCompteAnonyme())) return null
   try {
@@ -368,6 +556,8 @@ async function authEmail(
         ...(jeton ? { authorization: `Bearer ${jeton}` } : {}),
       },
       body: JSON.stringify(corps),
+      // Mutation (création ou ouverture de session) : 8 s.
+      signal: AbortSignal.timeout(DELAI_MUTATION),
     })
     const data = await r.json().catch(() => null)
 
@@ -429,6 +619,15 @@ export async function deconnecter(): Promise<void> {
   email = null
   try {
     localStorage.removeItem(CLE_JETON)
+    /*
+     * ⚠️ LE CATALOGUE AUSSI, ET C'EST VOULU.
+     *
+     * Il porte `possede` : un article marqué « acquis » par le compte QUITTÉ
+     * serait affiché comme acquis au compte suivant, jusqu'à ce que le serveur
+     * le corrige. Vider le cache coûte une fraction de seconde de bandeau
+     * « indisponible » ; le laisser mentir coûterait la confiance du joueur.
+     */
+    localStorage.removeItem(CLE_BOUTIQUE)
   } catch {
     /* rien à faire */
   }
@@ -515,6 +714,49 @@ export async function verserPots(recolte: {
   }
 }
 
+/*
+ * ————— Le catalogue gardé sur l'appareil —————
+ *
+ * ⚠️ IL NE CONTIENT QUE LES ARTICLES. JAMAIS LE SOLDE.
+ *
+ * Le solde est un reflet de la base et lui seul compte : un chiffre conservé
+ * mentirait au joueur qui vient de dépenser ailleurs, et le jeu a déjà toute
+ * une règle écrite sur ce sujet (cf. l'en-tête de ce fichier). Le catalogue,
+ * lui, ne bouge presque jamais — une liste de couleurs et de prix, relue à
+ * chaque ouverture.
+ *
+ * Ce cache sert à UNE chose : que la boutique s'ouvre AU MOMENT DU CLIC, et
+ * non à la fin d'un aller-retour réseau. Le serveur reprend la main juste
+ * après ; et c'est LUI qui décide des prix et des achats — un article périmé
+ * ne peut donc pas faire acheter, puisque `acheter` n'envoie que le CODE.
+ */
+let catalogueDuCache = false
+
+/** Le catalogue affiché vient-il du cache local plutôt que du serveur ? */
+export function boutiqueDuCache() {
+  return catalogueDuCache
+}
+
+function garderCatalogue() {
+  try {
+    localStorage.setItem(CLE_BOUTIQUE, JSON.stringify(articles))
+  } catch {
+    /* navigation privée : on fera sans */
+  }
+}
+
+function lireCatalogueLocal(): Article[] {
+  try {
+    const brut = localStorage.getItem(CLE_BOUTIQUE)
+    const l = brut ? JSON.parse(brut) : null
+    // On ne garde que ce qui ressemble à un article : un cache corrompu ne
+    // doit pas faire planter l'écran de la boutique.
+    return Array.isArray(l) ? l.filter((a: any) => a && typeof a.code === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 /**
  * Ouvre la boutique : le catalogue ET le solde, d'un seul appel.
  *
@@ -539,21 +781,32 @@ export async function verserPots(recolte: {
 export async function chargerBoutique(): Promise<Article[] | null> {
   // Pas de compte : ce n'est pas une boutique vide, c'est une boutique absente.
   if (!jeton) return null
+
+  /*
+   * Premier appel de la session : on ouvre avec le catalogue conservé, pour
+   * que la boutique s'affiche tout de suite. Le serveur confirme ou corrige
+   * juste après — et si le serveur répond, `catalogueDuCache` repasse à faux.
+   */
+  catalogueDuCache = false
+  if (articles.length === 0) articles = lireCatalogueLocal()
+
   try {
     const r = await appel('/api/boutique')
     profil = r.profil
-    articles = r.articles
+    if (Array.isArray(r.articles)) articles = r.articles
+    garderCatalogue()
   } catch {
     /*
      * ⚠️ ON GARDE LE CATALOGUE PRÉCÉDENT, ET C'EST LE SEUL CAS OÙ IL COMPTE.
      *
      * Une coupure réseau au milieu de la visite ne doit pas effacer ce qu'on
      * affichait une seconde plus tôt : le joueur verrait le rayon se vider
-     * sous ses yeux. Mais si l'on n'a JAMAIS rien chargé, il n'y a rien à
-     * garder — et rendre `[]` dirait « rayon vide », ce qui est le mensonge
-     * qu'on est en train de supprimer.
+     * sous ses yeux. Mais si l'on n'a JAMAIS rien chargé — ni réseau, ni
+     * cache — il n'y a rien à garder, et rendre `[]` dirait « rayon vide »,
+     * ce qui est le mensonge qu'on est en train de supprimer.
      */
-    return articles.length > 0 ? articles : null
+    catalogueDuCache = articles.length > 0
+    return catalogueDuCache ? articles : null
   }
   return articles
 }
@@ -571,7 +824,11 @@ export async function acheter(
   try {
     const r = await appel('/api/acheter', { code })
     profil = r.profil
-    articles = r.articles
+    if (Array.isArray(r.articles)) articles = r.articles
+    // Le serveur vient de nous dire ce qu'on possède : le cache suit, sinon
+    // la prochaine ouverture hors-ligne remontrerait l'article comme absent.
+    catalogueDuCache = false
+    garderCatalogue()
     return { ok: true }
   } catch (e: any) {
     return { ok: false, raison: e?.message ?? 'erreur' }

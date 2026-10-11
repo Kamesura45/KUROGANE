@@ -130,8 +130,16 @@ export interface Identity {
   region?: string
 }
 
+/*
+ * `?.` N'EST PAS DE LA PRUDENCE, C'EST POUR LES BANCS.
+ *
+ * Vite remplit toujours `import.meta.env` dans le navigateur ; Node, lui, n'en
+ * a jamais. Or tous les `tools/verifier-*.ts` s'exécutent sous Node, et
+ * `compte.ts` importe `WS_URL` — c'est-à-dire ce fichier. Sans le `?.`, le
+ * simple fait d'importer le module du compte plante un banc.
+ */
 export const WS_URL: string =
-  import.meta.env.VITE_SERVER_URL ??
+  import.meta.env?.VITE_SERVER_URL ??
   (location.protocol === 'https:' ? PROD_SERVER_URL : `ws://${location.hostname}:2567`)
 
 /** Génère un code de salon lisible : 4 lettres, sans voyelles (pas de gros mots). */

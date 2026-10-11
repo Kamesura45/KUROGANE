@@ -431,6 +431,24 @@
         <!-- Ce que le joueur POSSÈDE déjà — le premier chiffre qu'on cherche ici. -->
         <p class="lead" id="boutiquePossede" hidden></p>
 
+        <!--
+          ⚠️ LE CATALOGUE PEUT VENIR DE L'APPAREIL, ET IL FAUT LE DIRE.
+
+          Quand le serveur ne répond pas, la boutique s'ouvre quand même avec
+          ce qu'elle a conservé la dernière fois — c'est ce qui la rend
+          instantanée. Mais un catalogue conservé n'est pas un catalogue
+          confirmé : les prix sont ceux de la dernière visite, et c'est le
+          serveur qui tranchera au moment de l'achat.
+
+          Sans cette ligne, un joueur croirait une boutique en ligne alors que
+          le serveur est muet — et il apprendrait la vérité au clic, sur le
+          toast « Hors ligne ». Mieux vaut le lui dire avant.
+        -->
+        <p class="lead" id="boutiqueCache" hidden>
+          📡 Catalogue conservé sur cet appareil — les prix et tes achats sont
+          vérifiés par le serveur au moment de l'achat.
+        </p>
+
         <p class="lead">
           Des couleurs de maître pour ton guerrier perso. <b>Uniquement de
           l'apparence</b> : rien de ce qui se vend ici ne te fera courir plus

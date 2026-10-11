@@ -323,6 +323,8 @@ npm run fuites:test        # le feu ne reprogramme sa rampe qu'en CHANGEANT de
                            # cible, et les cinq scans des plans coûtent 28 µs
 npm run image              # ce que la boucle pait HORS Track.update : collisions,
                            # arcs de portail et animations — 37 µs sur 16 667
+npm run serveur:test       # un serveur qui dort, qui se réveille, qui refuse :
+                           # 21 vérifications, dont « les comptes reviennent seuls »
 ```
 
 ## ⛩️ Le portique et sa forme creuse
@@ -1308,6 +1310,100 @@ la fenêtre où l'un dit 3 et l'autre 4.
 > `profils.hisui`, avec `check (>= 0)` en sécurité. Il n'y a pas d'« argent » à
 > côté. Ajouter une troisième monnaie, ce n'est pas une case dans `index.html` :
 > c'est une colonne, une contrainte, une migration, et le placeur qui la verse.
+
+## 🛌 Le serveur dort, et le client s'en aperçoit enfin
+
+Un soir de septembre, la boutique affiche **« indisponible »** et les comptes ne
+répondent plus, alors que les courses en ligne tournent. On sonde la production :
+
+```
+GET https://kurogane-production.up.railway.app/sante
+{"ok":true,"base":true,"saine":false,"raison":"ENOTFOUND","comptes":true,"google":true}
+```
+
+Un contrôle avec un nom d'hôte inventé rend `404` : **notre service existe et
+répond**. Ce n'est pas lui qui est mort. Sept sondes à douze secondes d'intervalle
+donnent ensuite, sans rien changer d'autre :
+
+| | réveil | puis |
+|---|---|---|
+| `/sante` | **3 391 ms** | 307 · 316 · 340 · 314 · 335 · 324 ms |
+
+Railway met le service en **sommeil** dès que personne ne joue. Le premier appel
+le réveille, et pendant cette fenêtre il répond **avant** que sa base soit
+joignable : une requête Postgres casse en `ENOTFOUND`, `/sante` dit « non saine ».
+Le serveur se soigne **tout seul** — c'est sa façon normale de fonctionner, et sa
+boucle `insister()` (2, 5, 10, 20, 30, 60 s) a fini par trouver la base. Moins de
+deux minutes plus tard, les sept sondes rendent toutes `saine:true`.
+
+**La base n'avait donc jamais été supprimée.** Ce qui manquait, c'était le client
+qui s'en aperçoive.
+
+### Les quatre défauts du client
+
+| défaut | ce que ça coûtait | correctif |
+|---|---|---|
+| aucun délai sur les appels (`compte.ts`) | chaque tentative attendait les **10 s** de `connectionTimeoutMillis` du serveur | `AbortSignal.timeout()` — **5 s** en lecture, **8 s** en mutation |
+| **une seule** sonde, au lancement | « injoignable » était écrit pour **toute la session**, même quand le serveur était revenu | la **veille** : re-sonde `/sante` toutes les 10 s tant que c'est cassé |
+| `connecter()` renonçait | rien ne reprenait la tentative, jamais, jusqu'au F5 | on garde le jeton, on retente à la prochaine reprise |
+| le catalogue n'était pas gardé | « indisponible » au lieu d'une boutique | cache `localStorage` du **catalogue seul** |
+
+Dix secondes entre deux sondes plutôt que trente : le serveur se remet en 10 à
+30 secondes, et le joueur attend **en ouvrant la boutique**. C'est une requête
+d'un kilo-octet, lancée uniquement tant que c'est cassé, et annulée dès que ça va
+mieux.
+
+### ⚠️ LE SOLDE N'ENTRE JAMAIS DANS LE CACHE
+
+C'est la seule règle de ce chapitre, et elle est absolue. Le solde est un reflet
+de la base et **lui seul compte** : un chiffre conservé mentirait au joueur qui
+vient de dépenser ailleurs. Le catalogue, lui, ne bouge presque jamais — une
+liste de couleurs et de prix.
+
+Et le cache ne peut pas faire acheter : `acheter()` n'envoie que le **code**, le
+serveur relit le prix dans la base. Un article périmé affiché depuis l'appareil
+se traduit au pire par un refus, pas par un achat à faux prix. L'écran le dit
+d'ailleurs, en toutes lettres : *« Catalogue conservé sur cet appareil »*.
+
+### Ce qui a changé de visible
+
+| | avant | après |
+|---|---|---|
+| serveur endormi, boutique ouverte | « indisponible », jusqu'au F5 | **catalogue affiché** en 5 s, avec la mention « conservé » |
+| le serveur revient | rien, jusqu'au F5 | compte, solde et boutique **reviennent seuls** |
+| premier lancement sans réseau | 10 à 20 s de gel | **4 006 ms** |
+| `deconnecter()` | le jeton s'efface | **le catalogue aussi** — il porte `possede`, il mentirait au compte suivant |
+
+### Le banc : `npm run serveur:test`
+
+`tools/verifier-serveur.ts` fabrique un faux serveur — qui dort, qui se
+réveille, qui refuse — et **21 vérifications** mesurent le client face à lui :
+
+```
+ok  connecter() rend la main vite                    → 4006 ms
+ok  la veille a re-sondé                             → 2 sonde(s) en plus
+ok  le retour est signalé sans rechargement          → après 10074 ms
+ok  la boutique s'ouvre quand même
+ok  et elle s'ouvre vite                             → 5186 ms
+ok  le catalogue vient bien du serveur               → boutiqueDuCache() === false
+ok  aucun solde de profil
+```
+
+> ⚠️ **Deux pièges d'outillage rencontrés en chemin**, tous deux réparés :
+>
+> 1. `tools/resolveur-ts.mjs` charge son hook via une URL `data:`. Le premier
+>    jet marchait **par chance** : le payload contient des `/`, des `$`, des `\`
+>    — autant de façons de faire échouer un parseur d'URL, avec un
+>    `SyntaxError: Unexpected token` qui ne nomme même pas le fichier fautive.
+>    `encodeURIComponent` ne laisse passer aucun de ces caractères.
+> 2. Le même hook coupait la chaîne d'import à la fin : `../src/compte.ts?v=1`
+>    ne se termine pas par `.ts`, la règle lui en rajoutait un, et Node
+>    cherchait `compte.ts?v=1.ts`. On coupe sur le premier `?` avant de tester
+>    l'extension.
+>
+> Et un troisième, dans le code du jeu cette fois : `import.meta.env` n'existe
+> pas sous Node — or tous les bancs importent des modules du jeu. Un `?.` suffit,
+> et Vite, lui, remplit toujours l'objet.
 
 ## 🧹 Le ménage : six exports morts, et deux qui étaient des pièges
 

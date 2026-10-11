@@ -400,6 +400,7 @@ boutiqueListe: document.getElementById('boutiqueListe')!,
       boutiqueVide: document.getElementById('boutiqueVide')!,
       boutiqueIndispo: document.getElementById('boutiqueIndispo')!,
       boutiquePossede: document.getElementById('boutiquePossede')!,
+      boutiqueCache: document.getElementById('boutiqueCache')!,
       /*
        * ⚠️ CE SONT LES `<b>`, PAS LES PAVÉS.
        *
@@ -1354,13 +1355,22 @@ setBourse(mon: number | null, hisui: number | null) {
  * décidé de ne rien vendre. Le joueur ne peut pas deviner que tout le
  * catalogue existe, et il ne songera pas d'y revenir. Le classement faisait
  * depuis le début la distinction que la boutique ne faisait pas — même règle,
- * mêmeraison, une seule version désormais.
+ * même raison, une seule version désormais.
+ *
+ * `horsConnexion` signale un troisième état, que les deux mots ci-dessus ne
+ * peuvent pas dire : le catalogue EST affiché, mais il vient de l'APPAREIL
+ * (cf. le cache de `chargerBoutique`) et non du serveur, qui ne répond pas.
+ * L'écran ouvre, les prix sont vraisemblables, et le joueur mérite de savoir
+ * d'où ils viennent avant de cliquer sur « Acheter ».
  */
-setBoutique(articles: ArticleVu[] | null) {
+setBoutique(articles: ArticleVu[] | null, horsConnexion = false) {
     const liste = this.el.boutiqueListe
     liste.replaceChildren()
     this.el.boutiqueIndispo.classList.toggle('hidden', articles !== null)
     this.el.boutiqueVide.classList.toggle('hidden', articles === null || articles.length > 0)
+    // L'avertissement n'a de sens que s'il y a un catalogue sous les yeux :
+    // sur un écran « indisponible », il contredirait le message d'à côté.
+    this.el.boutiqueCache.hidden = articles === null || !horsConnexion
     if (!articles) {
       this.el.boutiquePossede.hidden = true
       return
