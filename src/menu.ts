@@ -2559,7 +2559,7 @@ setBoutique(articles: ArticleVu[] | null) {
   private afficherDiag(r: DiagResultat) {
     const BUDGET = 16.7 // une image à 60 images/s
     const fmt = (n: number) => n.toFixed(1).replace('.', ',')
-    const dejaFluide = this.settings.quality === 'bas'
+    const dejaFluide = this.settings.quality === 'fluide'
 
     const conseilQualite = dejaFluide
       ? 'Vous êtes déjà sur « Fluide » : c’est le réglage le plus efficace, et il est fait.'

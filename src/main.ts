@@ -412,9 +412,10 @@ function applyQuality(q: Quality) {
   track.setBudgetDecor(n.decor, change)
   resize() // setSize doit être rappelé après un changement de pixelRatio
   // Le flou des voiles n'est pas gratuit : le navigateur le refait dès que
-  // l'image du dessous bouge, en plein écran. En qualité basse, le voile garde
-  // son opacité — c'est elle qui masque — et le filtre part.
-  document.documentElement.classList.toggle('qualite-basse', q === 'bas')
+  // l'image du dessous bouge, en plein écran. En qualité Fluide — le cran le
+  // plus économique, celui de la machine qui a besoin de tout ce qui reste —,
+  // le voile garde son opacité : c'est elle qui masque, et le filtre part.
+  document.documentElement.classList.toggle('qualite-basse', q === 'fluide')
 }
 
 /**
