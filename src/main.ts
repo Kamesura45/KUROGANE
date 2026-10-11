@@ -46,7 +46,7 @@ import {
   LUEUR_DUREE,
   type ParcheminKind,
 } from './parchemin'
-import { Menu, escapeHtml } from './menu'
+import { Menu, escapeHtml, type DiagResultat } from './menu'
 import {
   connecter,
   monProfil,
@@ -369,6 +369,26 @@ function applyQuality(q: Quality) {
   // l'image du dessous bouge, en plein écran. En qualité basse, le voile garde
   // son opacité — c'est elle qui masque — et le filtre part.
   document.documentElement.classList.toggle('qualite-basse', q === 'bas')
+}
+
+/**
+ * 🏷️ Rend un nom de carte lisible, pour une seule ligne de verdict.
+ *
+ * `ANGLE (NVIDIA, NVIDIA GeForce GT 320 (0x0000CA2) Direct3D11 vs_5_0 ps_5_0, …)`
+ * → `NVIDIA GeForce GT 320`. L'identifiant hexadécimal, l'API de rendu et les
+ * versions de shaders ne disent rien au joueur. Si le navigateur n'emploie pas
+ * ce format (Firefox, WebKit), on renvoie la chaîne telle quelle.
+ */
+function nomGpu(brut: string): string {
+  const sansAnge = brut.startsWith('ANGLE (') ? brut.slice(7) : brut
+  const morceaux = sansAnge.split(',')
+  const candidat = morceaux.length > 1 ? morceaux[1] : morceaux[0]
+  return candidat
+    .replace(/\(0x[0-9a-fA-F]+\)/g, '')
+    .replace(/\b(Direct3D|OpenGL|Metal|WebGL|vs_|ps_)\S*/g, '')
+    .replace(/\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 // ————— L'interface —————
@@ -3737,6 +3757,42 @@ const menu = new Menu({
   },
   onQuality(q) {
     applyQuality(q)
+  },
+  /**
+   * 🩺 La mesure derrière le verdict des options : 20 rendus de la VRAIE
+   * scène, chronométrés, précédés d'une passe de chauffe.
+   *
+   * Sans la chauffe, le premier relevé chronomètre la compilation des
+   * programmes — le même piège que sur les bancs de node, où il a fait varier
+   * un chiffre de ×2,4 d'un lancer à l'autre.
+   *
+   * ⚠️ On dessine NOUS-MÊMES : les garde de `voileOuvert` ne s'appliquent pas
+   * ici, et c'est voulu — le bouton mesure ce que la carte sait faire, pas ce
+   * que la boucle a décidé d'afficher au moment du clic.
+   */
+  onDiagnostic(): DiagResultat {
+    const gl = renderer.getContext()
+    const nav = navigator as Navigator & { deviceMemory?: number }
+    const res: DiagResultat = {
+      ms: null,
+      pixels: renderer.domElement.width * renderer.domElement.height,
+      gpu: nomGpu(String(gl.getParameter(gl.RENDERER))),
+      coeurs: navigator.hardwareConcurrency ?? 0,
+      memoire: typeof nav.deviceMemory === 'number' ? nav.deviceMemory : null,
+    }
+    if (renduPerdu) return res // dessiner sur un contexte mort lèverait une exception
+    try {
+      renderer.render(scene, camera)
+      gl.finish()
+      const N = 20
+      const t0 = performance.now()
+      for (let i = 0; i < N; i++) renderer.render(scene, camera)
+      gl.finish()
+      res.ms = (performance.now() - t0) / N
+    } catch {
+      res.ms = null
+    }
+    return res
   },
   onMusique(volume) {
     musique.setVolume(volume)

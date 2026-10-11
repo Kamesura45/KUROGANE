@@ -1683,6 +1683,46 @@ html.qualite-basse .tutobox {
   opacity: 0.6;
   line-height: 1.4;
 }
+/* ——— 🩺 Le verdict du diagnostic ———
+   Trois lignes, pas un rapport : un verdict coloré, une ligne de chiffres, puis
+   DE UNE À TROIS réponses numérotées (trois quand ça ne va pas, une quand tout
+   va). `role="status"` est en HTML : le lecteur d'écran annonce le résultat
+   sans déplacer le focus de celui qui vient de cliquer. */
+.diag {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid #3d4560;
+  border-radius: 12px;
+  background: rgba(13, 16, 28, 0.7);
+  text-align: left;
+}
+.diag b {
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+.diag b.ok { color: #74dba6; }
+.diag b.juste { color: #d6ac5a; }
+.diag b.bas { color: #ff6a4d; }
+.diag small {
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+  opacity: 0.65;
+}
+.diag ol {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.diag ol li::marker {
+  color: #9aa4c0;
+  font-weight: 700;
+}
 /* ——— L'interrupteur des réglages ———
    Une case à cocher native est minuscule au doigt et ne se teinte pas. On garde
    donc l'<input> pour le clavier et les lecteurs d'écran, mais on le rend

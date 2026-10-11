@@ -496,6 +496,19 @@
           <small>« Fluide » dessine moins de pixels : à essayer si ça saccade.</small>
         </div>
 
+        <!--
+          🩺 « EST-CE QUE MA MACHINE TIENT ? »
+          Une mesure réelle (20 rendus de la VRAIE scène, chronométrés), puis un
+          verdict en trois lignes et DE UNE À TROIS réponses — jamais un rapport.
+          Le banc complet reste en développement (diagnostic.html) : lui, il
+          compare trois configurations et s'intéresse au GPU ; ici, on répond.
+        -->
+        <div class="field">
+          <label>Tester ma machine</label>
+          <button id="btnDiag" class="secondary">🩺 LANCER LE DIAGNOSTIC</button>
+          <div id="diagResult" class="diag hidden" role="status"></div>
+        </div>
+
         <div class="field">
           <label for="optVolume">Musique <span id="optVolumeVal">55 %</span></label>
           <input id="optVolume" type="range" min="0" max="100" step="5" value="55" />

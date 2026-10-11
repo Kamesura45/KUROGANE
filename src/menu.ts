@@ -63,6 +63,26 @@ type ScreenName =
   | 'compte'
   | 'accueil'
 
+/**
+ * Ce que le bouton « Tester ma machine » a relevé sur la machine du joueur.
+ *
+ * Une seule mesure, pas une comparaison de configurations : le banc complet
+ * (`diagnostic.html`) s'intéresse au GPU, ici on répond à une question —
+ * « est-ce que ça tourne ? » — en trois lignes.
+ */
+export interface DiagResultat {
+  /** Millisecondes par image — `null` quand la mesure n'a pas pu se faire. */
+  ms: number | null
+  /** Pixels réellement dessinés : tampon de dessin, densité d'écran comprise. */
+  pixels: number
+  /** Nom court de la carte, tel que le navigateur la nomme. */
+  gpu: string
+  /** Cœurs annoncés par le navigateur (0 = inconnu). */
+  coeurs: number
+  /** Mémoire annoncée, en Go — `null` quand le navigateur ne la dit pas. */
+  memoire: number | null
+}
+
 export interface MenuCallbacks {
   onSolo(): void
   /** 🎓 Le tutoriel : deux temps, la neige puis le pont. */
@@ -74,6 +94,8 @@ export interface MenuCallbacks {
   onFighter(f: Fighter): void
   /** Le joueur a changé la qualité graphique */
   onQuality(q: Quality): void
+  /** 🩺 Chronomètre la VRAIE scène — c'est la mesure derrière le verdict. */
+  onDiagnostic(): DiagResultat
   /** Le joueur a réglé le volume de la musique (0 → 1) */
   onMusique(volume: number): void
   /** Le joueur a réglé le volume des bruitages (0 → 1) */
@@ -267,6 +289,9 @@ export class Menu {
     optSfx: document.getElementById('optSfx') as HTMLInputElement,
     optSfxVal: document.getElementById('optSfxVal')!,
     optNoms: document.getElementById('optNoms') as HTMLInputElement,
+    // ————— 🩺 Le diagnostic de machine —————
+    btnDiag: document.getElementById('btnDiag')!,
+    diagResult: document.getElementById('diagResult')!,
     // ————— Salon —————
     joinCode: document.getElementById('joinCode') as HTMLInputElement,
     salonList: document.getElementById('salonList')!,
@@ -2192,6 +2217,91 @@ export class Menu {
       this.settings.afficherNoms = this.el.optNoms.checked
       saveSettings(this.settings)
     })
+
+    // 🩺 Le diagnostic de machine. Deux images d'attente AVANT de mesurer :
+    // la mesure bloque le fil (20 rendus suivis d'un `gl.finish()`), et sans
+    // ce délai le joueur verrait « Mesure en cours… » apparaître et disparaître
+    // d'un seul trait — c'est-à-dire jamais.
+    this.el.btnDiag.addEventListener('click', () => {
+      this.el.diagResult.classList.remove('hidden')
+      const attente = document.createElement('b')
+      attente.className = 'juste'
+      attente.textContent = '⏳ Mesure en cours…'
+      this.el.diagResult.replaceChildren(attente)
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => this.afficherDiag(this.cb.onDiagnostic())),
+      )
+    })
+  }
+
+  /**
+   * 🩺 La réponse, et rien d'autre : un verdict, une ligne de chiffres, puis
+   * **de une à trois** solutions — trois quand ça ne va pas, une quand tout va.
+   *
+   * Un rapport détaillé, personne ne le lit. Trois conseils ordonnés, si. Les
+   * mesures elles-mêmes viennent de `onDiagnostic()`, qui chronomètre la vraie
+   * scène ; ce bloc ne fait que les lire et les ranger.
+   */
+  private afficherDiag(r: DiagResultat) {
+    const BUDGET = 16.7 // une image à 60 images/s
+    const fmt = (n: number) => n.toFixed(1).replace('.', ',')
+    const dejaFluide = this.settings.quality === 'bas'
+
+    const conseilQualite = dejaFluide
+      ? 'Vous êtes déjà sur « Fluide » : c’est le réglage le plus efficace, et il est fait.'
+      : 'Passez la qualité sur « Fluide » : quatre fois moins de pixels dessinés par image.'
+    const conseilCharge =
+      'Fermez le reste avant de courir — onglets, Discord, lecture vidéo : ' +
+      'tout cela se partage la même carte que le jeu.'
+    const mpx = fmt(r.pixels / 1e6)
+    const conseilPixels =
+      r.pixels >= 900_000
+        ? `Baissez la résolution de l’écran : ${mpx} Mpx dessinés à chaque image, c’est le réglage le plus direct.`
+        : `Baissez quand même la résolution de l’écran (${mpx} Mpx) : le travail suit les pixels, et c’est la seule case qu’il reste à cocher.`
+
+    let classe: 'ok' | 'juste' | 'bas'
+    let titre: string
+    let solutions: string[]
+
+    if (r.ms === null) {
+      classe = 'juste'
+      titre = '⚠️ Mesure impossible : la carte ne répond pas'
+      solutions = [conseilQualite, conseilCharge]
+    } else if (r.ms <= 8) {
+      classe = 'ok'
+      titre = `✅ Confortable — ${fmt(r.ms)} ms par image, 16,7 pour le 60 i/s`
+      solutions = [
+        dejaFluide
+          ? 'Rien à changer : vous êtes en « Fluide » et la machine suit sans broncher.'
+          : 'Rien à changer : gardez « Auto », vous avez de la marge.',
+      ]
+    } else if (r.ms <= BUDGET) {
+      classe = 'juste'
+      titre = `⚠️ Juste — ${fmt(r.ms)} ms par image, 16,7 pour le 60 i/s`
+      solutions = [conseilQualite, conseilCharge]
+    } else {
+      classe = 'bas'
+      titre = `❌ Saccadé — ${fmt(r.ms)} ms par image, il en faut 16,7`
+      solutions = [conseilQualite, conseilCharge, conseilPixels]
+    }
+
+    const chiffres = [r.gpu || 'Carte inconnue', `${mpx} Mpx`]
+    if (r.coeurs > 0) chiffres.push(`${r.coeurs} cœurs`)
+    if (r.memoire !== null) chiffres.push(`${r.memoire} Go`)
+
+    const titreEl = document.createElement('b')
+    titreEl.className = classe
+    titreEl.textContent = titre
+    const detailEl = document.createElement('small')
+    detailEl.textContent = chiffres.join('  ·  ')
+    const liste = document.createElement('ol')
+    for (const s of solutions) {
+      const li = document.createElement('li')
+      li.textContent = s
+      liste.append(li)
+    }
+    this.el.diagResult.replaceChildren(titreEl, detailEl, liste)
+    this.el.diagResult.classList.remove('hidden')
   }
 
   private markQuality() {
