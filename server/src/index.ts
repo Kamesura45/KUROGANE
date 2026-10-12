@@ -400,6 +400,41 @@ function compterLesPresences(): number {
   return presences.size
 }
 
+/** Le nombre de connectés, tel que le compteur du coin le montre. */
+function nombreDeConnectes(): number {
+  return Math.max(compterLesPresences(), matchMaker.stats.local.ccu)
+}
+
+/*
+ * ————— Le JOURNAL des connectés —————
+ *
+ * Un point toutes les cinq minutes, quarante-huit heures de mémoire, et c'est
+ * tout. Le banc `/journal` en fait un tableau — « de 14:00 à 16:20 : 0 », puis
+ * « 16:25 : 3 » — pour répondre à une question que le compteur du coin ne peut
+ * pas : non pas « combien sont-ils LÀ », mais « combien y avait-il, et quand ».
+ *
+ * ⚠️ TOUT EST EN MÉMOIRE VIVE, donc éphémère : un redéploy, un redémarrage,
+ * une nuit de sommeil effacent le tableau. C'est assumé et dit tel quel sur le
+ * banc — la vraie réponse serait une base, et cette dépense-là ne vaut pas ce
+ * qu'elle coûte pour un banc de développement.
+ *
+ * `unref()` sur le minuteur : il ne doit PAS être une raison pour laquelle le
+ * processus reste vivant. Railway décide de la vie et de la mort du service,
+ * pas notre curiosité.
+ */
+const JOURNAL_INTERVALLE = 5 * 60_000
+const JOURNAL_MAX = 576 // 48 h de points à 5 min
+const journal: { t: number; n: number }[] = []
+
+function consigner() {
+  journal.push({ t: Date.now(), n: nombreDeConnectes() })
+  while (journal.length > JOURNAL_MAX) journal.shift()
+}
+
+// Démarré au chargement du module, et détaché de la durée de vie du processus.
+setInterval(consigner, JOURNAL_INTERVALLE).unref()
+consigner() // le tout premier point, tout de suite
+
 /**
  * Le serveur HTTP est créé NU, sans gestionnaire.
  *
@@ -799,7 +834,30 @@ gameServer.listen(port).then(() => {
            * quelque chose. Un serveur qui ne le renvoie pas laisse le client à
            * zéro — jamais à une fausse valeur.
            */
-          joueurs: Math.max(compterLesPresences(), matchMaker.stats.local.ccu),
+          joueurs: nombreDeConnectes(),
+        },
+        req
+      )
+      return
+    }
+
+    /*
+     * ————— Le journal des connectés —————
+     *
+     * Servi au banc `/journal` (panneau dev). Rien d'identifiant dedans : des
+     * horodatages et des compteurs. C'est public comme l'est `/sante`, et pour
+     * la même raison — il n'y a rien à protéger.
+     */
+    if (chemin === '/journal' || chemin.startsWith('/journal?')) {
+      repondre(
+        res,
+        200,
+        {
+          ok: true,
+          // La cadence d'échantillonnage, pour que le banc puisse convertir les
+          // écarts en durées sans la deviner.
+          intervalle: JOURNAL_INTERVALLE,
+          points: journal,
         },
         req
       )

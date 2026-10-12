@@ -38,6 +38,22 @@ export interface Settings {
   afficherNoms: boolean
 
   /**
+   * ————— Le banc permanent dans le HUD —————
+   *
+   * Deux mesures LOCALES, affichées à droite du compteur de connectés. Les
+   * deux sont ÉTEINTES par défaut : un chiffre qui défile en permanence
+   * dérange autant qu'il rassure, et la majorité n'en a rien à faire.
+   *
+   * ⚠️ Rien n'en part au serveur. Le ping est déjà mesuré par `net.ts` pour la
+   * prédiction des rivaux ; on ne fait que le montrer.
+   */
+
+  /** Afficher le ping aller-retour, en millisecondes. */
+  afficherPing: boolean
+  /** Afficher la cadence de rendu réelle, en images par seconde. */
+  afficherFps: boolean
+
+  /**
    * 🌍 Le pays qu'on représente — code ISO à deux lettres, `''` si aucun.
    *
    * ⚠️ Un réglage LOCAL, comme le pseudo, et surtout PAS une donnée de compte :
@@ -221,6 +237,11 @@ export function loadSettings(): Settings {
     // Absent d'une vieille sauvegarde = allumé : on ne fait pas disparaître les
     // pseudos chez qui ne les a jamais éteints.
     afficherNoms: raw.afficherNoms !== false,
+    // Absents d'une vieille sauvegarde = ÉTEINTS : c'est l'inverse, et pour la
+    // même raison — ce sont des chiffres de diagnostic, pas du confort. On
+    // n'ouvre pas un HUD à qui ne l'a pas demandé.
+    afficherPing: raw.afficherPing === true,
+    afficherFps: raw.afficherFps === true,
     // 🌍 Validés ENSEMBLE : une région n'a de sens que dans son pays, et un
     // couple incohérent (japonais et normand) doit se réduire au pays seul.
     ...valider(raw.pays, raw.region),

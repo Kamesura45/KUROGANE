@@ -74,6 +74,7 @@ import {
   joueursConnectes,
   type LigneClassement,
 } from './compte'
+import { arreterPerf, demarrerPerf, mesures, surMesure, type Mesures } from './perf'
 
 /** Les trois lectures du classement, cf. buildScores. */
 type OngletScore = 'mondial' | 'local' | 'recentes'
@@ -344,6 +345,16 @@ export class Menu {
   private couleursAchetees: number[] = []
   private anim = new Anim()
 
+  /**
+   * 👥 Le dernier nombre de connectés reçu.
+   *
+   * `null` = on ne sait PAS encore — la distinction est tout le sujet du
+   * compteur : un `CO:000` affiché avant la première réponse mentirait.
+   */
+  private connectes: number | null = null
+  /** 📈 La mesure courante du banc permanent, repeinte à chaque image. */
+  private mesure: Mesures = mesures()
+
   private el = {
     banner: document.getElementById('banner')!,
     msg: document.getElementById('msg')!,
@@ -368,6 +379,10 @@ export class Menu {
     optSfx: document.getElementById('optSfx') as HTMLInputElement,
     optSfxVal: document.getElementById('optSfxVal')!,
     optNoms: document.getElementById('optNoms') as HTMLInputElement,
+    // ————— 📈 Le banc permanent (ping / images/s) —————
+    optPing: document.getElementById('optPing') as HTMLInputElement,
+    optFps: document.getElementById('optFps') as HTMLInputElement,
+    optPerfApercu: document.getElementById('optPerfApercu')!,
     // ————— 🩺 Le diagnostic de machine —————
     btnDiag: document.getElementById('btnDiag')!,
     diagResult: document.getElementById('diagResult')!,
@@ -666,7 +681,7 @@ boutiqueListe: document.getElementById('boutiqueListe')!,
     this.applyFighter(this.settings.fighter)
 
     /*
-     * 👥 Le compteur des connectés.
+     * 👥 Le compteur des connectés, et — sur demande — le banc permanent.
      *
      * On s'abonne UNE fois ici, et le robinet est ouvert d'un seul coup :
      * il tourne sur TOUS les écrans — titre, boutique, réglages, salon — et
@@ -677,14 +692,26 @@ boutiqueListe: document.getElementById('boutiqueListe')!,
      * déjà répondu AVANT la création du menu laisserait le compteur vide
      * jusqu'à la prochaine cadence. Et `null` = on ne sait PAS : le compteur
      * reste alors invisible plutôt que d'afficher un faux `CO:000`.
+     *
+     * 📈 Le ping et les images/s s'y ajoutent SEULEMENT si le joueur l'a
+     * demandé (cf. options). `perf.ts` ne fait que rendre lisibles deux
+     * choses déjà calculées ailleurs — le ping par `net.ts`, la cadence par
+     * le propre `requestAnimationFrame` du rendu.
      */
-    const majEnLigne = (n: number) => {
-      this.el.enLigne.textContent = `CO:${String(n).padStart(3, '0')}`
-      this.el.enLigne.hidden = false
-    }
-    surNombreJoueurs(majEnLigne)
+    surNombreJoueurs((n) => {
+      this.connectes = n
+      this.peindreCompteur()
+    })
     const dejaVu = joueursConnectes()
-    if (dejaVu !== null) majEnLigne(dejaVu)
+    if (dejaVu !== null) {
+      this.connectes = dejaVu
+      this.peindreCompteur()
+    }
+    surMesure((m) => {
+      this.mesure = m
+      this.peindreCompteur()
+      this.peindreApercuPerf(m)
+    })
     demarrerLeCompteur()
     // 🌀 L'enseigne n'est plus lancée ici : cf. showTitle().
   }
@@ -2578,6 +2605,22 @@ setBoutique(articles: ArticleVu[] | null, horsConnexion = false) {
       saveSettings(this.settings)
     })
 
+    // 📈 Le banc permanent. Une seule bascule pour les deux interrupteurs :
+    // c'est `appliquerPerf()` qui décide d'ouvrir ou de fermer le robinet de
+    // mesure, et qui repeint l'aperçu — le joueur doit voir ce qu'il active,
+    // tout de suite, sans quitter l'écran.
+    this.el.optPing.checked = this.settings.afficherPing
+    this.el.optFps.checked = this.settings.afficherFps
+    const basculePerf = () => {
+      this.settings.afficherPing = this.el.optPing.checked
+      this.settings.afficherFps = this.el.optFps.checked
+      saveSettings(this.settings)
+      this.appliquerPerf()
+    }
+    this.el.optPing.addEventListener('change', basculePerf)
+    this.el.optFps.addEventListener('change', basculePerf)
+    this.appliquerPerf()
+
     // 🩺 Le diagnostic de machine. Deux images d'attente AVANT de mesurer :
     // la mesure bloque le fil (20 rendus suivis d'un `gl.finish()`), et sans
     // ce délai le joueur verrait « Mesure en cours… » apparaître et disparaître
@@ -2709,5 +2752,69 @@ private markQuality() {
     // C'est ce qui remplit le rail en or jusqu'à la poignée : sur WebKit, aucun
     // pseudo-élément ne donne la progression, il faut la lui dire (cf. le CSS).
     this.el.optSfx.style.setProperty('--pct', `${pct}%`)
+  }
+
+  /**
+   * 📈 Ouvre ou ferme le robinet de mesure, selon les options.
+   *
+   * Le `requestAnimationFrame` de `perf.ts` ne tourne QUE si l'une des deux
+   * options est active. Ce n'est pas une charge qu'on impose à un joueur qui
+   * n'a rien demandé — même si compter un coup par image coûte, avouons-le,
+   * effectivement presque rien.
+   */
+  private appliquerPerf() {
+    if (this.settings.afficherPing || this.settings.afficherFps) demarrerPerf()
+    else arreterPerf()
+    // ⚠️ On repeint AUSSI le compteur. Sans ça, éteindre les interrupteurs
+    // laisserait `CO:001 · 41 fps` affiché jusqu'à la prochaine cadence du
+    // serveur — dix secondes de chiffre mort, et une classe CSS qui refuse
+    // de partir. C'est exactement le genre de chose qu'un test sur écran
+    // figé ne voit pas.
+    this.peindreCompteur()
+    this.peindreApercuPerf(mesures())
+  }
+
+  /**
+   * 👥 Le coin en haut à droite : le compteur des connectés, et — si le
+   * joueur l'a demandé — le banc permanent.
+   *
+   * Une méthode et non une fermeture : c'est le MÊME coin que réclament deux
+   * raisons différentes d'être repeint, un nouveau nombre de connectés ET un
+   * interrupteur qu'on vient de basculer. Deux copies auraient fini par
+   * diverger.
+   */
+  private peindreCompteur() {
+    if (this.connectes === null) return
+    let s = `CO:${String(this.connectes).padStart(3, '0')}`
+    // Le ping AVANT les images/s : sur un réseau douteux, c'est lui qu'on
+    // cherche, et il doit se trouver au même endroit à chaque lecture.
+    if (this.settings.afficherPing && this.mesure.ping !== null) {
+      s += ` · ${Math.round(this.mesure.ping)} ms`
+    }
+    if (this.settings.afficherFps && this.mesure.fps !== null) {
+      s += ` · ${Math.round(this.mesure.fps)} fps`
+    }
+    this.el.enLigne.textContent = s
+    // La ligne s'allonge : on resserre l'interlettrage pour qu'elle tienne
+    // toujours dans le coin, même à 420 ms de ping.
+    this.el.enLigne.classList.toggle('perf', s.length > 10)
+    this.el.enLigne.hidden = false
+  }
+
+  /**
+   * 📈 L'aperçu, dans les options : les deux chiffres, en direct.
+   *
+   * Il mesure MÊME À L'ARRÊT des interrupteurs. Un afficheur muet oblige à
+   * activer pour juger, puis à désactiver — deux gestes pour une information
+   * qu'on pouvait donner d'avance. Et c'est là qu'on voit le résultat d'un
+   * réglage de qualité sans retourner en piste.
+   */
+  private peindreApercuPerf(m: Mesures) {
+    // `ping` est absent tant qu'aucun salon n'a répondu : le dire, plutôt que
+    // d'afficher « 0 ms » qui se lirait comme « instantané ». Hors salon, la
+    // seule mesure honnête est de n'en pas donner.
+    const ping = m.ping === null ? 'hors salon' : `${Math.round(m.ping)} ms`
+    const fps = m.fps === null ? '—' : `${Math.round(m.fps)} fps`
+    this.el.optPerfApercu.textContent = `Mesure en direct — ping : ${ping} · images/s : ${fps}`
   }
 }

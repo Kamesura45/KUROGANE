@@ -1557,6 +1557,116 @@ ne compte personne.
 > le CORS et le compteur reste muet. Passe par `localhost`, ou ajoute l'origine
 > via `ORIGINES_AUTORISEES`.
 
+### Le journal : ce que le compteur ne peut pas dire
+
+Le compteur du coin répond « combien sont-ils, **LÀ, maintenant** ». La moitié
+de la question restait sans réponse : « combien il y en avait, **et quand** ».
+
+Le panneau dev gagne donc un sixième banc — **`/journal.html`** — qui lit
+`/journal`, un tableau que le serveur tient **toutes les cinq minutes**, sur
+**quarante-huit heures**.
+
+> ⚠️ **Tout est en mémoire vive, donc éphémère.** Un redéploy, un redémarrage
+> ou une nuit de sommeil efface le tableau — et sur Railway le service dort dès
+> que personne ne joue, donc les trous du journal correspondent exactement aux
+> moments où le serveur était éteint. C'est dit tel quel sur le banc. La vraie
+> réponse serait une base, et cette dépense ne vaut pas ce qu'elle coûte pour un
+> banc de développement.
+
+#### Ce qui fait la moitié du travail : la fusion
+
+Le serveur note un point toutes les cinq minutes. Quarante-huit heures de zéros
+donnent **cent quarante-quatre lignes** que personne ne lira. Le banc réunit
+donc les points de même valeur consécutifs — « de 14:00 à 16:20 : 0 » se lit,
+lui.
+
+Deux règles, et les deux ont été prises après coup :
+
+- **Le dernier point ne fusionne jamais**, même s'il rejoint le précédent.
+  C'est l'instant présent : le fusionner ferait croire que le compte a tenu
+  pendant une durée qu'il n'a pas encore tenue.
+- **La moyenne pèse la durée**, pas le nombre de tronçons. Fusionner cent
+  points de zéro en un seul ne doit pas faire grimper la moyenne.
+
+La fusion est éprouvée sans attendre cinq minutes entre chaque point : le banc
+expose son guichet sous `import.meta.env.DEV` — `window.__journal` — comme le
+fait déjà `catalogue.ts`, et les cas sont appelés dessus.
+
+| cas | résultat |
+|---|---|
+| 6 points, 3 valeurs | **3 tronçons** — `n=0 ×3`, `n=3 ×2`, `n=1` |
+| les deux derniers à 1 | **3 tronçons** — le dernier reste seul |
+| 1 point | 1 tronçon |
+| journal vide | 0 tronçon |
+
+#### Vérifié
+
+Le banc s'ouvre sur le dev, affiche la ligne réelle (`lun. 12 oct. 21:16 · 0`),
+son résumé — couverture, dernier point, pic, moyenne — et **aucune erreur
+console**. `tsc` client et serveur verts, 13 bancs verts, build vert. Et
+`journal.html` ne figure **pas** dans `dist/` : Vite ne construit que
+`index.html`, les bancs n'existent qu'en développement.
+
+### Le banc permanent : le ping et les images/s, à côté du compteur
+
+Deux interrupteurs dans **Paramètres → « Afficher en jeu »**, tous deux
+**éteints** par défaut. Allumés, le coin en haut à droite s'allonge :
+
+```
+CO:002 · 42 ms · 58 fps
+```
+
+Rien de tout ça ne part au serveur — c'est une sonde locale, pas un
+télémètre. Et le `requestAnimationFrame` de mesure ne tourne **que** si
+l'une des deux options est active.
+
+#### Le banc ne fabrique rien : il rend lisibles deux choses déjà là
+
+| mesure | où elle existait déjà |
+|---|---|
+| **Le ping** | `net.ts` le mesure depuis toujours — un aller-retour toutes les deux secondes, pour la prédiction des rivaux. Il n'était nulle part affichable. |
+| **Les images/s** | Nulle part en jeu. Le diagnostic les mesure une fois, en laboratoire, sur une scène figée. |
+
+Le ping a donc **deux portes**, et une priorité :
+
+- **`'salon'`** — le WebSocket, toutes les deux secondes, en piste. C'est la
+  liaison sur laquelle le jeu repose : il gagne.
+- **`'http'`** — la sonde `/sante`, toutes les dix secondes, déjà en place.
+  Sans elle, le ping serait **muet sur l'écran-titre**, alors que le compteur
+  y vit pourtant. On ne chronomètre que ce qu'on allait déjà faire.
+
+La sonde ne parle que si le salon s'est tu depuis plus de **cinq secondes** —
+un salon perdu, un écran verrouillé, une reconnexion en cours.
+
+#### L'aperçu mesure même à l'arrêt
+
+La ligne « Mesure en direct » des options tourne en permanence. Un
+interrupteur muet oblige à activer pour juger, puis à désactiver — deux gestes
+pour une information qu'on pouvait donner d'avance. C'est aussi là qu'on voit
+le résultat d'un réglage de qualité sans retourner en piste.
+
+Hors salon, le ping dit **`hors salon`** et non `0 ms` : « 0 » se lirait comme
+« instantané », et c'est exactement le mensonge que le compteur refuse déjà de
+faire avec `CO:000` tant qu'il n'a rien reçu.
+
+#### Vérifié
+
+Ouvert en navigateur réel, les deux interrupteurs allumés à la main :
+`CO:001 · 847 ms · 19 fps` (mesure headless, machine à froid), la classe
+`perf` posée, les deux drapeaux persistés dans `localStorage`. Puis **tout
+éteint** : le compteur revient à `CO:001` et la classe part.
+
+> ⚠️ Ce dernier point a cassé au premier jet : `appliquerPerf()` repeignait
+> l'aperçu mais pas le compteur, et éteindre les interrupteurs laissait
+> `CO:001 · 41 fps` affiché **dix secondes** durant, jusqu'à la prochaine
+> cadence du serveur. C'est le genre de chose qu'un test sur écran figé ne
+> voit pas — d'où `peindreCompteur()`, méthode et non fermeture : le même
+> coin est repeint par deux raisons différentes, et deux copies auraient fini
+> par diverger.
+
+`tsc` client et serveur verts, 13 bancs verts, build vert, **aucune erreur
+console**.
+
 ### Les effets : cinq allocations par image, supprimées
 
 Le portail en vol devait savoir, **chaque image**, qui il croisait dans sa

@@ -1,4 +1,5 @@
 import { Client, Room } from '@colyseus/sdk'
+import { noterPing, oublierPing } from './perf'
 
 /** Ce qu'on sait d'un joueur du salon (nous compris) à un instant donné */
 export interface RemotePlayer {
@@ -276,6 +277,8 @@ export class Net {
     this.myFinished = false
     this.leaving = false
     this.rtt = 0
+    // 📈 Plus de salon, plus de ping : un chiffre figé mentirait.
+    oublierPing()
     this.offset = 0
     this.offsetReady = false
     this.startAt = 0
@@ -323,6 +326,12 @@ export class Net {
       const sample = (now - p.sentAt) / 1000
       const clean = this.rtt === 0 || sample < this.rtt * 2
       this.rtt = this.rtt === 0 ? sample : this.rtt * 0.7 + sample * 0.3
+      // 📈 Le banc permanent lit ICI, et nulle part ailleurs : c'est le seul
+      // endroit où le ping existe déjà, et une seconde mesure n'en
+      // inventerait pas un autre. On publie l'échantillon BRUT — `perf.ts`
+      // se charge de lisser, et c'est au banc d'afficher un pic, pas à nous
+      // de le cacher.
+      noterPing(sample * 1000)
       if (clean) {
         const est = p.server - (p.sentAt + now) / 2
         this.offset = this.offsetReady ? this.offset * 0.7 + est * 0.3 : est

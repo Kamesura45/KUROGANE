@@ -1,4 +1,5 @@
 import { WS_URL } from './net'
+import { noterPing } from './perf'
 
 /**
  * ————— LE COMPTE DU JOUEUR —————
@@ -377,9 +378,17 @@ export async function sonderServeur(): Promise<void> {
      * l'onglet est encore ouvert — c'est lui, et non le `ccu` de Colyseus, qui
      * rend compte des gens sur le menu.
      */
+    const tSonde = performance.now()
     const r = await fetch(`${API}/sante?v=${encodeURIComponent(cleVisiteur())}`, {
       signal: AbortSignal.timeout(DELAI_SONDE),
     })
+    /*
+     * 📈 L'aller-retour de cette sonde sert de PING sur les écrans où il n'y a
+     * pas de salon — c'est-à-dire presque partout, puisque le compteur vit sur
+     * l'écran-titre. On ne chronomètre QUE ce qu'on allait déjà faire ; c'est
+     * `perf.ts` qui arbitre la priorité entre ce chemin et celui du salon.
+     */
+    noterPing(performance.now() - tSonde, 'http')
     const d = await r.json()
     googleDispo = d?.google === true
     // `saine` absent = serveur d'une version plus ancienne : on ne casse rien.

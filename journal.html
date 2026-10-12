@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KUROGANE — le journal des connectés</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #151a2c;
+        color: #f0e8d8;
+        font-family: system-ui, sans-serif;
+      }
+      h1 {
+        font-size: 1.3rem;
+        letter-spacing: 0.1em;
+      }
+      h2 {
+        font-size: 0.92rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #d6ac5a;
+        margin: 30px 0 12px;
+        border-bottom: 1px solid #2b3350;
+        padding-bottom: 7px;
+      }
+      p {
+        color: #9aa4c0;
+        max-width: 62ch;
+        line-height: 1.6;
+      }
+      b {
+        color: #f0e8d8;
+      }
+
+      /* ——— Le résumé : quatre chiffres, pas plus ——— */
+      .resume {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 22px 0 4px;
+      }
+      .bloc {
+        flex: 1 1 150px;
+        min-width: 140px;
+        padding: 12px 14px;
+        border: 1px solid #3d4560;
+        border-radius: 10px;
+        background: rgba(61, 69, 96, 0.28);
+      }
+      .bloc .cle {
+        font-size: 0.64rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #6b7594;
+      }
+      .bloc .val {
+        margin-top: 4px;
+        font-size: 1.35rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+      .bloc .val.plein {
+        color: #e24b3a;
+      }
+
+      /* ——— Le tableau ——— */
+      .cadre {
+        max-height: 62vh;
+        overflow: auto;
+        border: 1px solid #3d4560;
+        border-radius: 10px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.86rem;
+      }
+      thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        text-align: left;
+        padding: 9px 12px;
+        background: #1b2138;
+        color: #6b7594;
+        font-size: 0.64rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        border-bottom: 1px solid #3d4560;
+      }
+      tbody td {
+        padding: 7px 12px;
+        border-bottom: 1px solid rgba(61, 69, 96, 0.4);
+        font-variant-numeric: tabular-nums;
+      }
+      tbody tr:last-child td {
+        border-bottom: none;
+      }
+      tbody tr.vif td {
+        background: rgba(226, 75, 58, 0.12);
+      }
+      td.quand {
+        white-space: nowrap;
+        color: #9aa4c0;
+      }
+      td.quand .jour {
+        color: #6b7594;
+      }
+      /* La barre : longueur proportionnelle au nombre, jamais un graphique —
+         le tableau suffit, et une colonne de pixels mentirait moins bien qu'on
+         ne croit sur un écran étroit. */
+      .barre {
+        display: inline-block;
+        height: 9px;
+        margin-right: 9px;
+        border-radius: 5px;
+        background: #e24b3a;
+        vertical-align: middle;
+      }
+      .vide {
+        padding: 26px 12px;
+        text-align: center;
+        color: #6b7594;
+      }
+
+      .note {
+        margin-top: 22px;
+        max-width: 62ch;
+        font-size: 0.82rem;
+        line-height: 1.7;
+        color: #6b7594;
+        border-top: 1px dashed #3d4560;
+        padding-top: 14px;
+      }
+      .note b {
+        color: #9aa4c0;
+      }
+      #rafraichir {
+        font: inherit;
+        margin-top: 18px;
+        padding: 10px 18px;
+        border: 1px solid #3d4560;
+        border-radius: 9px;
+        background: rgba(61, 69, 96, 0.3);
+        color: #f0e8d8;
+        cursor: pointer;
+      }
+      #rafraichir:hover {
+        border-color: #d6ac5a;
+      }
+      #rafraichir:active {
+        transform: scale(0.97);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>👥 BANC D'ESSAI — LE JOURNAL DES CONNECTÉS</h1>
+    <p>
+      Le compteur du coin dit <b>combien sont-ils, maintenant</b>. Celui-ci dit
+      <b>combien il y en avait, et quand</b> — un point toutes les cinq minutes,
+      quarante-huit heures en arrière. Les tronçons de même valeur sont
+      fusionnés : « de 14:00 à 16:20 : 0 » se lit mieux que cent quarante-quatre
+      lignes de zéros.
+    </p>
+
+    <div class="resume" id="resume"></div>
+
+    <h2>Le tableau</h2>
+    <div class="cadre">
+      <table>
+        <thead>
+          <tr>
+            <th>Quand</th>
+            <th>Connectés</th>
+            <th>Durée</th>
+          </tr>
+        </thead>
+        <tbody id="corps">
+          <tr>
+            <td class="vide" colspan="3">Lecture du journal…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <button id="rafraichir">↻ Relire le journal</button>
+
+    <p class="note">
+      <b>⚠️ Ce journal vit en mémoire vive.</b> Un redéploy, un redémarrage ou
+      une nuit de sommeil l'effacent — et sur Railway le service dort dès que
+      personne ne joue, donc les trous correspondent exactement aux moments où
+      le serveur était éteint. Rien ici n'est identifiant : des horodatages et
+      des compteurs, rien d'autre. La vraie réponse serait une base, et cette
+      dépense ne vaut pas ce qu'elle coûte pour un banc.
+    </p>
+
+    <p class="note" style="border-top: none; padding-top: 6px">
+      <a href="/dev.html" style="color: #d6ac5a">‹ Retour au panneau dev</a>
+    </p>
+
+    <script type="module" src="/src/journal.ts"></script>
+  </body>
+</html>

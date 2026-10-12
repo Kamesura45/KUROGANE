@@ -684,6 +684,16 @@ html.qualite-basse .tutobox {
   -webkit-user-select: none;
 }
 
+/*
+ * Quand le banc permanent s'allonge — `CO:002 · 42 ms · 58 fps` —
+ * l'interlettrage d'origine ferait déborder la ligne hors du coin, à droite.
+ * On le resserre, et rien d'autre : la teinte pâle reste celle d'un chiffre
+ * qu'on ne lit qu'en le cherchant.
+ */
+#enLigne.perf {
+  letter-spacing: 0.08em;
+}
+
 /* ————————————————————————————————————————————————————————————
    🌀 L'ENSEIGNE — le titre est PEINT, pas affiché
    ————————————————————————————————————————————————————————————

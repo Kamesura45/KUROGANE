@@ -573,6 +573,46 @@
         </div>
 
         <!--
+          📈 LE BANC PERMANENT.
+          Deux mesures qui existent déjà — le ping est mesuré par net.ts pour la
+          prédiction des rivaux, les images/s par le banc de diagnostic — et
+          qu'on rend enfin LISIBLES à côté du compteur de connectés.
+
+          Rien de tout ça ne part au serveur : c'est local. Et les deux sont
+          ÉTEINTS par défaut — un chiffre qui défile en permanence dérange
+          autant qu'il rassure.
+
+          L'aperçu mesure en vrai, même à l'arrêt : le joueur voit ce qu'il va
+          activer, et le résultat d'un réglage de qualité, avant de s'y
+          engager. Un interrupteur qui ne montre rien oblige à activer pour
+          juger, puis à désactiver — deux gestes pour une information.
+        -->
+        <div class="field">
+          <label>Afficher en jeu</label>
+          <small>
+            À droite du compteur de connectés. Deux mesures locales — rien
+            n'est envoyé au serveur, et rien ne coûte.
+          </small>
+          <label class="bascule" for="optPing">
+            <span class="lines">
+              <b>Ping</b>
+              <small>Le temps d'aller-retour au serveur, en millisecondes.</small>
+            </span>
+            <input id="optPing" type="checkbox" />
+            <span class="glissiere" aria-hidden="true"></span>
+          </label>
+          <label class="bascule" for="optFps">
+            <span class="lines">
+              <b>Images par seconde</b>
+              <small>La cadence réellement rendue, pas le plafond du réglage.</small>
+            </span>
+            <input id="optFps" type="checkbox" />
+            <span class="glissiere" aria-hidden="true"></span>
+          </label>
+          <small id="optPerfApercu"></small>
+        </div>
+
+        <!--
           🩺 « EST-CE QUE MA MACHINE TIENT ? »
           Une mesure réelle (20 rendus de la VRAIE scène, chronométrés), puis un
           verdict en trois lignes et DE UNE À TROIS réponses — jamais un rapport.
