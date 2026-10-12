@@ -1474,30 +1474,88 @@ Trois demandes d'un coup : un compteur de connectés dans le coin, des effets de
 sorts optimisés, et une émulation des sorts dans le diagnostic. Elles se
 croisent — le compteur vient du serveur, le reste du rendu.
 
-### Le compteur du menu
+### Le compteur : il comptait les salons, pas les joueurs
 
-Dans le coin haut-droit de l'écran-titre, en tout petit, un chiffre :
-**`CO:014`**. Pas de légende, pas d'explication, pas de pastille de couleur.
-C'est le nombre de joueurs connectés, **en temps réel**.
+Dans le coin haut-droit, en tout petit, un chiffre : **`CO:014`**. Pas de
+légende, pas d'explication, pas de pastille de couleur. C'est le nombre de
+joueurs connectés, **en temps réel**, et il est là **sur tous les écrans** —
+titre, boutique, réglages, salon, course.
 
-Le serveur le renvoie avec `/sante` (champ `joueurs`), tenu par **Colyseus
-lui-même** — `matchMaker.stats.local.ccu`, incrémenté à chaque `onJoin` et
-décrémenté à chaque `onLeave`, sur **toutes** les salons, lobby compris. Un
-compteur tenu à la main dans nos deux rooms aurait raté la salle d'attente, et
-un déconnecté sans `onLeave` l'aurait laissé gonfler jusqu'au redémarrage.
+> ⚠️ **La première version était fausse, et il a fallu deux joueurs ouverts
+> pour s'en apercevoir.** Elle affichait `CO:000` alors que deux personnes
+> étaient sur le site. La cause tient en une ligne de Colyseus :
+> `matchMaker.stats.local.ccu` est incrémenté dans `onClientJoinRoom` — il
+> compte les clients qui ont **rejoint une salle**. Or un joueur sur l'écran-
+> titre, dans la boutique ou dans les réglages n'a **aucune** connexion
+> Colyseus : `Net.listSalons()` ne se connecte qu'un instant pour lire la liste,
+> puis repart. Deux visiteurs du menu, donc, donnaient zéro.
 
-Côté client, la sonde tourne **toutes les 30 s, et seulement pendant que
-l'écran-titre est à l'écran**. Ailleurs personne ne le regarde, et une requête
-en rafale n'aurait d'autre effet que de réveiller Railway pour rien. Un onglet
-en arrière-plan ne sonde pas non plus — c'est ce qui empêche un onglet oublié
-toute la nuit de maintenir le serveur debout.
+#### Ce qu'on compte maintenant
 
-> ⚠️ Le compteur est **invisible tant que le serveur n'a rien répondu**. Un
+Deux sources, et on rend le **MAX** des deux :
+
+| source | ce qu'elle voit |
+|---|---|
+| `presences` | les **pages ouvertes** qui sondent `/sante` — le menu, la boutique, les réglages, tout ce que le `ccu` est aveugle |
+| `matchMaker.stats.local.ccu` | les clients **dans une salle** — lobby et courses compris |
+
+Le MAX et non la somme : un joueur en course tient une présence **et** une salle
+à la fois — additionner l'aurait compté deux fois.
+
+#### Comment une page prouve qu'elle est ouverte
+
+Chaque sonde de `/sante` porte `?v=` — l'identité de l'**onglet**, gardée dans
+`sessionStorage` (et non `localStorage` : deux onglets doivent compter pour
+**deux**). Le serveur rafraîchit l'empreinte à chaque passage ; une empreinte
+qui cesse de se manifester est supprimée au bout de **45 s**.
+
+Et un onglet qui se ferme dit **au revoir sur le champ** : un `pagehide` envoie
+`?v=…&sortie=1` avec `keepalive: true` — c'est ce qui laisse la requête partir
+alors que la page est déjà en train de mourir. Sans ce petit geste, le joueur
+fermerait son navigateur et le compteur afficherait encore son fantôme
+quarante-cinq secondes.
+
+L'identité ne passe pas par `crypto.randomUUID()` : cette fonction n'existe que
+dans un **contexte sécurisé**, donc pas en `http://192.168.1.194:5173` —
+l'adresse de dev sur le réseau local, où elle lèverait un `TypeError` à chaque
+sonde. Un repli temps + hasard prend le relais.
+
+#### Le compteur suit l'onglet, plus l'écran
+
+`#enLigne` est un enfant **direct du `<body>`**, posé en fin de fichier — donc
+au-dessus de `#overlay` dans l'ordre de peinture, avec un `z-index: 50` qui le
+laisse lire par-dessus la pause (6) et le tutoriel (40), tout en restant sous
+`.panne-rendu` (1000), qui a le droit de l'écraser. Il ne déborde aucun clic :
+`pointer-events: none`.
+
+La sonde, elle, tourne **toutes les 10 s, tant que la page est ouverte** —
+quel que soit l'écran. On la fermait dès qu'on quittait l'écran-titre, et le
+compteur y restait figé partout ailleurs. Un onglet en arrière-plan ne sonde
+pas : c'est ce qui empêche un onglet oublié toute la nuit de maintenir le
+serveur debout, et l'empreinte s'éteint d'elle-même faute de se rafraîchir.
+
+> ⚠️ Le compteur reste **invisible tant que le serveur n'a rien répondu**. Un
 > `CO:000` affiché dès le premier rendu mentirait trois secondes à chaque
-> lancement, et un joueur qui se connecte au même instant croirait le jeu vide.
-> `joueursConnectes()` renvoie donc `null` tant qu'on ne sait pas — et le
-> serveur de production, **qui n'a pas encore été redéployé**, ne renvoie pas
-> encore le champ : le compteur reste discret plutôt que de mentir.
+> lancement. `joueursConnectes()` renvoie donc `null` tant qu'on ne sait pas.
+
+#### Ce que ça donne, mesuré
+
+Sur le dev, deux onglets réels, sans rien d'autre :
+
+| | compteur |
+|---|---|
+| premier onglet | **`CO:001`** |
+| deuxième onglet, 9 s plus tard | **`CO:002`** |
+
+La présence est éprouvée aussi hors navigateur, en dix vérifications : deux
+identités donnent 2, une fermeture rend 1 **immédiatement**, une empreinte
+abandonnée expire seule, et une `/sante` sans `v` (le banc, le monitoring)
+ne compte personne.
+
+> ⚠️ `ORIGINES` n'autorise que `localhost:5173` et `127.0.0.1:5173` pour le
+> dev : ouvrir le jeu en `http://192.168.1.194:5173` fait tomber la sonde sur
+> le CORS et le compteur reste muet. Passe par `localhost`, ou ajoute l'origine
+> via `ORIGINES_AUTORISEES`.
 
 ### Les effets : cinq allocations par image, supprimées
 

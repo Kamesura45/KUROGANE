@@ -69,7 +69,7 @@ import {
 import { PAYS, drapeau, regionsDe, niveauDe } from './pays'
 import {
   lireClassement,
-  compterLesJoueurs,
+  demarrerLeCompteur,
   surNombreJoueurs,
   joueursConnectes,
   type LigneClassement,
@@ -668,9 +668,10 @@ boutiqueListe: document.getElementById('boutiqueListe')!,
     /*
      * 👥 Le compteur des connectés.
      *
-     * On s'abonne UNE fois ici ; c'est `show()` qui ouvre et ferme le robinet.
-     * Le chiffre arrive par le même aller-retour que la santé du serveur — pas
-     * d'appel réseau en plus.
+     * On s'abonne UNE fois ici, et le robinet est ouvert d'un seul coup :
+     * il tourne sur TOUS les écrans — titre, boutique, réglages, salon — et
+     * plus seulement depuis l'écran-titre. Le chiffre arrive par le même
+     * aller-retour que la santé du serveur, pas d'appel réseau en plus.
      *
      * ⚠️ `joueursConnectes()` au démarrage : sans lui, un serveur qui aurait
      * déjà répondu AVANT la création du menu laisserait le compteur vide
@@ -684,6 +685,7 @@ boutiqueListe: document.getElementById('boutiqueListe')!,
     surNombreJoueurs(majEnLigne)
     const dejaVu = joueursConnectes()
     if (dejaVu !== null) majEnLigne(dejaVu)
+    demarrerLeCompteur()
     // 🌀 L'enseigne n'est plus lancée ici : cf. showTitle().
   }
 
@@ -1107,11 +1109,10 @@ boutiqueListe: document.getElementById('boutiqueListe')!,
     // le téléphone pour un canvas caché.
     if (name === 'roster') this.resizePreview()
     /*
-     * 👥 Le compteur ne sonde que depuis l'écran qui l'affiche. Partout ailleurs
-     * personne ne le regarde, et une requête toutes les trente secondes
-     * n'aurait d'autre effet que de réveiller le serveur pour rien.
+     * 👥 Le compteur, lui, ne se préoccupe plus de l'écran : il sonde en
+     * continu tant que la page est ouverte (cf. `demarrerLeCompteur()`).
+     * Le fermer ici le figeait partout hors de l'écran-titre.
      */
-    compterLesJoueurs(name === 'title')
   }
 
   /**
@@ -1207,8 +1208,8 @@ boutiqueListe: document.getElementById('boutiqueListe')!,
     // Une course démarre : le 2ᵉ contexte WebGL passe la main. Il ne dessine
     // RIEN pendant la course, et pourtant il reste ouvert toute la session.
     this.libererPreview()
-    // 👥 Plus rien à l'écran : le compteur cesse de sonder.
-    compterLesJoueurs(false)
+    // 👥 Le compteur reste seul debout : le masquer ici l'aurait fait disparaître
+    // pendant toute la course, alors qu'il doit suivre l'onglet, pas l'écran.
   }
 
   /**

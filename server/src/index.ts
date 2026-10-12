@@ -371,6 +371,35 @@ function avecSession(
     })
 }
 
+/*
+ * 👥 LES PRÉSENCES — combien de pages sont ouvertes, là, tout de suite.
+ *
+ * ⚠️ `matchMaker.stats.local.ccu` compte les clients qui ont REJOINT une salle
+ * (Colyseus l'incrémente dans `onClientJoinRoom`). Or un joueur sur l'écran-
+ * titre, dans la boutique ou dans les réglages n'a AUCUNE connexion Colyseus :
+ * `Net.listSalons()` ne se connecte qu'un instant, puis repart. Deux personnes
+ * sur le menu donnaient donc `ccu = 0` — le compteur restait à `CO:000`.
+ *
+ * Ici on compte ce que le joueur demande vraiment : « la page est ouverte et
+ * elle parle au serveur ». Chaque `/sante` porte l'identité de l'onglet (`v`) et
+ * rafraîchit son empreinte ; une empreinte qui cesse de se rafraîchir disparaît,
+ * et un onglet qui se ferme dit au revoir sur le champ (`sortie=1`).
+ *
+ * Le chiffre rendu est le MAX des deux : les présences couvrent le menu, le `ccu`
+ * couvre une connexion Colyseus ouverte sans que le client ne sonde.
+ */
+const PRESENCE_FENETRE = 45_000
+const presences = new Map<string, number>()
+
+/** Purge ce qui a cessé de se manifester, puis rend le nombre de vivants. */
+function compterLesPresences(): number {
+  const maintenant = Date.now()
+  for (const [cle, vu] of presences) {
+    if (maintenant - vu > PRESENCE_FENETRE) presences.delete(cle)
+  }
+  return presences.size
+}
+
 /**
  * Le serveur HTTP est créé NU, sans gestionnaire.
  *
@@ -715,7 +744,18 @@ gameServer.listen(port).then(() => {
     // ————— Un point de santé —————
     // Permet de vérifier d'un coup d'œil, depuis un navigateur, que le
     // déploiement répond et si les comptes sont bien actifs.
-    if (req.url === '/sante') {
+    //
+    // ⚠️ Comparaison PRÉFIXE et non `req.url === '/sante'` : le jeu y accroche
+    // `?v=` (son identité d'onglet) et `?sortie=1` (au revoir). Une égalité
+    // stricte aurait laissé ces appels tomber dans les routes de Colyseus.
+    const chemin = req.url ?? ''
+    if (chemin === '/sante' || chemin.startsWith('/sante?')) {
+      const url = new URL(chemin, 'http://localhost')
+      const visiteur = (url.searchParams.get('v') ?? '').slice(0, 64)
+      if (visiteur) {
+        if (url.searchParams.get('sortie') === '1') presences.delete(visiteur)
+        else presences.set(visiteur, Date.now())
+      }
       // Le jeu interroge cette route pour savoir ce que le serveur sait faire
       // (Google configuré ?). Elle a donc besoin des en-têtes CORS comme les
       // autres — sans eux, le navigateur bloque et le jeu croit Google absent.
@@ -742,18 +782,24 @@ gameServer.listen(port).then(() => {
           /*
            * 👥 Combien sont-ils, là, tout de suite.
            *
-           * `matchMaker.stats.local.ccu` n'est pas le nôtre : c'est Colyseus
-           * qui l'incrémente à chaque `onJoin` et le décrémente à chaque
-           * `onLeave`, sur TOUTES les salons — lobby compris. Un compteur tenu
-           * à la main dans nos deux rooms aurait raté la salle d'attente, et un
-           * joueur déconnecté sans `onLeave` l'aurait laissé gonfler jusqu'au
-           * redémarrage.
+           * Deux sources, et on prend le MAX.
            *
-           * ⚠️ Cet entier est la SEULE raison pour laquelle le menu affiche
+           *  · `presences` : les pages ouvertes qui sondent `/sante` — c'est le
+           *    menu, la boutique, les réglages, tout ce qui n'a AUCUNE connexion
+           *    Colyseus et que le `ccu` ne voit jamais.
+           *  · `matchMaker.stats.local.ccu` : Colyseus l'incrémente à chaque
+           *    `onJoin` et le décrémente à chaque `onLeave`, sur TOUTES les
+           *    salons — lobby compris. Un joueur déconnecté sans `onLeave`
+           *    l'aurait laissé gonfler jusqu'au redémarrage.
+           *
+           * Le MAX et non la somme : un joueur en course tient une présence ET
+           * une salle à la fois — additionner l'aurait compté deux fois.
+           *
+           * ⚠️ Cet entier est la SEULE raison pour laquelle le compteur affiche
            * quelque chose. Un serveur qui ne le renvoie pas laisse le client à
            * zéro — jamais à une fausse valeur.
            */
-          joueurs: matchMaker.stats.local.ccu,
+          joueurs: Math.max(compterLesPresences(), matchMaker.stats.local.ccu),
         },
         req
       )

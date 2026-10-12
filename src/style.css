@@ -665,11 +665,16 @@ html.qualite-basse .tutobox {
  *
  * `pointer-events: none` parce qu'il est posé AU-DESSUS des boutons du coin
  * haut-droit : sans ça, il avalerait leur clic.
+ *
+ * `z-index: 50` : au-dessus des menus (`#overlay`, sans z-index), de la pause
+ * (6) et du tutoriel (40) — le compteur doit se lire PARTOUT. En dessous de
+ * `.panne-rendu` (1000), qui a le droit de l'écraser.
  */
 #enLigne {
   position: fixed;
   top: max(10px, env(safe-area-inset-top));
   right: max(12px, env(safe-area-inset-right));
+  z-index: 50;
   font: 600 11px/1 ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
   letter-spacing: 0.16em;
   /* Assez pâle pour qu'on ne le lise qu'en cherchant. */

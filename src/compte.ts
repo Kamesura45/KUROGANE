@@ -201,41 +201,105 @@ function prevenirLesJoueurs() {
 }
 
 /*
- * ————— Le compteur du menu —————
+ * ————— Le compteur des connectés —————
  *
- * On ne sonde QUE quand le menu principal est à l'écran. Ailleurs, personne ne
- * regarde, et une requête toutes les trente secondes n'aurait d'autre effet
- * que de réveiller Railway.
+ * Il tourne TANT QUE LA PAGE EST OUVERTE, quel que soit l'écran affiché :
+ * l'écran-titre, la boutique, les réglages, le salon. On le refermait dès qu'on
+ * quittait le titre, et le compteur restait figé sur un chiffre mort partout
+ * ailleurs.
  *
- * Trente secondes, et non deux : ce sont des personnes, pas un chrono. Le
- * chiffre rajeunit assez pour qu'on le voie bouger quand un ami se connecte,
- * assez lentement pour ne pas faire du serveur une machine à garder éveillée.
+ * Dix secondes, et non trente : c'est un compteur de joueurs, il doit bouger
+ * quand un ami arrive, pas une minute plus tard. Dix secondes reste très loin
+ * d'une charge qui tiendrait le serveur éveillé — et l'onglet caché ne sonde
+ * pas du tout.
  */
-const CADENCE_MENU = 30_000
-let cadenceMenu: ReturnType<typeof setInterval> | null = null
+const CADENCE_COMPTEUR = 10_000
+let cadenceCompteur: ReturnType<typeof setInterval> | null = null
 
 /**
- * Ouvre ou ferme le robinet.
+ * Un identifiant, à portée de main même hors HTTPS.
  *
- * ⚠️ On ne touche PAS à la veille de `/sante` : si le serveur est endormi,
- * cette cadence ne doit pas le réveiller pour un chiffre que personne ne lira.
- * Le premier aller-retour de `connecter()` donne déjà le chiffre du jour ; la
- * cadence ne fait que le tenir à jour quand le serveur répond déjà.
+ * `crypto.randomUUID()` n'existe QUE dans un contexte sécurisé : il manque en
+ * `http://192.168.1.194:5173` — l'adresse de dev sur le réseau local — où il
+ * lèverait un `TypeError` à chaque sonde. On retombe sur du temps + du hasard :
+ * deux valeurs quasi sûres d'être différentes, ce qui est tout ce que demande
+ * un compteur d'onglets.
  */
-export function compterLesJoueurs(ouvert: boolean) {
-  if (ouvert) {
-    if (cadenceMenu) return
+function nouvelId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID()
+    }
+  } catch {
+    // contexte non sécurisé : on passe au repli
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}-${Math.random()
+    .toString(36)
+    .slice(2, 12)}`
+}
+
+/**
+ * L'identité de l'ONGLET, stable tant que la page vit.
+ *
+ * `sessionStorage` et non `localStorage` : deux onglets doivent compter pour
+ * DEUX. Et c'est ce qui distingue notre compteur du `ccu` de Colyseus, qui ne
+ * voit que les clients ayant rejoint une salle — le menu, la boutique et les
+ * réglages n'en ont aucune, d'où le `CO:000` malgré deux joueurs ouverts.
+ */
+let visiteur = ''
+function cleVisiteur(): string {
+  if (visiteur) return visiteur
+  try {
+    visiteur = sessionStorage.getItem('kurogane-visiteur') ?? ''
+    if (!visiteur) {
+      visiteur = nouvelId()
+      sessionStorage.setItem('kurogane-visiteur', visiteur)
+    }
+  } catch {
+    // Stockage refusé (navigation privée stricte) : on reste anonyme et jetable,
+    // le compteur fonctionne tout de même, il ne fait que perdre la mémoire
+    // d'un onglet entre deux sondes.
+    visiteur = nouvelId()
+  }
+  return visiteur
+}
+
+/**
+ * Ouvre le robinet, une fois pour toutes.
+ *
+ * Idempotent : appelé au démarrage, il ne sert qu'à garantir que le compteur
+ * tourne même si aucun écran n'a demandé quoi que ce soit.
+ */
+export function demarrerLeCompteur() {
+  if (cadenceCompteur) return
+  const sonder = () => {
+    // Un onglet en arrière-plan ne regarde rien : on ne fait pas travailler le
+    // serveur pour un chiffre que personne ne lit. Il se décompte de lui-même,
+    // faute de se manifester, au bout de PRESENCE_FENETRE côté serveur.
+    if (typeof document !== 'undefined' && document.hidden) return
     void sonderServeur()
-    cadenceMenu = setInterval(() => {
-      // Un onglet en arrière-plan ne regarde rien : on ferme le robinet dès
-      // que la page disparaît. C'est ce qui empêche un onglet oublié toute la
-      // nuit de maintenir le serveur debout.
-      if (typeof document !== 'undefined' && document.hidden) return
-      void sonderServeur()
-    }, CADENCE_MENU)
-  } else if (cadenceMenu) {
-    clearInterval(cadenceMenu)
-    cadenceMenu = null
+  }
+  void sonder()
+  cadenceCompteur = setInterval(sonder, CADENCE_COMPTEUR)
+  /*
+   * 🚪 Au revoir SUR LE CHAMP.
+   *
+   * Sans ça, un onglet fermé resterait compté jusqu'à expiration — le joueur
+   * ferme son navigateur et le compteur affiche encore son fantôme quarante-
+   * cinq secondes. `keepalive` est ce qui laisse la requête partir alors que
+   * la page est déjà en train de mourir.
+   */
+  if (typeof window !== 'undefined') {
+    window.addEventListener(
+      'pagehide',
+      () => {
+        const id = cleVisiteur()
+        void fetch(`${API}/sante?v=${encodeURIComponent(id)}&sortie=1`, {
+          keepalive: true,
+        }).catch(() => {})
+      },
+      { once: true }
+    )
   }
 }
 
@@ -308,7 +372,14 @@ export async function sonderServeur(): Promise<void> {
   sondeEnCours = true
   const avant = serveurSaine
   try {
-    const r = await fetch(`${API}/sante`, { signal: AbortSignal.timeout(DELAI_SONDE) })
+    /*
+     * `?v=` : c'est la PRESENCE, pas un détail. Chaque sonde prouve que
+     * l'onglet est encore ouvert — c'est lui, et non le `ccu` de Colyseus, qui
+     * rend compte des gens sur le menu.
+     */
+    const r = await fetch(`${API}/sante?v=${encodeURIComponent(cleVisiteur())}`, {
+      signal: AbortSignal.timeout(DELAI_SONDE),
+    })
     const d = await r.json()
     googleDispo = d?.google === true
     // `saine` absent = serveur d'une version plus ancienne : on ne casse rien.

@@ -203,16 +203,6 @@
         justement lui éviter.
       -->
       <section id="scr-title" class="screen hidden">
-        <!-- 👥 Combien de joueurs sont en ligne, tout de suite.
-             Un compteur, rien de plus : pas de légende, pas d'explication. Il
-             est en `position: fixed` et non `absolute` pour deux raisons — il
-             se cale sur le coin de la fenêtre plutôt que sur l'écran de 430 px,
-             et il disparaît DU COUP que `#scr-title` passe en `display: none`
-             (un ancêtre masqué masque ses descendants, même en fixed).
-             Masqué tant que le serveur n'a rien dit : `CO:000` signifierait
-             « personne ne joue » alors qu'on ne sait tout simplement rien. -->
-        <span id="enLigne" hidden>CO:000</span>
-
         <!-- ————— L'enseigne : shuriken, encre, pinceau —————
              Le titre n'est pas écrit, il est PEINT à l'ouverture. Tout est
              piloté par la classe `joue` posée par menu.ts : sans elle, rien ne
@@ -1142,6 +1132,20 @@
         <button id="btnCancel" class="secondary hidden">ANNULER</button>
       </section>
     </div>
+
+    <!--
+      👥 Combien de joueurs sont en ligne, tout de suite. Un compteur, rien de
+      plus : pas de légende, pas d'explication.
+
+      ⚠️ Enfant DIRECT du `<body>`, et non de `#scr-title` : il suit l'ONGLET,
+      pas l'écran. Posé dans l'écran-titre, il disparaissait dès qu'on ouvrait
+      la boutique ou les réglages, et le compteur ne sondait plus non plus.
+
+      En fin de `<body>`, il passe APRÈS `#overlay` dans l'ordre de peinture —
+      donc au-dessus des menus. Masqué tant que le serveur n'a rien dit :
+      `CO:000` signifierait « personne ne joue » alors qu'on ne sait rien.
+    -->
+    <span id="enLigne" hidden>CO:000</span>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

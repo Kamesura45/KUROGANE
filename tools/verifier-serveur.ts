@@ -85,7 +85,13 @@ function repondre(donnees: unknown, statut = 200) {
 ;(globalThis as any).fetch = async (url: unknown, opts: any = {}) => {
   const u = String(url)
   faux.appels.push(u)
-  const route = u.replace(/^https?:\/\/[^/]+/, '')
+  /*
+   * On retire la QUERY STRING avant de comparer : le client accroche `?v=`
+   * (son identité d'onglet, cf. la présence) sur `/sante`. Sans ce retrait, la
+   * route ne tombait plus sur `/sante` et le banc voyait toutes les sondes
+   * tomber dans le vide.
+   */
+  const route = u.replace(/^https?:\/\/[^/]+/, '').replace(/\?.*$/, '')
 
   if (faux.muet) {
     /*
@@ -234,7 +240,7 @@ console.log('\n————— 🔄 La veille re-sonde, et prévient ———�
   await c.connecter()
   verifier('au départ, les comptes sont cassés', c.comptesCasses() === true)
 
-  const santeAvant = faux.appels.filter((a) => a.endsWith('/sante')).length
+  const santeAvant = faux.appels.filter((a) => a.replace(/\?.*$/, '').endsWith('/sante')).length
 
   let revele = false
   c.surRepriseDuServeur(() => {
@@ -249,7 +255,7 @@ console.log('\n————— 🔄 La veille re-sonde, et prévient ———�
   while (!revele && performance.now() - t0 < 20_000) await dormir(200)
   const delai = performance.now() - t0
 
-  const santeApres = faux.appels.filter((a) => a.endsWith('/sante')).length
+  const santeApres = faux.appels.filter((a) => a.replace(/\?.*$/, '').endsWith('/sante')).length
   verifier('la veille a re-sondé', santeApres > santeAvant, `${santeApres - santeAvant} sonde(s) en plus`)
   verifier('le retour est signalé sans rechargement', revele, `après ${Math.round(delai)} ms`)
   verifier('les comptes sont réparés', c.comptesCasses() === false)
